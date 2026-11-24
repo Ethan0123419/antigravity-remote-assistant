@@ -1,0 +1,30 @@
+[project]
+name = "qq-antigravity-bridge"
+version = "0.1.0"
+description = "OneBot 11 (NapCatQQ) bridge for Antigravity CLI (agy) headless streaming sessions"
+requires-python = ">=3.11"
+dependencies = [
+    "python-dotenv>=1.0.1",
+    "segno>=1.6.1",
+    "websockets>=14.0",
+]
+
+[project.scripts]
+qq-agy-bridge = "qq_agy_bridge.main:main"
+agy-bridge-setup = "qq_agy_bridge.setup_wizard:main"
+
+[project.gui-scripts]
+qq-agy-launcher = "qq_agy_bridge.launcher:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qq_agy_bridge"]
