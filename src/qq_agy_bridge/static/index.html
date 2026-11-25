@@ -31,9 +31,22 @@
       --accent-green: #10b981;
       --danger: #ef4444;
       --safe-top: env(safe-area-inset-top, 0px);
+      --top-safe: var(--safe-top);
       --safe-bot: env(safe-area-inset-bottom, 0px);
       --app-h: 100dvh;
       --kb-open: 0;
+    }
+
+    /* Push header & drawer cleanly below iOS standalone system status-bar progressive blur scrim */
+    html.ios-standalone {
+      --top-safe: calc(max(env(safe-area-inset-top, 0px), 54px) + 16px);
+    }
+    @media all and (display-mode: standalone) {
+      @supports (-webkit-touch-callout: none) {
+        :root {
+          --top-safe: calc(max(env(safe-area-inset-top, 0px), 54px) + 16px);
+        }
+      }
     }
 
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -45,9 +58,7 @@
       height: var(--app-h, 100dvh);
       overflow: hidden;
       overscroll-behavior: none;
-      background:
-        radial-gradient(120% 60% at 50% -10%, rgba(255, 255, 255, 0.038), transparent 62%),
-        var(--bg-main);
+      background: var(--bg-main);
       color: var(--text-pri);
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "HarmonyOS Sans SC", "Segoe UI", system-ui, sans-serif;
       display: flex;
@@ -56,15 +67,25 @@
       text-rendering: optimizeLegibility;
     }
 
+    /* Hard opaque top status-bar shield so iOS WebKit samples pure #0D0D0F instead of washing out */
+    .ios-status-shield {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--top-safe);
+      background: #0d0d0f;
+      z-index: 25;
+      pointer-events: none;
+    }
+
     button { font-family: inherit; }
 
-    /* ── Frosted Obsidian Top Navigation Bar ── */
+    /* ── Crisp Razor-Sharp Solid Obsidian Top Bar (Zero Backdrop-Filter Subpixel Blur) ── */
     .topbar {
-      height: calc(var(--safe-top) + 52px);
-      padding: var(--safe-top) 10px 0;
-      background: rgba(13, 13, 15, 0.78);
-      backdrop-filter: blur(24px) saturate(180%);
-      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      height: calc(var(--top-safe) + 52px);
+      padding: var(--top-safe) 10px 0;
+      background: #0d0d0f;
       border-bottom: 1px solid var(--border-hairline);
       display: flex;
       align-items: center;
@@ -72,6 +93,7 @@
       gap: 8px;
       z-index: 20;
       flex-shrink: 0;
+      transform: translateZ(0);
     }
 
     .nav-icon-btn {
@@ -187,7 +209,7 @@
       transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
       display: flex;
       flex-direction: column;
-      padding: calc(var(--safe-top) + 12px) 12px calc(var(--safe-bot) + 12px);
+      padding: calc(var(--top-safe) + 12px) 12px calc(var(--safe-bot) + 12px);
       border-right: 1px solid var(--border-subtle);
       box-shadow: 18px 0 48px rgba(0, 0, 0, 0.65);
     }
@@ -1149,7 +1171,7 @@
 
     .toast {
       position: fixed;
-      top: calc(var(--safe-top) + 58px);
+      top: calc(var(--top-safe) + 58px);
       left: 50%;
       transform: translateX(-50%);
       background: rgba(28, 28, 35, 0.92);
@@ -1172,6 +1194,7 @@
   </style>
 </head>
 <body>
+  <div class="ios-status-shield" aria-hidden="true"></div>
 
   <!-- Authentic ChatGPT Mobile Top Bar -->
   <header class="topbar">
@@ -1477,6 +1500,9 @@
   const isStaticShell = Boolean(beaconRepo) || location.hostname.endsWith('.github.io');
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isStandalone = Boolean(window.navigator.standalone) || window.matchMedia('(display-mode: standalone)').matches;
+  if (isIOS && isStandalone) {
+    document.documentElement.classList.add('ios-standalone');
+  }
 
   // Extract ?token= or #key= from QR scan URL
   const urlParams = new URLSearchParams(location.search);
