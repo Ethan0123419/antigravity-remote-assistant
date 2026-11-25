@@ -6,9 +6,12 @@
 
 ## 核心亮点
 
-- **💻 电脑全会话零遗漏同步与无缝续聊**
-  - 自动发现并合并本机 **Antigravity IDE**（SQLite 索引 + 未入库 `brain/` 会话）与 **OpenAI Codex Desktop**（`state_*.sqlite` + `session_index.jsonl`）的全部对话。
-  - 智能剔除跨存储残影快照、内部子智能体（Subagents）与预热探针，支持分类计数筛选（`全部` / `Antigravity` / `Codex` / `远程`）、全文实时检索、完整早期消息分页加载与电脑端对话实时自动同步。
+- **💻 电脑真实聊天窗口直连驱动 + 手机一键新建电脑会话**
+  - 手机端选中任意 **Antigravity 电脑端** 对话发送消息时，通过 Windows UI Automation **直接驱动电脑上打开的 Antigravity 窗口现场执行**（自动切换对应会话、规避中文输入法干扰、实时回传工具状态、流式回复与 AI 生成截图），并支持在手机上一键**新建 Antigravity / Codex 电脑端对话**。
+  - 自动发现并合并本机 **Antigravity IDE**（SQLite 索引 + 未入库 `brain/` 会话）与 **OpenAI Codex Desktop**（`state_*.sqlite` + `session_index.jsonl` + `codex exec` 原生续写）的全部对话。
+- **📲 iPhone 永久独立全屏 App（零域名成本 · 电脑重启免重扫 · 永不掉签）**
+  - 内置 **零信任加密云端信标（`PBKDF2-HMAC-SHA256` 10 万次迭代 + 流加密与 `HMAC` 认证）**：电脑每次自启或外网隧道重连后，自动将加密后的最新地址同步至 `gh-pages` 静态外壳（公开仓库不暴露任何明文 IP 或隧道网址）。
+  - iPhone 扫码一次「添加到主屏幕」即生成 OLED 曜石黑全屏独立 App，无需开发者证书签名，重启电脑或切换 Wi-Fi / 5G 均自动寻址秒连。
 - **📂 工作区源码浏览与 Git Diff 审阅（灵感源自 GitHub 高星远程开发套件）**
   - 手机端内置工作区抽屉：一键查看当前 Git 分支、未提交文件状态（`M` / `A` / `D`）与彩色高亮 Unified Diff，支持一键点选让助手直接审阅改动或下载项目文件到手机。
 - **🖥 实时桌面画面 + 双向大文件互传 + 语音输入**
