@@ -141,7 +141,7 @@ def detect_github_pages_info(project_dir: Path) -> tuple[str, str, str, str] | N
 
 
 STATIC_PWA_SW_JS = """\
-const CACHE_NAME = 'antigravity-ios-shell-v5';
+const CACHE_NAME = 'antigravity-ios-shell-v6';
 const SHELL_ASSETS = ['./', './index.html', './apple-touch-icon.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -160,13 +160,13 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
-  if (url.pathname.endsWith('/beacon.json') || url.hostname === 'api.github.com') {
+  if (url.pathname.endsWith('/beacon.json') || url.hostname !== self.location.hostname) {
     return;
   }
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-store' })
       .then((res) => {
-        if (res && res.ok && url.origin === self.location.origin) {
+        if (res && res.ok) {
           const clone = res.clone();
           caches.open(CACHE_NAME).then((c) => c.put(e.request, clone)).catch(() => {});
         }

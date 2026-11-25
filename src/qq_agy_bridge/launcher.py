@@ -1251,7 +1251,7 @@ class LauncherApp:
         tok = self.settings.web_access_token
         mode = self._qr_mode.get()
         if mode == "ios" and self._ios_pages_url:
-            return f"{self._ios_pages_url}#key={tok}"
+            return f"{self._ios_pages_url}?key={tok}"
         if mode == "tunnel":
             return f"{self._tunnel_url}/?token={tok}" if self._tunnel_url else ""
         lan_ip = get_lan_ipv4()
