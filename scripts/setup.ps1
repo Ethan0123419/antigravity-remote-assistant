@@ -1,7 +1,4 @@
 ﻿param(
-    [string]$Mode = "auto",
-    [string]$QQUsers = "",
-    [string]$BotQQ = "",
     [switch]$NoTunnel,
     [switch]$NoShortcut,
     [switch]$LaunchNow
@@ -28,11 +25,8 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
 $venvPy = Join-Path $repoRoot ".venv\Scripts\python.exe"
 $venvPyw = Join-Path $repoRoot ".venv\Scripts\pythonw.exe"
 
-Write-Host "==> [2/3] 正在生成安全密钥、配置隧道与桌面快捷方式..." -ForegroundColor Cyan
+Write-Host "==> [2/3] 正在初始化配置、加密隧道与『反重力助手』桌面快捷方式..." -ForegroundColor Cyan
 $wizArgs = @("-X", "utf8", "-m", "qq_agy_bridge.setup_wizard", "--non-interactive", "--doctor")
-if ($Mode) { $wizArgs += @("--mode", $Mode) }
-if ($QQUsers) { $wizArgs += @("--qq-users", $QQUsers) }
-if ($BotQQ) { $wizArgs += @("--bot-qq", $BotQQ) }
 if (-not $NoTunnel) { $wizArgs += "--with-tunnel" }
 if (-not $NoShortcut) { $wizArgs += "--create-shortcut" }
 
@@ -44,8 +38,8 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "==> [3/3] 部署完成！" -ForegroundColor Green
 if ($LaunchNow) {
-    Write-Host "正在启动 Windows 毛玻璃控制台..." -ForegroundColor Cyan
+    Write-Host "正在启动『反重力助手』桌面控制台..." -ForegroundColor Cyan
     Start-Process -FilePath $venvPyw -ArgumentList "-X","utf8","-m","qq_agy_bridge.launcher" -WorkingDirectory $repoRoot
 } else {
-    Write-Host "双击桌面上的『Antigravity 远程助理』图标（或加 -LaunchNow 参数）即可一键启动！" -ForegroundColor Green
+    Write-Host "双击桌面上的『反重力助手』图标（或加 -LaunchNow 参数）即可一键启动！" -ForegroundColor Green
 }

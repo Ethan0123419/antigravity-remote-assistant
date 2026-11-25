@@ -1,7 +1,7 @@
 [project]
-name = "qq-antigravity-bridge"
-version = "0.1.0"
-description = "OneBot 11 (NapCatQQ) bridge for Antigravity CLI (agy) headless streaming sessions"
+name = "antigravity-remote-assistant"
+version = "0.2.0"
+description = "反重力助手 (Antigravity Assistant) — Mobile/Web PWA remote control, full Antigravity & Codex PC conversation sync, and Git diff inspector"
 requires-python = ">=3.11"
 dependencies = [
     "python-dotenv>=1.0.1",
@@ -10,10 +10,12 @@ dependencies = [
 ]
 
 [project.scripts]
-qq-agy-bridge = "qq_agy_bridge.main:main"
+antigravity-assistant = "qq_agy_bridge.main:main"
 agy-bridge-setup = "qq_agy_bridge.setup_wizard:main"
+qq-agy-bridge = "qq_agy_bridge.main:main"
 
 [project.gui-scripts]
+antigravity-launcher = "qq_agy_bridge.launcher:main"
 qq-agy-launcher = "qq_agy_bridge.launcher:main"
 
 [dependency-groups]

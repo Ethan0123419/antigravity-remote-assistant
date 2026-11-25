@@ -25,15 +25,8 @@ def _parse_float(value: str | None, default: float) -> float:
     return float(value.strip())
 
 
-def _parse_qq_set(value: str | None) -> frozenset[str]:
-    if not value:
-        return frozenset()
-    items = [part.strip() for part in value.split(",") if part.strip()]
-    return frozenset(items)
-
-
 def resolve_agy_executable(configured: str) -> str:
-    """Resolve agy binary path, checking common install locations on Windows."""
+    """Resolve agy binary path, checking common install locations on Windows / macOS / Linux."""
     configured = configured.strip() or "agy"
     found = shutil.which(configured)
     if found:
@@ -66,33 +59,21 @@ def resolve_agy_executable(configured: str) -> str:
 
 @dataclass(frozen=True)
 class BridgeConfig:
-    onebot_mode: str  # "forward_ws" or "reverse_ws"
-    onebot_ws_url: str
-    onebot_reverse_host: str
-    onebot_reverse_port: int
-    onebot_reverse_path: str
-    onebot_access_token: str
-    allowed_qq_users: frozenset[str]
     agy_executable: str
     agy_workspace: Path
-    agy_model: str
-    agy_effort: str
-    agy_dangerously_skip_permissions: bool
-    agy_timeout_seconds: int
-    progress_notice_delay_seconds: int
-    max_message_length: int
-    log_level: str
+    agy_model: str = ""
+    agy_effort: str = ""
+    agy_dangerously_skip_permissions: bool = True
+    agy_timeout_seconds: int = 300
+    progress_notice_delay_seconds: int = 0
+    log_level: str = "INFO"
     agy_system_prompt: str = ""
     user_memory_file: Path | None = None
-    clean_qq_formatting: bool = True
     agy_prewarm: bool = False
-    prewarm_user_ids: tuple[str, ...] = ()
-    message_debounce_seconds: float = 0.0
     agy_fallback_models: tuple[str, ...] = ()
     quota_cooldown_minutes: int = 60
-    cache_clean_interval_hours: float = 0.0
-    onebot_enabled: bool = True
-    web_pwa_enabled: bool = False
+    cache_clean_interval_hours: float = 6.0
+    web_pwa_enabled: bool = True
     web_pwa_host: str = "0.0.0.0"
     web_pwa_port: int = 8765
     web_access_token: str = ""
@@ -132,18 +113,8 @@ class BridgeConfig:
                 return file_vals[key]
             return os.getenv(key, default)
 
-        mode = (_get("ONEBOT_MODE") or "forward_ws").strip().lower()
-        if mode not in {"forward_ws", "reverse_ws"}:
-            raise ValueError(
-                f"Invalid ONEBOT_MODE={mode!r}. Expected 'forward_ws' or 'reverse_ws'."
-            )
-
         workspace_raw = (_get("AGY_WORKSPACE") or "").strip()
         workspace = Path(workspace_raw).expanduser().resolve() if workspace_raw else Path.cwd().resolve()
-
-        reverse_path = (_get("ONEBOT_REVERSE_PATH") or "/onebot/v11/ws").strip()
-        if not reverse_path.startswith("/"):
-            reverse_path = "/" + reverse_path
 
         project_root = Path(__file__).resolve().parents[2]
         prompt_file_raw = (_get("AGY_SYSTEM_PROMPT_FILE") or "").strip()
@@ -153,8 +124,10 @@ class BridgeConfig:
                 pf = Path(prompt_file_raw).expanduser()
                 if not pf.is_absolute():
                     pf = project_root / pf
+                if not pf.is_file() and pf.name == "qq_persona.md":
+                    pf = project_root / "prompts" / "persona.md"
             else:
-                pf = project_root / "prompts" / "qq_persona.md"
+                pf = project_root / "prompts" / "persona.md"
             if pf.is_file():
                 system_prompt = pf.read_text(encoding="utf-8").strip()
 
@@ -176,25 +149,6 @@ class BridgeConfig:
                 if default_mf.is_file():
                     memory_file = default_mf
 
-        allowed_ordered = tuple(
-            part.strip()
-            for part in (_get("ALLOWED_QQ_USERS") or "").split(",")
-            if part.strip()
-        )
-        raw_onebot_enabled = (_get("ONEBOT_ENABLED") or "auto").strip().lower()
-        if raw_onebot_enabled == "auto":
-            onebot_enabled = len(allowed_ordered) > 0
-        else:
-            onebot_enabled = _parse_bool(raw_onebot_enabled, True)
-        prewarm_enabled = _parse_bool(_get("AGY_PREWARM"), True)
-        prewarm_raw = (_get("AGY_PREWARM_USERS") or "").strip()
-        if prewarm_raw:
-            prewarm_users = tuple(
-                part.strip() for part in prewarm_raw.split(",") if part.strip()
-            )
-        else:
-            prewarm_users = allowed_ordered[:2]
-
         from .maintenance import DEFAULT_FALLBACK_MODELS
 
         fallback_raw = (_get("AGY_FALLBACK_MODELS") or "").strip()
@@ -208,13 +162,6 @@ class BridgeConfig:
             fallback_models = DEFAULT_FALLBACK_MODELS
 
         return cls(
-            onebot_mode=mode,
-            onebot_ws_url=(_get("ONEBOT_WS_URL") or "ws://127.0.0.1:3001").strip(),
-            onebot_reverse_host=(_get("ONEBOT_REVERSE_HOST") or "127.0.0.1").strip(),
-            onebot_reverse_port=_parse_int(_get("ONEBOT_REVERSE_PORT"), 8080),
-            onebot_reverse_path=reverse_path,
-            onebot_access_token=(_get("ONEBOT_ACCESS_TOKEN") or "").strip(),
-            allowed_qq_users=frozenset(allowed_ordered),
             agy_executable=resolve_agy_executable(_get("AGY_EXECUTABLE") or "agy"),
             agy_workspace=workspace,
             agy_model=(_get("AGY_MODEL") or "").strip(),
@@ -226,22 +173,15 @@ class BridgeConfig:
             progress_notice_delay_seconds=max(
                 0, _parse_int(_get("PROGRESS_NOTICE_DELAY_SECONDS"), 0)
             ),
-            max_message_length=max(200, _parse_int(_get("MAX_MESSAGE_LENGTH"), 1800)),
             log_level=(_get("LOG_LEVEL") or "INFO").strip().upper(),
             agy_system_prompt=system_prompt,
             user_memory_file=memory_file,
-            clean_qq_formatting=_parse_bool(_get("CLEAN_QQ_FORMATTING"), True),
-            agy_prewarm=prewarm_enabled,
-            prewarm_user_ids=prewarm_users,
-            message_debounce_seconds=max(
-                0.0, min(5.0, _parse_float(_get("MESSAGE_DEBOUNCE_SECONDS"), 1.2))
-            ),
+            agy_prewarm=_parse_bool(_get("AGY_PREWARM"), True),
             agy_fallback_models=fallback_models,
             quota_cooldown_minutes=max(1, _parse_int(_get("QUOTA_COOLDOWN_MINUTES"), 60)),
             cache_clean_interval_hours=max(
                 0.0, _parse_float(_get("CACHE_CLEAN_INTERVAL_HOURS"), 6.0)
             ),
-            onebot_enabled=onebot_enabled,
             web_pwa_enabled=_parse_bool(_get("WEB_PWA_ENABLED"), True),
             web_pwa_host=(_get("WEB_PWA_HOST") or "0.0.0.0").strip(),
             web_pwa_port=_parse_int(_get("WEB_PWA_PORT"), 8765),

@@ -1,12 +1,11 @@
-"""Windows 11 translucent glassmorphic desktop launcher for NapCatQQ + Antigravity Bridge.
+"""Windows 11 translucent glassmorphic desktop console for 反重力助手 (Antigravity Assistant).
 
 Features:
-- Native Windows 11 DWM immersive dark chrome, rounded corners, seamless caption/border tint
-- Smooth layered window translucency (-alpha) with live glass presets (82% / 90% / 95% / 100%)
-- Procedurally rendered anti-aliased frosted glass cards (specular top rim + radial glow orbs)
-- Custom dark minimal scrollbar (no bright Win32 scrollbar chrome)
-- One-click Windows boot auto-start toggle (--minimized support)
-- Win64-safe ctypes HANDLE/HWND declarations, auto-heal bridge watchdog, non-blocking shutdown
+- Pure standalone Antigravity + Codex remote control hub (zero QQ / NapCat dependencies)
+- Inline Frosted Glass QR Pairing Hero (1-click switch between 1ms Wi-Fi LAN & 4G/5G Cloudflare Tunnel)
+- Live PC conversation telemetry (Antigravity IDE + Codex Desktop synced chat counts)
+- Native Windows 11 DWM immersive dark chrome, rounded corners, and smooth layered translucency
+- Auto-healing service watchdog, sleep-prevention toggle, and one-click Firewall UAC helper
 """
 
 from __future__ import annotations
@@ -34,40 +33,25 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import Callable
-from urllib.parse import urlparse
 
 from dotenv import dotenv_values
 
+from .conversations import list_local_conversations
 from .maintenance import discover_default_cache_targets, run_safe_cache_cleanup
 from .web_pwa import ensure_web_access_token, get_lan_ipv4
 
-APP_TITLE = "QQ Antigravity 机器人"
-MUTEX_NAME = "Local\\QQAgyBridgeLauncherSingleton"
+APP_TITLE = "反重力助手"
+LEGACY_TITLES = ("QQ Antigravity 机器人", "Antigravity 远程助理")
+MUTEX_NAME = "Local\\AntigravityAssistantLauncherSingleton"
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
-NAPCAT_DIR = Path(os.getenv("NAPCAT_DIR", str(PROJECT_DIR.parent / "NapCatNode")))
 ICON_PATH = PROJECT_DIR / "assets" / "app.ico"
 UI_PREFS_PATH = PROJECT_DIR / ".launcher_ui.json"
-STARTUP_SHORTCUT_NAME = "QQ Antigravity 机器人.lnk"
+STARTUP_SHORTCUT_NAME = "反重力助手.lnk"
+LEGACY_STARTUP_SHORTCUTS = ("QQ Antigravity 机器人.lnk", "Antigravity 远程助理.lnk")
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
-WEBUI_URL_RE = re.compile(r"http://127\.0\.0\.1:\d+/webui(?:\?token=[A-Za-z0-9._-]+)?")
 TRYCLOUDFLARE_RE = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
-NOISY_LOG_PATTERNS = (
-    "light_quic_transport_session.cc",
-    "light_quic_crypto_config.cc",
-    "ERROR:light_quic_",
-    "light_quic_session_stats_report.cc",
-)
-QR_KEYWORDS = (
-    "二维码",
-    "qrcode",
-    "快速登录失败",
-    "请扫码",
-    "扫码登录",
-    "login fail",
-    "token expired",
-)
 
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
@@ -78,6 +62,8 @@ GLASS_PRESETS: tuple[tuple[str, float], ...] = (
     ("微透 95%", 0.95),
     ("纯实 100%", 1.00),
 )
+
+FIREWALL_RULE_NAME = "Antigravity Assistant LAN"
 
 
 # ---------------------------------------------------------------------------
@@ -103,14 +89,14 @@ def render_glass_card_b64(
     width: int,
     height: int,
     *,
-    radius: int = 14,
-    outer_bg: str = "#0B111B",
-    top_fill: str = "#162338",
-    bottom_fill: str = "#0F1828",
+    radius: int = 16,
+    outer_bg: str = "#070B14",
+    top_fill: str = "#121D31",
+    bottom_fill: str = "#0B1322",
     rim_top: str = "#67E8F9",
-    rim_bottom: str = "#283952",
-    rim_top_alpha: float = 0.34,
-    rim_bottom_alpha: float = 0.16,
+    rim_bottom: str = "#22324A",
+    rim_top_alpha: float = 0.36,
+    rim_bottom_alpha: float = 0.14,
 ) -> str:
     """Render an anti-aliased frosted glass rounded panel with a 1px specular top rim."""
     width = max(width, 24)
@@ -127,14 +113,12 @@ def render_glass_card_b64(
     bx = hw - 0.5 - rad
     by = hh - 0.5 - rad
 
-    # Fast row builder: interior middle rows without corner curvature share identical X profiles
     rows = bytearray()
     inv_h = 1.0 / max(height - 1, 1)
 
     for y in range(height):
         vy = y * inv_h
-        # Vertical frosted fill + subtle top sheen
-        sheen = math.exp(-vy * 5.5) * 0.08
+        sheen = math.exp(-vy * 5.8) * 0.08
         fill_r = tfr + (bfr - tfr) * vy + 255.0 * sheen
         fill_g = tfg + (bfg - tfg) * vy + 255.0 * sheen
         fill_b = tfb + (bfb - tfb) * vy + 255.0 * sheen
@@ -145,11 +129,9 @@ def render_glass_card_b64(
         rim_a = rim_top_alpha + (rim_bottom_alpha - rim_top_alpha) * vy
 
         py = abs(y - (hh - 0.5)) - by
-        rows.append(0)  # PNG filter 0
+        rows.append(0)
 
         if py <= -1.5 and 2 <= y <= height - 3:
-            # Fast path for straight vertical edges in the middle band!
-            # x = 0: border pixel; x = 1..width-2: interior pixel; x = width-1: border pixel
             br_r = int(min(255.0, fill_r * (1.0 - rim_a) + rim_r * rim_a) + 0.5)
             br_g = int(min(255.0, fill_g * (1.0 - rim_a) + rim_g * rim_a) + 0.5)
             br_b = int(min(255.0, fill_b * (1.0 - rim_a) + rim_b * rim_a) + 0.5)
@@ -175,7 +157,6 @@ def render_glass_card_b64(
                 rows.extend((int(obr), int(obg), int(obb), 255))
                 continue
 
-            # 1.1px crisp specular glass border around d in [-1.2, 0.0]
             rim_w = max(0.0, 1.0 - abs(d + 0.55) * 1.15) * rim_a
             cr = min(255.0, fill_r * (1.0 - rim_w) + rim_r * rim_w)
             cg = min(255.0, fill_g * (1.0 - rim_w) + rim_g * rim_w)
@@ -200,10 +181,9 @@ def render_glow_orb_b64(size: int, core_hex: str, bg_hex: str) -> str:
         rows.append(0)
         for x in range(size):
             dist = math.hypot(x - cx, y - cy)
-            halo = math.exp(-((dist / (size * 0.34)) ** 2) * 2.1) * 0.42
+            halo = math.exp(-((dist / (size * 0.34)) ** 2) * 2.1) * 0.44
             core = max(0.0, min(1.0, 0.5 - (dist - core_r) * 1.25))
             a = min(1.0, core + halo * (1.0 - core))
-            # Slight white specular highlight on upper-left of core
             spec = max(0.0, min(1.0, 1.0 - math.hypot(x - (cx - 1.2), y - (cy - 1.2)) / (core_r * 0.9))) * core * 0.35
             r = min(255.0, br * (1.0 - a) + cr * a + 255.0 * spec)
             g = min(255.0, bg * (1.0 - a) + cg * a + 255.0 * spec)
@@ -244,7 +224,6 @@ _setup_win32_prototypes()
 
 
 def acquire_single_instance_mutex() -> int | None:
-    """Acquire a named Win32 mutex; if another instance exists, bring it to front and return None."""
     if sys.platform != "win32":
         return 1
     k32 = ctypes.windll.kernel32
@@ -254,7 +233,7 @@ def acquire_single_instance_mutex() -> int | None:
     if last_err == 183:  # ERROR_ALREADY_EXISTS
         hwnd = u32.FindWindowW(None, APP_TITLE)
         if hwnd:
-            u32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            u32.ShowWindow(hwnd, 9)
             u32.SetForegroundWindow(hwnd)
         if handle:
             k32.CloseHandle(handle)
@@ -287,31 +266,30 @@ def set_windows_app_id() -> None:
         return
     try:
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-            "Antigravity.QQBridge.Launcher"
+            "Antigravity.Assistant.Console"
         )
     except Exception:
         pass
 
 
 def set_prevent_system_sleep(prevent: bool) -> None:
-    """Keep Windows CPU/network awake while assistant is running (still lets monitor turn off!)."""
+    """Keep Windows CPU/network awake while assistant is running (still lets monitor turn off)."""
     if sys.platform != "win32":
         return
     try:
-        # ES_CONTINUOUS (0x80000000) | ES_SYSTEM_REQUIRED (0x00000001)
         flags = 0x80000001 if prevent else 0x80000000
         ctypes.windll.kernel32.SetThreadExecutionState(wintypes.DWORD(flags))
     except Exception:
         pass
 
 
-def apply_win11_glass_dwm(root: tk.Tk) -> None:
+def apply_win11_glass_dwm(root: tk.Misc) -> None:
     """Apply Windows 11 DWM dark mode, rounded corners, seamless caption & glass rim."""
     if sys.platform != "win32":
         return
     try:
         root.update_idletasks()
-        frame_str = root.wm_frame()
+        frame_str = root.wm_frame()  # type: ignore[attr-defined]
         hwnd = int(frame_str, 16) if frame_str and frame_str != "0x0" else ctypes.windll.user32.GetParent(root.winfo_id())
         if not hwnd:
             hwnd = root.winfo_id()
@@ -334,16 +312,11 @@ def apply_win11_glass_dwm(root: tk.Tk) -> None:
                 ctypes.sizeof(c_val),
             )
 
-        # 20 = DWMWA_USE_IMMERSIVE_DARK_MODE
-        _set_int(20, 1)
-        # 33 = DWMWA_WINDOW_CORNER_PREFERENCE (2 = DWMWCP_ROUND)
-        _set_int(33, 2)
-        # 35 = DWMWA_CAPTION_COLOR (COLORREF 0x00BBGGRR for #0B111B -> 0x001B110B)
-        _set_int(35, 0x001B110B)
-        # 36 = DWMWA_TEXT_COLOR (#E2E8F0 -> 0x00F0E8E2)
-        _set_int(36, 0x00F0E8E2)
-        # 34 = DWMWA_BORDER_COLOR (subtle ice-cyan slate rim #2C4866 -> 0x0066482C)
-        _set_int(34, 0x0066482C)
+        _set_int(20, 1)          # DWMWA_USE_IMMERSIVE_DARK_MODE
+        _set_int(33, 2)          # DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND
+        _set_int(35, 0x00140B07) # DWMWA_CAPTION_COLOR (#070B14)
+        _set_int(36, 0x00FCF8F8) # DWMWA_TEXT_COLOR (#F8FAFC)
+        _set_int(34, 0x00583A22) # DWMWA_BORDER_COLOR (#223A58)
     except Exception:
         pass
 
@@ -354,19 +327,12 @@ def apply_win11_glass_dwm(root: tk.Tk) -> None:
 
 @dataclass
 class LauncherSettings:
-    bot_qq: str
-    onebot_enabled: bool
-    onebot_host: str
-    onebot_port: int
-    onebot_ws_url: str
-    allowed_users: list[str]
     active_model: str
-    webui_url: str
+    workspace: str
     web_pwa_enabled: bool
     web_pwa_port: int
     web_access_token: str
     tunnel_enabled: bool
-    napcat_dir: Path
     project_dir: Path
 
 
@@ -379,69 +345,23 @@ def _bool_env(val: object, default: bool = True) -> bool:
 def load_settings() -> LauncherSettings:
     env_file = PROJECT_DIR / ".env"
     env_data = dotenv_values(env_file) if env_file.is_file() else {}
-    ws_url = str(env_data.get("ONEBOT_WS_URL") or "ws://127.0.0.1:3001").strip()
-    parsed = urlparse(ws_url)
-    host = parsed.hostname or "127.0.0.1"
-    port = parsed.port or 3001
-
-    raw_users = str(env_data.get("ALLOWED_QQ_USERS") or "")
-    allowed_users = [u.strip() for u in raw_users.split(",") if u.strip()]
-    active_model = str(env_data.get("AGY_MODEL") or "默认模型").strip() or "默认模型"
-
-    raw_onebot = str(env_data.get("ONEBOT_ENABLED") or "auto").strip().lower()
-    if raw_onebot == "auto":
-        onebot_enabled = len(allowed_users) > 0
-    else:
-        onebot_enabled = _bool_env(raw_onebot, True)
+    active_model = str(env_data.get("AGY_MODEL") or "claude-sonnet-5-5-medium").strip() or "默认模型"
+    workspace = str(env_data.get("AGY_WORKSPACE") or PROJECT_DIR).strip()
     web_pwa_enabled = _bool_env(env_data.get("WEB_PWA_ENABLED"), True)
     web_pwa_port = int(str(env_data.get("WEB_PWA_PORT") or "8765").strip() or 8765)
     raw_web_tok = str(env_data.get("WEB_ACCESS_TOKEN") or "").strip()
     web_tok = ensure_web_access_token(env_file, raw_web_tok) if web_pwa_enabled else raw_web_tok
     tunnel_enabled = _bool_env(env_data.get("CLOUDFLARE_TUNNEL_ENABLED"), True)
 
-    custom_napcat = str(env_data.get("NAPCAT_DIR") or "").strip()
-    resolved_napcat_dir = Path(custom_napcat).expanduser().resolve() if custom_napcat else NAPCAT_DIR
-
-    bot_qq = str(env_data.get("BOT_QQ") or "").strip()
-    if not bot_qq:
-        cfg_dir = resolved_napcat_dir / "napcat" / "config"
-        if cfg_dir.is_dir():
-            for p in sorted(cfg_dir.glob("onebot11_*.json")):
-                stem_qq = p.stem.removeprefix("onebot11_")
-                if stem_qq.isdigit():
-                    bot_qq = stem_qq
-                    break
-
     return LauncherSettings(
-        bot_qq=bot_qq,
-        onebot_enabled=onebot_enabled,
-        onebot_host=host,
-        onebot_port=port,
-        onebot_ws_url=ws_url,
-        allowed_users=allowed_users,
         active_model=active_model,
-        webui_url=read_napcat_webui_url(resolved_napcat_dir),
+        workspace=workspace,
         web_pwa_enabled=web_pwa_enabled,
         web_pwa_port=web_pwa_port,
         web_access_token=web_tok,
         tunnel_enabled=tunnel_enabled,
-        napcat_dir=resolved_napcat_dir,
         project_dir=PROJECT_DIR,
     )
-
-
-def read_napcat_webui_url(napcat_dir: Path) -> str:
-    webui_cfg = napcat_dir / "napcat" / "config" / "webui.json"
-    port = 6099
-    token = ""
-    if webui_cfg.is_file():
-        try:
-            data = json.loads(webui_cfg.read_text(encoding="utf-8"))
-            port = int(data.get("port") or 6099)
-            token = str(data.get("token") or "").strip()
-        except Exception:
-            pass
-    return f"http://127.0.0.1:{port}/webui?token={token}" if token else f"http://127.0.0.1:{port}/webui"
 
 
 def load_ui_prefs() -> dict:
@@ -450,7 +370,7 @@ def load_ui_prefs() -> dict:
             return json.loads(UI_PREFS_PATH.read_text(encoding="utf-8"))
         except Exception:
             pass
-    return {"alpha": 0.90}
+    return {"alpha": 0.92}
 
 
 def save_ui_prefs(prefs: dict) -> None:
@@ -460,17 +380,30 @@ def save_ui_prefs(prefs: dict) -> None:
         pass
 
 
-def get_startup_shortcut_path() -> Path:
+def _startup_dir() -> Path:
     appdata = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
-    return Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / STARTUP_SHORTCUT_NAME
+    return Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+
+
+def get_startup_shortcut_path() -> Path:
+    return _startup_dir() / STARTUP_SHORTCUT_NAME
 
 
 def is_autostart_enabled() -> bool:
-    return get_startup_shortcut_path().is_file()
+    sdir = _startup_dir()
+    if (sdir / STARTUP_SHORTCUT_NAME).is_file():
+        return True
+    return any((sdir / old).is_file() for old in LEGACY_STARTUP_SHORTCUTS)
 
 
 def set_autostart_enabled(enable: bool) -> bool:
-    sc_path = get_startup_shortcut_path()
+    sdir = _startup_dir()
+    sc_path = sdir / STARTUP_SHORTCUT_NAME
+    for old in LEGACY_STARTUP_SHORTCUTS:
+        try:
+            (sdir / old).unlink(missing_ok=True)
+        except OSError:
+            pass
     if not enable:
         try:
             sc_path.unlink(missing_ok=True)
@@ -487,12 +420,13 @@ $sc.TargetPath = '{str(target).replace("'", "''")}'
 $sc.Arguments = '-X utf8 -m qq_agy_bridge.launcher --minimized'
 $sc.WorkingDirectory = '{str(PROJECT_DIR).replace("'", "''")}'
 $sc.IconLocation = '{str(icon).replace("'", "''")},0'
-$sc.Description = '开机静默启动 QQ Antigravity 机器人'
+$sc.Description = '开机静默启动 反重力助手'
 $sc.Save()
 """
+    encoded_ps = base64.b64encode(ps.encode("utf-16-le")).decode("ascii")
     try:
         subprocess.run(
-            ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps],
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded_ps],
             check=True,
             capture_output=True,
             timeout=8,
@@ -511,63 +445,42 @@ def is_tcp_port_open(host: str, port: int, timeout: float = 0.35) -> bool:
         return False
 
 
-def find_external_processes(exclude_pids: set[int]) -> tuple[list[int], list[int]]:
-    """Return (napcat_pids, bridge_pids) currently running on Windows."""
+def find_external_server_processes(exclude_pids: set[int]) -> list[int]:
+    """Return running backend server PIDs outside this launcher."""
     ps_script = r"""
 $procs = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue
-$napcat = @(
+$srv = @(
     $procs | Where-Object {
-        $_.Name -ieq 'node.exe' -and (
-            ($_.ExecutablePath -like '*NapCatNode*') -or
-            ($_.CommandLine -like '*NapCatNode*')
-        )
-    } | ForEach-Object { [int]$_.ProcessId }
-)
-$bridge = @(
-    $procs | Where-Object {
-        ($_.Name -ieq 'qq-agy-bridge.exe') -or (
-            $_.Name -ieq 'python.exe' -and (
+        ($_.Name -ieq 'qq-agy-bridge.exe') -or
+        ($_.Name -ieq 'antigravity-assistant.exe') -or (
+            $_.Name -like 'python*' -and (
                 ($_.CommandLine -like '*qq-agy-bridge*') -or
                 ($_.CommandLine -like '*qq_agy_bridge.main*')
             ) -and ($_.CommandLine -notlike '*qq_agy_bridge.launcher*')
         )
     } | ForEach-Object { [int]$_.ProcessId }
 )
-@{ napcat = $napcat; bridge = $bridge } | ConvertTo-Json -Compress
+ConvertTo-Json -InputObject $srv -Compress
 """
     try:
         result = subprocess.run(
-            [
-                "powershell.exe",
-                "-NoProfile",
-                "-NonInteractive",
-                "-WindowStyle",
-                "Hidden",
-                "-Command",
-                ps_script,
-            ],
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps_script],
             capture_output=True,
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=10,
+            timeout=8,
             creationflags=CREATE_NO_WINDOW,
         )
         raw = result.stdout.strip()
-        if not raw:
-            return ([], [])
+        if not raw or raw == "null":
+            return []
         data = json.loads(raw)
-        napcat_raw = data.get("napcat") or []
-        bridge_raw = data.get("bridge") or []
-        if isinstance(napcat_raw, int):
-            napcat_raw = [napcat_raw]
-        if isinstance(bridge_raw, int):
-            bridge_raw = [bridge_raw]
-        napcat_pids = [int(p) for p in napcat_raw if int(p) not in exclude_pids]
-        bridge_pids = [int(p) for p in bridge_raw if int(p) not in exclude_pids]
-        return (napcat_pids, bridge_pids)
+        if isinstance(data, int):
+            data = [data]
+        return [int(p) for p in data if int(p) not in exclude_pids]
     except Exception:
-        return ([], [])
+        return []
 
 
 def kill_pid_tree(pid: int) -> None:
@@ -582,30 +495,28 @@ def kill_pid_tree(pid: int) -> None:
         pass
 
 
-FIREWALL_RULE_NAME = "Antigravity Mobile PWA"
-
-
 def is_lan_firewall_rule_present(port: int) -> bool:
-    """Check whether Windows Firewall already has our inbound TCP allow rule."""
     if sys.platform != "win32":
         return True
-    try:
-        res = subprocess.run(
-            ["netsh", "advfirewall", "firewall", "show", "rule", f"name={FIREWALL_RULE_NAME}"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="ignore",
-            timeout=3,
-            creationflags=CREATE_NO_WINDOW,
-        )
-        return res.returncode == 0 and str(port) in (res.stdout or "")
-    except Exception:
-        return False
+    for rule_name in (FIREWALL_RULE_NAME, "Antigravity Mobile PWA"):
+        try:
+            res = subprocess.run(
+                ["netsh", "advfirewall", "firewall", "show", "rule", f"name={rule_name}"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="ignore",
+                timeout=3,
+                creationflags=CREATE_NO_WINDOW,
+            )
+            if res.returncode == 0 and str(port) in (res.stdout or ""):
+                return True
+        except Exception:
+            pass
+    return False
 
 
 def request_lan_firewall_allow(port: int) -> bool:
-    """Prompt Windows UAC via ShellExecuteW to allow inbound TCP on the PWA LAN port."""
     if sys.platform != "win32":
         return True
     try:
@@ -620,30 +531,31 @@ def request_lan_firewall_allow(port: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Glassmorphic Launcher Application
+# Glassmorphic Desktop Hub Application
 # ---------------------------------------------------------------------------
 
 class LauncherApp:
-    # Deep Midnight Aurora Glass Palette
-    BG = "#0B111B"
-    GLASS_TOP = "#16243A"
-    GLASS_BOTTOM = "#0F1929"
-    GLASS_SURFACE = "#131E31"
-    LOG_BG = "#070C14"
+    BG = "#070B14"
+    GLASS_SURFACE = "#0F1829"
+    QR_SURFACE = "#0D1525"
+    LOG_BG = "#050810"
 
-    TEXT_PRIMARY = "#F1F5F9"
+    TEXT_PRIMARY = "#F8FAFC"
     TEXT_SECONDARY = "#94A3B8"
     TEXT_MUTED = "#64748B"
 
     CYAN = "#38BDF8"
+    INDIGO = "#818CF8"
     EMERALD = "#34D399"
     AMBER = "#FBBF24"
     ROSE = "#FB7185"
 
-    PILL_PRIMARY = "#0369A1"
-    PILL_PRIMARY_HOVER = "#0284C7"
-    PILL_SLATE = "#19283F"
-    PILL_SLATE_HOVER = "#233754"
+    PILL_PRIMARY = "#0284C7"
+    PILL_PRIMARY_HOVER = "#0369A1"
+    PILL_INDIGO = "#4338CA"
+    PILL_INDIGO_HOVER = "#4F46E5"
+    PILL_SLATE = "#152238"
+    PILL_SLATE_HOVER = "#1E314F"
     PILL_DANGER = "#881337"
     PILL_DANGER_HOVER = "#BE123C"
 
@@ -652,23 +564,21 @@ class LauncherApp:
     def __init__(self, root: tk.Tk, settings: LauncherSettings, *, start_minimized: bool = False) -> None:
         self.root = root
         self.settings = settings
-        self._webui_url = settings.webui_url
         self._prefs = load_ui_prefs()
-        self._alpha: float = float(self._prefs.get("alpha", 0.90))
+        self._alpha: float = float(self._prefs.get("alpha", 0.92))
 
-        self._napcat_proc: subprocess.Popen[str] | None = None
-        self._bridge_proc: subprocess.Popen[str] | None = None
+        self._server_proc: subprocess.Popen[str] | None = None
         self._tunnel_proc: subprocess.Popen[str] | None = None
         self._tunnel_url: str = ""
-        self._qr_refresh_cb: Callable[[], None] | None = None
-        self._napcat_external = False
-        self._bridge_external = False
-        self._bridge_connected = False
-        self._qr_required = False
+        self._server_external = False
         self._desired_running = True
         self._auto_restart_timestamps: list[float] = []
         self._busy = False
         self._closing = False
+
+        self._qr_mode = tk.StringVar(value="lan")
+        self._qr_photo_ref: list[tk.PhotoImage] = []
+        self._conv_stats_str = "正在扫描电脑端会话..."
 
         self._op_lock = threading.Lock()
         self._log_queue: queue.Queue[tuple[str, str, str]] = queue.Queue()
@@ -678,7 +588,6 @@ class LauncherApp:
         self._autostart_var = tk.BooleanVar(value=is_autostart_enabled())
         self._keep_awake_var = tk.BooleanVar(value=bool(self._prefs.get("keep_awake", True)))
 
-        # PhotoImage caches (prevent GC)
         self._img_cache: dict[tuple, tk.PhotoImage] = {}
         self._orbs: dict[str, tk.PhotoImage] = {}
 
@@ -690,13 +599,15 @@ class LauncherApp:
         self._apply_window_alpha(self._alpha)
         self._start_ui_loops()
 
-        self.root.after(200, lambda: self._run_async(self._start_all_worker, False))
+        threading.Thread(target=self._refresh_conv_stats_bg, daemon=True).start()
+        threading.Thread(target=self._check_firewall_bg, daemon=True).start()
+        self.root.after(160, lambda: self._run_async(self._start_all_worker, False))
 
     def _configure_window(self, *, start_minimized: bool) -> None:
         self.root.title(APP_TITLE)
         self.root.configure(bg=self.BG)
-        self.root.minsize(820, 580)
-        self.root.geometry("940x670")
+        self.root.minsize(920, 620)
+        w, h = 980, 690
         self.root.protocol("WM_DELETE_WINDOW", self._on_close_requested)
 
         if ICON_PATH.is_file():
@@ -706,7 +617,6 @@ class LauncherApp:
                 pass
 
         self.root.update_idletasks()
-        w, h = 940, 670
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
         x = max((sw - w) // 2, 20)
@@ -725,7 +635,7 @@ class LauncherApp:
         style.configure(
             "Glass.Vertical.TScrollbar",
             gripcount=0,
-            background="#1E2F47",
+            background="#1C2D46",
             darkcolor=self.LOG_BG,
             lightcolor=self.LOG_BG,
             troughcolor=self.LOG_BG,
@@ -738,7 +648,7 @@ class LauncherApp:
         )
         style.map(
             "Glass.Vertical.TScrollbar",
-            background=[("active", "#38BDF8"), ("!active", "#1E2F47")],
+            background=[("active", "#38BDF8"), ("!active", "#1C2D46")],
         )
 
     def _prepare_orb_icons(self) -> None:
@@ -755,16 +665,16 @@ class LauncherApp:
         width: int,
         height: int,
         *,
-        radius: int = 14,
+        radius: int = 16,
         rim_top: str = "#67E8F9",
-        top_fill: str = "#16243A",
-        bottom_fill: str = "#0F1929",
+        top_fill: str = "#121D31",
+        bottom_fill: str = "#0C1525",
     ) -> tk.PhotoImage:
         key = (width, height, radius, rim_top, top_fill, bottom_fill)
         cached = self._img_cache.get(key)
         if cached is not None:
             return cached
-        if len(self._img_cache) > 24:
+        if len(self._img_cache) > 28:
             self._img_cache.clear()
         b64 = render_glass_card_b64(
             width,
@@ -788,7 +698,7 @@ class LauncherApp:
         if hasattr(self, "_alpha_btns"):
             for btn, val in self._alpha_btns:
                 active = abs(val - self._alpha) < 0.015
-                bg = "#0284C7" if active else "#132033"
+                bg = "#0284C7" if active else "#101B2D"
                 fg = "#FFFFFF" if active else "#94A3B8"
                 btn._base_bg = bg  # type: ignore[attr-defined]
                 btn.configure(bg=bg, fg=fg)
@@ -796,10 +706,10 @@ class LauncherApp:
         save_ui_prefs(self._prefs)
 
     def _build_ui(self) -> None:
-        outer = tk.Frame(self.root, bg=self.BG, padx=22, pady=16)
+        outer = tk.Frame(self.root, bg=self.BG, padx=24, pady=18)
         outer.pack(fill=tk.BOTH, expand=True)
 
-        # ── Top Header Bar ──
+        # ── Top Brand Header ──
         header = tk.Frame(outer, bg=self.BG)
         header.pack(fill=tk.X, pady=(0, 14))
 
@@ -809,46 +719,54 @@ class LauncherApp:
         title_row = tk.Frame(left_hdr, bg=self.BG)
         title_row.pack(fill=tk.X)
 
-        tk.Label(
+        emblem = tk.Label(
             title_row,
             text="✦",
-            bg=self.BG,
+            bg="#0F2038",
             fg=self.CYAN,
-            font=("Segoe UI Symbol", 15, "bold"),
-        ).pack(side=tk.LEFT, padx=(0, 8))
+            font=("Segoe UI Symbol", 14, "bold"),
+            padx=8,
+            pady=2,
+        )
+        emblem.pack(side=tk.LEFT, padx=(0, 10))
 
         tk.Label(
             title_row,
-            text="QQ · Antigravity 私人助理",
+            text="反重力助手",
             bg=self.BG,
             fg=self.TEXT_PRIMARY,
-            font=("Microsoft YaHei UI", 16, "bold"),
+            font=("Microsoft YaHei UI", 17, "bold"),
             anchor="w",
         ).pack(side=tk.LEFT)
 
-        whitelist_str = ", ".join(self.settings.allowed_users) if self.settings.allowed_users else "未配置"
+        tk.Label(
+            title_row,
+            text="ANTIGRAVITY REMOTE HUB",
+            bg=self.BG,
+            fg="#475569",
+            font=("Segoe UI", 8, "bold"),
+            padx=10,
+        ).pack(side=tk.LEFT, pady=(4, 0))
+
         self.subtitle_lbl = tk.Label(
             left_hdr,
-            text=(
-                f"机器人 QQ {self.settings.bot_qq}   ·   "
-                f"仅响应白名单私聊 ({whitelist_str})   ·   Google OAuth 直连"
-            ),
+            text="电脑全会话实时同步 (Antigravity + Codex)   ·   Wi-Fi 1ms 极速直连 + 全球加密隧道   ·   免 API Key",
             bg=self.BG,
             fg=self.TEXT_SECONDARY,
             font=("Microsoft YaHei UI", 9),
             anchor="w",
-            pady=3,
+            pady=4,
         )
         self.subtitle_lbl.pack(fill=tk.X)
 
-        # Right Header Controls: Opacity Glass Switcher + Auto-Start Toggle
+        # Right Header: Translucency Switcher + System Toggles
         right_hdr = tk.Frame(header, bg=self.BG)
         right_hdr.pack(side=tk.RIGHT, anchor="ne")
 
         glass_bar = tk.Frame(
             right_hdr,
-            bg="#101B2B",
-            highlightbackground="#233854",
+            bg="#0C1524",
+            highlightbackground="#1E324F",
             highlightthickness=1,
             padx=6,
             pady=4,
@@ -858,7 +776,7 @@ class LauncherApp:
         tk.Label(
             glass_bar,
             text="玻璃透感",
-            bg="#101B2B",
+            bg="#0C1524",
             fg=self.TEXT_MUTED,
             font=("Microsoft YaHei UI", 8),
             padx=4,
@@ -870,8 +788,8 @@ class LauncherApp:
                 glass_bar,
                 text=label,
                 command=lambda v=val: self._apply_window_alpha(v),
-                bg="#132033",
-                hover="#1E3350",
+                bg="#101B2D",
+                hover="#1B2E4B",
                 fg="#94A3B8",
                 padx=8,
                 pady=2,
@@ -883,167 +801,223 @@ class LauncherApp:
         chk_row = tk.Frame(right_hdr, bg=self.BG)
         chk_row.pack(side=tk.TOP, anchor="e", pady=(6, 0))
 
-        awake_chk = tk.Checkbutton(
+        tk.Checkbutton(
             chk_row,
-            text="防自动休眠(允许息屏)",
+            text="防自动休眠 (允许息屏)",
             variable=self._keep_awake_var,
             command=self._on_toggle_keep_awake,
             bg=self.BG,
             fg=self.TEXT_SECONDARY,
-            selectcolor="#132033",
+            selectcolor="#101B2D",
             activebackground=self.BG,
             activeforeground=self.TEXT_PRIMARY,
             font=("Microsoft YaHei UI", 8),
             bd=0,
             highlightthickness=0,
             cursor="hand2",
-        )
-        awake_chk.pack(side=tk.LEFT, padx=(0, 10))
+        ).pack(side=tk.LEFT, padx=(0, 12))
 
-        autostart_chk = tk.Checkbutton(
+        tk.Checkbutton(
             chk_row,
             text="开机静默自启",
             variable=self._autostart_var,
             command=self._on_toggle_autostart,
             bg=self.BG,
             fg=self.TEXT_SECONDARY,
-            selectcolor="#132033",
+            selectcolor="#101B2D",
             activebackground=self.BG,
             activeforeground=self.TEXT_PRIMARY,
             font=("Microsoft YaHei UI", 8),
             bd=0,
             highlightthickness=0,
             cursor="hand2",
-        )
-        autostart_chk.pack(side=tk.LEFT)
+        ).pack(side=tk.LEFT)
 
-        # ── Frosted Glass Status Cards Row ──
-        cards_row = tk.Frame(outer, bg=self.BG)
-        cards_row.pack(fill=tk.X, pady=(0, 12))
-        cards_row.columnconfigure(0, weight=1, uniform="glass_cards")
-        cards_row.columnconfigure(1, weight=1, uniform="glass_cards")
+        # ── Two-Column Hero Dashboard (Telemetry + Inline Live QR Card) ──
+        hero_grid = tk.Frame(outer, bg=self.BG)
+        hero_grid.pack(fill=tk.X, pady=(0, 12))
+        hero_grid.columnconfigure(0, weight=1)
+        hero_grid.columnconfigure(1, weight=0)
 
-        self.napcat_orb_lbl, self.napcat_status_lbl, self.napcat_detail_lbl = self._create_glass_card(
-            cards_row,
-            col=0,
-            padx=(0, 8),
-            title="NAPCAT · QQ 协议核心",
-            detail=f"OneBot WS  {self.settings.onebot_host}:{self.settings.onebot_port}  ·  本地隔离登录",
+        left_col = tk.Frame(hero_grid, bg=self.BG)
+        left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
+
+        self.engine_orb_lbl, self.engine_status_lbl, self.engine_detail_lbl = self._create_glass_card(
+            left_col,
+            title="CORE ENGINE · 反重力核心引擎与全会话同步",
+            detail=f"默认模型：{self.settings.active_model}  ·  {self._conv_stats_str}",
             rim_color="#38BDF8",
-        )
-        self.bridge_orb_lbl, self.bridge_status_lbl, self.bridge_detail_lbl = self._create_glass_card(
-            cards_row,
-            col=1,
-            padx=(8, 0),
-            title="ANTIGRAVITY · 智能桥接与热会话",
-            detail=f"当前模型：{self.settings.active_model}  ·  支持截图 / 传文件 / 长期记忆",
-            rim_color="#34D399",
+            pady=(0, 10),
         )
 
-        # ── Dynamic Glass Banner (hidden unless needed) ──
-        self.banner_frame = tk.Frame(
-            outer,
-            bg="#1E1B10",
-            highlightbackground="#D97706",
-            highlightthickness=1,
-            padx=14,
-            pady=9,
+        lan_ip = get_lan_ipv4()
+        self.net_orb_lbl, self.net_status_lbl, self.net_detail_lbl = self._create_glass_card(
+            left_col,
+            title="NETWORK · 局域网 1ms 直连与全球加密隧道",
+            detail=f"局域网地址：http://{lan_ip}:{self.settings.web_pwa_port}  ·  外网隧道准备中...",
+            rim_color="#818CF8",
+            pady=(0, 12),
         )
-        self.banner_lbl = tk.Label(
-            self.banner_frame,
-            text="",
-            bg="#1E1B10",
-            fg="#FDE68A",
-            font=("Microsoft YaHei UI", 9, "bold"),
-            anchor="w",
-            justify=tk.LEFT,
-        )
-        self.banner_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.banner_btn = self._make_button(
-            self.banner_frame,
-            text="打开扫码后台",
-            command=self._open_webui,
-            bg="#D97706",
-            hover="#B45309",
-            fg="#FFFFFF",
-            padx=12,
-            pady=4,
-        )
-        self.banner_btn.pack(side=tk.RIGHT, padx=(10, 0))
 
-        # ── Action Pill Bar ──
-        self.btn_bar = tk.Frame(outer, bg=self.BG)
-        self.btn_bar.pack(fill=tk.X, pady=(0, 12))
+        # Action Pill Bar inside Left Column
+        self.btn_bar = tk.Frame(left_col, bg=self.BG)
+        self.btn_bar.pack(fill=tk.X)
 
         self.btn_start = self._make_button(
             self.btn_bar,
-            text="▶  一键启动",
+            text="▶  启动服务",
             command=lambda: self._run_async(self._start_all_worker, False),
             bg=self.PILL_PRIMARY,
             hover=self.PILL_PRIMARY_HOVER,
             highlight="#38BDF8",
         )
-        self.btn_start.pack(side=tk.LEFT, padx=(0, 8))
+        self.btn_start.pack(side=tk.LEFT, padx=(0, 7))
 
         self.btn_restart = self._make_button(
             self.btn_bar,
-            text="↻  重启全部",
+            text="↻  重启并接管",
             command=lambda: self._run_async(self._start_all_worker, True),
             bg=self.PILL_SLATE,
             hover=self.PILL_SLATE_HOVER,
-            highlight="#334E6E",
+            highlight="#2D466B",
         )
-        self.btn_restart.pack(side=tk.LEFT, padx=(0, 8))
+        self.btn_restart.pack(side=tk.LEFT, padx=(0, 7))
 
         self.btn_stop = self._make_button(
             self.btn_bar,
-            text="■  停止服务",
+            text="■  停止",
             command=lambda: self._run_async(self._stop_all_worker, True),
             bg=self.PILL_DANGER,
             hover=self.PILL_DANGER_HOVER,
             highlight="#F43F5E",
+            padx=13,
         )
-        self.btn_stop.pack(side=tk.LEFT, padx=(0, 12))
+        self.btn_stop.pack(side=tk.LEFT, padx=(0, 10))
 
-        self.btn_pwa = self._make_button(
+        self.btn_open_web = self._make_button(
             self.btn_bar,
-            text="📱  手机端专属 App",
-            command=self._open_pwa_qr_dialog,
-            bg="#312E81",
-            hover="#4338CA",
+            text="🖥  电脑浏览器打开",
+            command=self._open_local_browser,
+            bg=self.PILL_INDIGO,
+            hover=self.PILL_INDIGO_HOVER,
             highlight="#818CF8",
+            padx=13,
         )
-        self.btn_pwa.pack(side=tk.LEFT, padx=(0, 8))
-
-        self.btn_webui = self._make_button(
-            self.btn_bar,
-            text="🌐  NapCat 扫码后台",
-            command=self._open_webui,
-            bg=self.PILL_SLATE,
-            hover=self.PILL_SLATE_HOVER,
-            highlight="#2B425E",
-        )
-        self.btn_webui.pack(side=tk.LEFT, padx=(0, 8))
+        self.btn_open_web.pack(side=tk.LEFT, padx=(0, 7))
 
         self.btn_folder = self._make_button(
             self.btn_bar,
-            text="📂  配置与记忆",
+            text="📂  项目目录",
             command=self._open_config_folder,
             bg=self.PILL_SLATE,
             hover=self.PILL_SLATE_HOVER,
-            highlight="#2B425E",
+            highlight="#283E5E",
+            padx=12,
         )
-        self.btn_folder.pack(side=tk.LEFT, padx=(0, 8))
+        self.btn_folder.pack(side=tk.LEFT, padx=(0, 7))
 
         self.btn_clean = self._make_button(
             self.btn_bar,
-            text="🧹  清理缓存",
+            text="🧹  清缓存",
             command=self._clean_cache_async,
             bg=self.PILL_SLATE,
             hover=self.PILL_SLATE_HOVER,
-            highlight="#2B425E",
+            highlight="#283E5E",
+            padx=12,
         )
         self.btn_clean.pack(side=tk.LEFT)
+
+        # Right Column: Inline Frosted Glass QR Pairing Card (Zero-click mobile scan!)
+        qr_card = tk.Frame(
+            hero_grid,
+            bg=self.QR_SURFACE,
+            highlightbackground="#274060",
+            highlightthickness=1,
+            padx=14,
+            pady=12,
+            width=292,
+        )
+        qr_card.grid(row=0, column=1, sticky="ns")
+
+        qr_hdr = tk.Frame(qr_card, bg=self.QR_SURFACE)
+        qr_hdr.pack(fill=tk.X)
+        tk.Label(
+            qr_hdr,
+            text="📱 手机扫码直连",
+            bg=self.QR_SURFACE,
+            fg=self.TEXT_PRIMARY,
+            font=("Microsoft YaHei UI", 10, "bold"),
+        ).pack(side=tk.LEFT)
+
+        self.qr_tab_lan = self._make_button(
+            qr_hdr,
+            text="Wi-Fi 1ms",
+            command=lambda: self._switch_qr_mode("lan"),
+            bg=self.PILL_PRIMARY,
+            hover=self.PILL_PRIMARY_HOVER,
+            padx=8,
+            pady=2,
+            font_size=8,
+        )
+        self.qr_tab_tunnel = self._make_button(
+            qr_hdr,
+            text="4G/5G 外网",
+            command=lambda: self._switch_qr_mode("tunnel"),
+            bg="#15233A",
+            hover="#1E3352",
+            fg="#94A3B8",
+            padx=8,
+            pady=2,
+            font_size=8,
+        )
+        self.qr_tab_tunnel.pack(side=tk.RIGHT, padx=(4, 0))
+        self.qr_tab_lan.pack(side=tk.RIGHT)
+
+        self.qr_img_lbl = tk.Label(
+            qr_card,
+            bg=self.QR_SURFACE,
+            fg=self.TEXT_SECONDARY,
+            font=("Microsoft YaHei UI", 8),
+            pady=6,
+        )
+        self.qr_img_lbl.pack(pady=(6, 2))
+
+        self.qr_url_lbl = tk.Label(
+            qr_card,
+            text="",
+            bg=self.QR_SURFACE,
+            fg=self.CYAN,
+            font=("Consolas", 8),
+            wraplength=255,
+        )
+        self.qr_url_lbl.pack()
+
+        qr_actions = tk.Frame(qr_card, bg=self.QR_SURFACE)
+        qr_actions.pack(pady=(6, 0))
+
+        self._make_button(
+            qr_actions,
+            text="📋 复制免密链接",
+            command=self._copy_qr_link,
+            bg="#162944",
+            hover="#0284C7",
+            padx=10,
+            pady=4,
+            font_size=8,
+        ).pack(side=tk.LEFT, padx=3)
+
+        self.fw_btn = self._make_button(
+            qr_actions,
+            text="🛡 放行防火墙",
+            command=self._allow_firewall,
+            bg="#1E3A5F",
+            hover="#0284C7",
+            padx=9,
+            pady=4,
+            font_size=8,
+        )
+
+        self._render_inline_qr()
 
         # ── Log Stream Header ──
         log_hdr = tk.Frame(outer, bg=self.BG)
@@ -1057,43 +1031,36 @@ class LauncherApp:
             font=("Microsoft YaHei UI", 10, "bold"),
         ).pack(side=tk.LEFT)
 
-        clear_btn = self._make_button(
+        self._make_button(
             log_hdr,
             text="清空日志",
             command=self._clear_logs,
-            bg="#132033",
-            hover="#1E3350",
+            bg="#101B2D",
+            hover="#1B2E4B",
             fg=self.TEXT_SECONDARY,
             padx=10,
             pady=2,
             font_size=8,
-        )
-        clear_btn.pack(side=tk.RIGHT)
+        ).pack(side=tk.RIGHT)
 
-        debug_chk = tk.Checkbutton(
+        tk.Checkbutton(
             log_hdr,
-            text="显示底层网络帧",
+            text="显示底层隧道帧",
             variable=self._show_debug_var,
             command=lambda: setattr(self, "_show_debug", bool(self._show_debug_var.get())),
             bg=self.BG,
             fg=self.TEXT_MUTED,
-            selectcolor="#132033",
+            selectcolor="#101B2D",
             activebackground=self.BG,
             activeforeground=self.TEXT_PRIMARY,
             font=("Microsoft YaHei UI", 8),
             bd=0,
             highlightthickness=0,
             cursor="hand2",
-        )
-        debug_chk.pack(side=tk.RIGHT, padx=(0, 12))
+        ).pack(side=tk.RIGHT, padx=(0, 12))
 
         # ── Frosted Glass Terminal Panel ──
-        log_glass_border = tk.Frame(
-            outer,
-            bg="#263B57",
-            padx=1,
-            pady=1,
-        )
+        log_glass_border = tk.Frame(outer, bg="#1E324D", padx=1, pady=1)
         log_glass_border.pack(fill=tk.BOTH, expand=True)
 
         inner_log = tk.Frame(log_glass_border, bg=self.LOG_BG, padx=4, pady=4)
@@ -1126,17 +1093,16 @@ class LauncherApp:
 
         self.log_text.tag_configure("ts", foreground="#475569")
         self.log_text.tag_configure("sys", foreground="#94A3B8")
-        self.log_text.tag_configure("napcat", foreground="#38BDF8")
-        self.log_text.tag_configure("bridge", foreground="#34D399")
+        self.log_text.tag_configure("engine", foreground="#38BDF8")
+        self.log_text.tag_configure("tunnel", foreground="#34D399")
         self.log_text.tag_configure("warn", foreground="#FBBF24")
         self.log_text.tag_configure("err", foreground="#FB7185")
 
-        # Footer
         tk.Label(
             outer,
-            text="最小化窗口后助理会在后台安静值守（异常断线会自动自愈重连）；右上角可随时调节窗口玻璃通透度。",
+            text="最小化窗口后「反重力助手」会在后台静默值守并自动重连自愈；手机扫码后添加到主屏幕即可获得原生全屏 App 体验。",
             bg=self.BG,
-            fg="#4E617A",
+            fg="#475569",
             font=("Microsoft YaHei UI", 8),
             anchor="w",
             pady=5,
@@ -1145,22 +1111,21 @@ class LauncherApp:
     def _create_glass_card(
         self,
         parent: tk.Frame,
-        col: int,
-        padx: tuple[int, int],
+        *,
         title: str,
         detail: str,
         rim_color: str,
+        pady: tuple[int, int] = (0, 8),
     ) -> tuple[tk.Label, tk.Label, tk.Label]:
-        """Build an anti-aliased frosted glass card using a Canvas backdrop + crisp interior widgets."""
         card_canvas = tk.Canvas(
             parent,
             bg=self.BG,
-            height=96,
+            height=92,
             bd=0,
             highlightthickness=0,
             relief=tk.FLAT,
         )
-        card_canvas.grid(row=0, column=col, sticky="nsew", padx=padx)
+        card_canvas.pack(fill=tk.X, pady=pady)
 
         content = tk.Frame(card_canvas, bg=self.GLASS_SURFACE)
 
@@ -1169,19 +1134,14 @@ class LauncherApp:
             text=title,
             bg=self.GLASS_SURFACE,
             fg="#7C93B0",
-            font=("Microsoft YaHei UI", 8, "bold"),
+            font=("Segoe UI", 8, "bold"),
             anchor="w",
         ).pack(fill=tk.X)
 
         status_row = tk.Frame(content, bg=self.GLASS_SURFACE)
-        status_row.pack(fill=tk.X, pady=(5, 4))
+        status_row.pack(fill=tk.X, pady=(4, 3))
 
-        orb_lbl = tk.Label(
-            status_row,
-            image=self._orbs["amber"],
-            bg=self.GLASS_SURFACE,
-            bd=0,
-        )
+        orb_lbl = tk.Label(status_row, image=self._orbs["amber"], bg=self.GLASS_SURFACE, bd=0)
         orb_lbl.pack(side=tk.LEFT, padx=(0, 8))
 
         status_lbl = tk.Label(
@@ -1205,7 +1165,7 @@ class LauncherApp:
         detail_lbl.pack(fill=tk.X)
 
         bg_item = card_canvas.create_image(0, 0, anchor="nw")
-        win_item = card_canvas.create_window(16, 13, anchor="nw", window=content)
+        win_item = card_canvas.create_window(16, 12, anchor="nw", window=content)
         resize_after_id: list[str | None] = [None]
 
         def _redraw(event: tk.Event) -> None:  # type: ignore[type-arg]
@@ -1219,7 +1179,7 @@ class LauncherApp:
                 img = self._get_glass_image(
                     w,
                     h,
-                    radius=14,
+                    radius=15,
                     rim_top=rim_color,
                     top_fill=self.GLASS_SURFACE,
                     bottom_fill=self.GLASS_SURFACE,
@@ -1245,7 +1205,7 @@ class LauncherApp:
         hover: str,
         fg: str = "#F8FAFC",
         highlight: str | None = None,
-        padx: int = 15,
+        padx: int = 14,
         pady: int = 7,
         font_size: int = 9,
     ) -> tk.Button:
@@ -1277,6 +1237,94 @@ class LauncherApp:
         btn.bind("<Leave>", lambda _e: btn.configure(bg=btn._base_bg))  # type: ignore[attr-defined]
         return btn
 
+    def _current_qr_url(self) -> str:
+        tok = self.settings.web_access_token
+        if self._qr_mode.get() == "tunnel":
+            return f"{self._tunnel_url}/?token={tok}" if self._tunnel_url else ""
+        lan_ip = get_lan_ipv4()
+        return f"http://{lan_ip}:{self.settings.web_pwa_port}/?token={tok}"
+
+    def _switch_qr_mode(self, mode: str) -> None:
+        self._qr_mode.set(mode)
+        self._render_inline_qr()
+
+    def _render_inline_qr(self) -> None:
+        if self._closing:
+            return
+        m = self._qr_mode.get()
+        for btn, active in ((self.qr_tab_lan, m == "lan"), (self.qr_tab_tunnel, m == "tunnel")):
+            bg = self.PILL_PRIMARY if active else "#15233A"
+            fg = "#FFFFFF" if active else "#94A3B8"
+            btn._base_bg = bg  # type: ignore[attr-defined]
+            btn.configure(bg=bg, fg=fg)
+
+        target_u = self._current_qr_url()
+        if not target_u:
+            self.qr_img_lbl.configure(
+                image="",
+                text="\n⏳ 正在建立全球加密隧道...\n约 3~6 秒自动生成外网二维码\n（同 Wi-Fi 可点右上 Wi-Fi 1ms 秒扫）\n",
+            )
+            self.qr_url_lbl.configure(text="等待分配 https://*.trycloudflare.com")
+            return
+
+        try:
+            import segno
+            buf = io.BytesIO()
+            segno.make(target_u, error="m").write(
+                buf, kind="png", scale=4, border=2, dark="#F8FAFC", light=self.QR_SURFACE
+            )
+            b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+            photo = tk.PhotoImage(data=b64)
+            self._qr_photo_ref.clear()
+            self._qr_photo_ref.append(photo)
+            self.qr_img_lbl.configure(image=photo, text="")
+            masked = target_u.split("?token=")[0]
+            self.qr_url_lbl.configure(text=masked)
+        except Exception as exc:
+            self.qr_img_lbl.configure(image="", text=f"二维码渲染失败：{exc}")
+
+    def _copy_qr_link(self) -> None:
+        lan_ip = get_lan_ipv4()
+        fallback = f"http://{lan_ip}:{self.settings.web_pwa_port}/?token={self.settings.web_access_token}"
+        u = self._current_qr_url() or fallback
+        self.root.clipboard_clear()
+        self.root.clipboard_append(u)
+        self.qr_url_lbl.configure(text="✓ 已复制免密直连链接！")
+
+    def _open_local_browser(self) -> None:
+        url = f"http://127.0.0.1:{self.settings.web_pwa_port}/?token={self.settings.web_access_token}"
+        webbrowser.open(url)
+
+    def _check_firewall_bg(self) -> None:
+        ok = is_lan_firewall_rule_present(self.settings.web_pwa_port)
+        if not ok:
+            self._post_ui(lambda: self.fw_btn.pack(side=tk.LEFT, padx=3))
+
+    def _allow_firewall(self) -> None:
+        if request_lan_firewall_allow(self.settings.web_pwa_port):
+            self.qr_url_lbl.configure(text=f"✓ 已放行局域网端口 {self.settings.web_pwa_port}")
+            self.fw_btn.pack_forget()
+
+    def _refresh_conv_stats_bg(self) -> None:
+        try:
+            items = list_local_conversations(limit=500)
+            n_ide = sum(1 for x in items if x.store == "ide")
+            n_codex = sum(1 for x in items if x.store == "codex")
+            n_cli = sum(1 for x in items if x.store == "cli")
+            parts = [f"Antigravity {n_ide}"]
+            if n_codex > 0:
+                parts.append(f"Codex {n_codex}")
+            if n_cli > 0:
+                parts.append(f"远程 {n_cli}")
+            self._conv_stats_str = f"已同步会话：{' · '.join(parts)}（共 {len(items)} 个）"
+            self._post_ui(
+                lambda: self.engine_detail_lbl.configure(
+                    text=f"默认模型：{self.settings.active_model}  ·  {self._conv_stats_str}"
+                )
+            )
+        except Exception:
+            pass
+
     def _on_toggle_autostart(self) -> None:
         want = bool(self._autostart_var.get())
         ok = set_autostart_enabled(want)
@@ -1284,7 +1332,7 @@ class LauncherApp:
             self._autostart_var.set(not want)
             self._enqueue_log("系统", "设置开机自启快捷方式失败。", "err")
             return
-        msg = "已开启开机静默自启（开机后自动在任务栏最小化运行）。" if want else "已关闭开机自启。"
+        msg = "已开启开机静默自启（开机后自动最小化值守）。" if want else "已关闭开机自启。"
         self._enqueue_log("系统", msg, "sys")
 
     def _on_toggle_keep_awake(self) -> None:
@@ -1292,7 +1340,7 @@ class LauncherApp:
         self._prefs["keep_awake"] = want
         save_ui_prefs(self._prefs)
         set_prevent_system_sleep(want and self._desired_running)
-        msg = "已开启防自动休眠保活（屏幕仍可正常自动关闭省电，网络与助理不断线）。" if want else "已关闭防休眠保活。"
+        msg = "已开启防自动休眠保活（屏幕仍可正常熄灭省电）。" if want else "已关闭防休眠保活。"
         self._enqueue_log("系统", msg, "sys")
 
     def _enqueue_log(self, source: str, message: str, tag: str = "sys") -> None:
@@ -1357,157 +1405,87 @@ class LauncherApp:
     def _health_poll_worker(self, force: bool = False) -> None:
         if self._closing or (self._busy and not force):
             return
-        port_open = is_tcp_port_open(self.settings.onebot_host, self.settings.onebot_port, timeout=0.35)
-        napcat_alive = self._napcat_proc is not None and self._napcat_proc.poll() is None
-        bridge_alive = self._bridge_proc is not None and self._bridge_proc.poll() is None
+        pwa_open = is_tcp_port_open("127.0.0.1", self.settings.web_pwa_port, timeout=0.3)
+        srv_alive = self._server_proc is not None and self._server_proc.poll() is None
+        tun_alive = self._tunnel_proc is not None and self._tunnel_proc.poll() is None
 
-        if port_open and self._qr_required:
-            self._qr_required = False
-            self._enqueue_log("系统", "检测到 OneBot 端口 3001 已就绪，登录成功！", "sys")
-
-        # Auto-heal watchdog: if Bridge exited unexpectedly while user wanted services running
         if (
             self._desired_running
             and not self._busy
-            and self._bridge_proc is not None
-            and not bridge_alive
-            and not self._bridge_external
+            and self._server_proc is not None
+            and not srv_alive
+            and not self._server_external
             and not self._closing
         ):
             now = time.monotonic()
             self._auto_restart_timestamps = [t for t in self._auto_restart_timestamps if now - t < 120.0]
             if len(self._auto_restart_timestamps) < 3:
                 self._auto_restart_timestamps.append(now)
-                self._enqueue_log("系统", "检测到桥接服务意外退出，正在自动自愈重启...", "warn")
-                self._launch_bridge()
-                bridge_alive = self._bridge_proc is not None and self._bridge_proc.poll() is None
+                self._enqueue_log("系统", "检测到核心服务意外退出，正在自动自愈重启...", "warn")
+                self._launch_server()
+                srv_alive = self._server_proc is not None and self._server_proc.poll() is None
 
-        self._post_ui(lambda: self._refresh_status_ui(port_open, napcat_alive, bridge_alive))
+        self._post_ui(lambda: self._refresh_status_ui(pwa_open, srv_alive, tun_alive))
 
-    def _refresh_status_ui(self, port_open: bool, napcat_alive: bool, bridge_alive: bool) -> None:
+    def _refresh_status_ui(self, pwa_open: bool, srv_alive: bool, tun_alive: bool) -> None:
         if self._closing:
             return
-        # NapCat card
-        if not self.settings.onebot_enabled:
+        lan_ip = get_lan_ipv4()
+        port = self.settings.web_pwa_port
+
+        if srv_alive and pwa_open:
             self._set_card(
-                self.napcat_orb_lbl,
-                self.napcat_status_lbl,
+                self.engine_orb_lbl,
+                self.engine_status_lbl,
                 "green",
-                "免 QQ 纯净模式（仅运行手机端 App）",
+                f"在线值守中 · 本地端口 :{port} 已就绪",
             )
-        elif self._qr_required and not port_open:
-            self._set_card(self.napcat_orb_lbl, self.napcat_status_lbl, "amber", "等待手机 QQ 扫码登录")
-            self._show_banner(
-                kind="warn",
-                text="NapCatQQ 登录态需要验证，请点击右侧按钮在浏览器中扫码登录。",
-                btn_text="立即打开扫码页",
-                btn_cmd=self._open_webui,
+        elif self._server_external and pwa_open:
+            self._set_card(
+                self.engine_orb_lbl,
+                self.engine_status_lbl,
+                "green",
+                f"后台运行中 · 端口 :{port} 已连通（可点『重启并接管』统一管理）",
             )
-        elif port_open:
-            if napcat_alive:
-                qq_tag = f" · QQ {self.settings.bot_qq}" if self.settings.bot_qq else ""
-                self._set_card(
-                    self.napcat_orb_lbl,
-                    self.napcat_status_lbl,
-                    "green",
-                    f"在线值守中{qq_tag}",
-                )
-            elif self._napcat_external:
-                self._set_card(
-                    self.napcat_orb_lbl,
-                    self.napcat_status_lbl,
-                    "green",
-                    "在线运行中 · 外部后台进程",
-                )
-            else:
-                self._set_card(
-                    self.napcat_orb_lbl,
-                    self.napcat_status_lbl,
-                    "green",
-                    f"端口 {self.settings.onebot_port} 已就绪",
-                )
-        elif napcat_alive:
-            self._set_card(self.napcat_orb_lbl, self.napcat_status_lbl, "amber", "正在启动并快速登录...")
+        elif srv_alive:
+            self._set_card(self.engine_orb_lbl, self.engine_status_lbl, "amber", "正在启动反重力引擎...")
         else:
-            self._set_card(self.napcat_orb_lbl, self.napcat_status_lbl, "red", "已停止")
+            self._set_card(self.engine_orb_lbl, self.engine_status_lbl, "red", "服务已停止")
 
-        # Bridge card
-        if bridge_alive:
-            if not self.settings.onebot_enabled:
+        if pwa_open:
+            if self._tunnel_url and tun_alive:
                 self._set_card(
-                    self.bridge_orb_lbl,
-                    self.bridge_status_lbl,
+                    self.net_orb_lbl,
+                    self.net_status_lbl,
                     "green",
-                    "手机端专属 App 已就绪 · 点上方扫码",
+                    "双通道全通 · Wi-Fi 1ms 极速 + 全球 4G/5G 加密隧道",
                 )
-            elif self._bridge_connected and port_open:
+                self.net_detail_lbl.configure(
+                    text=f"局域网：http://{lan_ip}:{port}   ·   外网：{self._tunnel_url}"
+                )
+            elif tun_alive:
                 self._set_card(
-                    self.bridge_orb_lbl,
-                    self.bridge_status_lbl,
+                    self.net_orb_lbl,
+                    self.net_status_lbl,
                     "green",
-                    "已连通 · 手机 App 与 QQ 双在线",
+                    f"Wi-Fi 1ms 已就绪 (http://{lan_ip}:{port}) · 正在分配外网隧道...",
                 )
             else:
                 self._set_card(
-                    self.bridge_orb_lbl,
-                    self.bridge_status_lbl,
-                    "amber",
-                    "运行中 · 正在握手 OneBot...",
-                )
-        elif self._bridge_external:
-            if port_open:
-                self._set_card(
-                    self.bridge_orb_lbl,
-                    self.bridge_status_lbl,
+                    self.net_orb_lbl,
+                    self.net_status_lbl,
                     "green",
-                    "在线运行中 · 外部后台进程",
+                    f"局域网 1ms 极速直连已就绪 · http://{lan_ip}:{port}",
                 )
-            else:
-                self._set_card(
-                    self.bridge_orb_lbl,
-                    self.bridge_status_lbl,
-                    "amber",
-                    "外部进程运行中（等待 NapCat）",
-                )
+                self.net_detail_lbl.configure(text=f"手机连同一 Wi-Fi 扫右侧二维码即可毫秒级操控电脑")
         else:
-            self._set_card(self.bridge_orb_lbl, self.bridge_status_lbl, "red", "已停止")
-
-        if not self._qr_required:
-            if self._napcat_external or self._bridge_external:
-                self._show_banner(
-                    kind="info",
-                    text="检测到后台已有运行中的进程，已自动跳过重复启动。点右侧「接管并重启」可切换至本窗口统一管理并加载最新配置。",
-                    btn_text="接管并重启",
-                    btn_cmd=lambda: self._run_async(self._start_all_worker, True),
-                )
-            else:
-                self._hide_banner()
+            self._set_card(self.net_orb_lbl, self.net_status_lbl, "red", "网络监听未启动")
 
     def _set_card(self, orb_lbl: tk.Label, lbl: tk.Label, orb_key: str, text: str) -> None:
         orb_img = self._orbs.get(orb_key)
         if orb_img is not None:
             orb_lbl.configure(image=orb_img)
         lbl.configure(text=text)
-
-    def _show_banner(self, kind: str, text: str, btn_text: str, btn_cmd) -> None:
-        if kind == "warn":
-            bg, border, fg = "#26190B", "#D97706", "#FDE68A"
-            btn_bg, btn_hover = "#D97706", "#B45309"
-        else:
-            bg, border, fg = "#0D253B", "#0284C7", "#E0F2FE"
-            btn_bg, btn_hover = "#0284C7", "#0369A1"
-
-        self.banner_frame.configure(bg=bg, highlightbackground=border)
-        self.banner_lbl.configure(bg=bg, fg=fg, text=text)
-        self.banner_btn._base_bg = btn_bg  # type: ignore[attr-defined]
-        self.banner_btn._hover_bg = btn_hover  # type: ignore[attr-defined]
-        self.banner_btn.configure(text=btn_text, command=btn_cmd, bg=btn_bg, activebackground=btn_hover)
-        if not self.banner_frame.winfo_ismapped():
-            self.banner_frame.pack(fill=tk.X, pady=(0, 12), before=self.btn_bar)
-
-    def _hide_banner(self) -> None:
-        if self.banner_frame.winfo_ismapped():
-            self.banner_frame.pack_forget()
 
     def _set_buttons_busy(self, busy: bool) -> None:
         state = tk.DISABLED if busy else tk.NORMAL
@@ -1537,122 +1515,42 @@ class LauncherApp:
             set_prevent_system_sleep(True)
         self._auto_restart_timestamps.clear()
         self.settings = load_settings()
-        self._webui_url = self.settings.webui_url
-        self._qr_required = False
-        self._post_ui(
-            lambda: self.bridge_detail_lbl.configure(
-                text=f"当前模型：{self.settings.active_model}  ·  支持截图 / 传文件 / 长期记忆"
-            )
-        )
+        self._post_ui(self._render_inline_qr)
+        threading.Thread(target=self._refresh_conv_stats_bg, daemon=True).start()
 
         if takeover:
-            self._enqueue_log("系统", "正在平滑停止旧进程并重启全部服务...", "sys")
+            self._enqueue_log("系统", "正在平滑重启并接管反重力助手全部服务...", "sys")
             self._stop_all_internal(include_external=True)
-            time.sleep(0.8)
+            time.sleep(0.5)
         else:
-            self._enqueue_log("系统", "正在检查并启动 QQ · Antigravity 服务...", "sys")
+            self._enqueue_log("系统", "正在启动反重力助手核心服务...", "sys")
 
         managed_pids: set[int] = {os.getpid()}
-        if self._napcat_proc and self._napcat_proc.poll() is None:
-            managed_pids.add(self._napcat_proc.pid)
-        if self._bridge_proc and self._bridge_proc.poll() is None:
-            managed_pids.add(self._bridge_proc.pid)
+        if self._server_proc and self._server_proc.poll() is None:
+            managed_pids.add(self._server_proc.pid)
 
-        ext_napcat, ext_bridge = find_external_processes(managed_pids)
-        port_open = is_tcp_port_open(self.settings.onebot_host, self.settings.onebot_port)
+        ext_srv = find_external_server_processes(managed_pids)
+        port_open = is_tcp_port_open("127.0.0.1", self.settings.web_pwa_port)
 
-        # 1. Start or detect NapCatQQ (when ONEBOT_ENABLED=true)
-        if not self.settings.onebot_enabled:
-            self._napcat_external = False
-            self._enqueue_log("系统", "QQ 通道已设为关闭，仅启动专属手机端 Web App。", "sys")
-        elif self._napcat_proc and self._napcat_proc.poll() is None:
-            self._napcat_external = False
-            self._enqueue_log("系统", "NapCatQQ 已在本窗口运行中。", "sys")
-        elif port_open or ext_napcat:
-            self._napcat_external = True
+        if self._server_proc and self._server_proc.poll() is None:
+            self._server_external = False
+            self._enqueue_log("系统", "反重力核心引擎已在本窗口运行中。", "sys")
+        elif ext_srv or port_open:
+            self._server_external = True
             self._enqueue_log(
                 "系统",
-                f"检测到 NapCatQQ 已在后台运行（端口 {self.settings.onebot_port} {'已开放' if port_open else '启动中'}），未重复启动。",
+                f"检测到后台已有运行中的核心进程，已直接复用（点『↻ 重启并接管』可加载最新配置）。",
                 "sys",
             )
         else:
-            self._napcat_external = False
-            self._launch_napcat()
-            deadline = time.monotonic() + 14.0
-            while time.monotonic() < deadline and not self._closing:
-                if is_tcp_port_open(self.settings.onebot_host, self.settings.onebot_port):
-                    self._enqueue_log("系统", f"NapCatQQ 就绪（端口 {self.settings.onebot_port} 已监听）。", "sys")
-                    break
-                if self._napcat_proc and self._napcat_proc.poll() is not None:
-                    self._enqueue_log("系统", f"NapCatQQ 进程意外退出（退出码 {self._napcat_proc.returncode}）。", "err")
-                    break
-                if self._qr_required:
-                    self._enqueue_log("系统", "NapCatQQ 等待扫码验证，扫码完成后将自动连通桥接。", "warn")
-                    break
-                time.sleep(0.4)
+            self._server_external = False
+            self._launch_server()
 
-        # 2. Start or detect Bridge (+ Web PWA)
-        if self._bridge_proc and self._bridge_proc.poll() is None:
-            self._bridge_external = False
-            self._enqueue_log("系统", "Antigravity 桥接服务已在本窗口运行中。", "sys")
-        elif ext_bridge:
-            self._bridge_external = True
-            self._enqueue_log(
-                "系统",
-                f"检测到桥接服务已在后台运行（PID: {', '.join(map(str, ext_bridge))}），未重复启动。",
-                "sys",
-            )
-        else:
-            self._bridge_external = False
-            self._launch_bridge()
-
-        # 3. Start encrypted Cloudflare Quick Tunnel for anywhere mobile access
         if self.settings.web_pwa_enabled and self.settings.tunnel_enabled:
             if self._tunnel_proc is None or self._tunnel_proc.poll() is not None:
                 self._launch_tunnel()
 
-    def _launch_napcat(self) -> None:
-        node_exe = self.settings.napcat_dir / "node.exe"
-        index_js = self.settings.napcat_dir / "index.js"
-        if not node_exe.is_file() or not index_js.is_file():
-            self._enqueue_log("系统", f"未找到 NapCatNode 文件：{node_exe}", "err")
-            return
-
-        cmd = [str(node_exe), ".\\index.js"]
-        if self.settings.bot_qq:
-            cmd.extend(["-q", self.settings.bot_qq])
-        qq_note = f" (QQ: {self.settings.bot_qq})" if self.settings.bot_qq else ""
-        self._enqueue_log("系统", f"正在启动 NapCatQQ{qq_note}...", "sys")
-        self._post_ui(
-            lambda: self._set_card(
-                self.napcat_orb_lbl, self.napcat_status_lbl, "amber", "正在启动并快速登录..."
-            )
-        )
-        try:
-            env = os.environ.copy()
-            env["FORCE_COLOR"] = "0"
-            self._napcat_proc = subprocess.Popen(
-                cmd,
-                cwd=str(self.settings.napcat_dir),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                stdin=subprocess.DEVNULL,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                bufsize=1,
-                env=env,
-                creationflags=CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP,
-            )
-            threading.Thread(
-                target=self._stream_process_output,
-                args=(self._napcat_proc, "NapCat", "napcat"),
-                daemon=True,
-            ).start()
-        except Exception as exc:
-            self._enqueue_log("系统", f"启动 NapCatQQ 失败：{exc}", "err")
-
-    def _launch_bridge(self) -> None:
+    def _launch_server(self) -> None:
         venv_python = self.settings.project_dir / ".venv" / "Scripts" / "python.exe"
         py_exe = venv_python if venv_python.is_file() else Path(sys.executable)
         if py_exe.name.lower() == "pythonw.exe":
@@ -1669,15 +1567,9 @@ class LauncherApp:
             env["PATH"] = f"{agy_bin};{env.get('PATH', '')}"
 
         cmd = [str(py_exe), "-X", "utf8", "-u", "-m", "qq_agy_bridge.main"]
-        self._bridge_connected = False
-        self._enqueue_log("系统", "正在启动 Antigravity 智能桥接与热会话...", "sys")
-        self._post_ui(
-            lambda: self._set_card(
-                self.bridge_orb_lbl, self.bridge_status_lbl, "amber", "正在连接 OneBot WS..."
-            )
-        )
+        self._enqueue_log("系统", "正在拉起反重力核心会话服务...", "sys")
         try:
-            self._bridge_proc = subprocess.Popen(
+            self._server_proc = subprocess.Popen(
                 cmd,
                 cwd=str(self.settings.project_dir),
                 stdout=subprocess.PIPE,
@@ -1692,11 +1584,11 @@ class LauncherApp:
             )
             threading.Thread(
                 target=self._stream_process_output,
-                args=(self._bridge_proc, "Bridge", "bridge"),
+                args=(self._server_proc, "Engine", "engine"),
                 daemon=True,
             ).start()
         except Exception as exc:
-            self._enqueue_log("系统", f"启动桥接服务失败：{exc}", "err")
+            self._enqueue_log("系统", f"启动核心引擎失败：{exc}", "err")
 
     def _launch_tunnel(self) -> None:
         cf_exe = self.settings.project_dir / "bin" / "cloudflared.exe"
@@ -1705,7 +1597,7 @@ class LauncherApp:
             if found and Path(found[0]).is_file():
                 cf_exe = Path(found[0])
             else:
-                self._enqueue_log("系统", "未检测到 cloudflared.exe，当前手机端可通过同 Wi-Fi 局域网扫码访问。", "warn")
+                self._enqueue_log("系统", "未检测到 cloudflared.exe，当前可通过同 Wi-Fi 1ms 扫码直连。", "warn")
                 return
 
         self._tunnel_url = ""
@@ -1720,7 +1612,7 @@ class LauncherApp:
             "4",
             "--no-autoupdate",
         ]
-        self._enqueue_log("系统", "正在建立手机端 4G/5G 加密隧道 (HTTP/2 直连优化)...", "sys")
+        self._enqueue_log("系统", "正在建立全球 4G/5G 加密隧道 (HTTP/2 直连)...", "sys")
         try:
             env = os.environ.copy()
             env["NO_PROXY"] = "127.0.0.1,localhost,::1"
@@ -1740,7 +1632,7 @@ class LauncherApp:
             )
             threading.Thread(
                 target=self._stream_process_output,
-                args=(self._tunnel_proc, "Tunnel", "sys"),
+                args=(self._tunnel_proc, "Tunnel", "tunnel"),
                 daemon=True,
             ).start()
         except Exception as exc:
@@ -1767,48 +1659,25 @@ class LauncherApp:
                         self._tunnel_url = m_cf.group(0)
                         self._enqueue_log(
                             "Tunnel",
-                            f"外网加密隧道已开通：{self._tunnel_url} （点击上方『📱 手机端专属 App』即可扫码直连）",
-                            "bridge",
+                            f"全球 4G/5G 加密隧道已就绪：{self._tunnel_url} （点右侧『4G/5G 外网』即可扫码）",
+                            "tunnel",
                         )
-                        if self._qr_refresh_cb is not None:
-                            self._post_ui(self._qr_refresh_cb)
+                        self._post_ui(self._render_inline_qr)
+                        threading.Thread(target=self._health_poll_worker, daemon=True).start()
                     if not self._show_debug:
                         continue
 
-                if source == "NapCat":
-                    url_match = WEBUI_URL_RE.search(line)
-                    if url_match:
-                        self._webui_url = url_match.group(0)
-                    low = line.lower()
-                    if any(k in low for k in QR_KEYWORDS):
-                        if not self._qr_required:
-                            self._qr_required = True
-                            threading.Thread(target=self._health_poll_worker, daemon=True).start()
-                    if not self._show_debug and any(p in line for p in NOISY_LOG_PATTERNS):
-                        continue
-
-                if source == "Bridge":
-                    if "Connected to NapCatQQ OneBot WS" in line:
-                        self._bridge_connected = True
-                        threading.Thread(target=self._health_poll_worker, daemon=True).start()
-                    elif "auto-switching to " in line:
-                        new_m = line.split("auto-switching to ", 1)[1].split()[0].strip()
-                        if new_m:
-                            self._post_ui(
-                                lambda m=new_m: self.bridge_detail_lbl.configure(
-                                    text=f"当前模型：{m} (额度自动切换)  ·  支持截图 / 传文件 / 长期记忆"
-                                )
+                if source == "Engine" and "auto-switching to " in line:
+                    new_m = line.split("auto-switching to ", 1)[1].split()[0].strip()
+                    if new_m:
+                        self._post_ui(
+                            lambda m=new_m: self.engine_detail_lbl.configure(
+                                text=f"当前模型：{m} (额度自动容灾切换)  ·  {self._conv_stats_str}"
                             )
-                    elif (
-                        "Disconnected from OneBot WS" in line
-                        or "Failed to connect" in line
-                        or "OneBot WS connection error" in line
-                    ):
-                        self._bridge_connected = False
-                        threading.Thread(target=self._health_poll_worker, daemon=True).start()
+                        )
 
                 tag = default_tag
-                if "[ERROR]" in line or "安全检查失败" in line or "未找到 agy" in line:
+                if "[ERROR]" in line or "未找到 agy" in line:
                     tag = "err"
                 elif "[WARNING]" in line or "[warn]" in line.lower():
                     tag = "warn"
@@ -1819,16 +1688,15 @@ class LauncherApp:
                 self._enqueue_log("系统", f"{source} 日志流中断：{exc}", "warn")
         finally:
             code = proc.poll()
-            if source == "Bridge":
-                self._bridge_connected = False
             if not self._closing and code is not None:
                 self._enqueue_log("系统", f"{source} 进程已退出（退出码 {code}）。", "warn")
 
     def _stop_all_worker(self, include_external: bool) -> None:
         self._desired_running = False
         set_prevent_system_sleep(False)
-        self._enqueue_log("系统", "正在停止所有服务...", "sys")
+        self._enqueue_log("系统", "正在停止反重力助手后台服务...", "sys")
         self._stop_all_internal(include_external=include_external)
+        self._post_ui(self._render_inline_qr)
         self._enqueue_log("系统", "所有服务已安全停止。", "sys")
 
     def _stop_all_internal(self, include_external: bool) -> None:
@@ -1837,223 +1705,14 @@ class LauncherApp:
         self._tunnel_proc = None
         self._tunnel_url = ""
 
-        if self._bridge_proc and self._bridge_proc.poll() is None:
-            kill_pid_tree(self._bridge_proc.pid)
-        self._bridge_proc = None
-        self._bridge_connected = False
-        self._bridge_external = False
+        if self._server_proc and self._server_proc.poll() is None:
+            kill_pid_tree(self._server_proc.pid)
+        self._server_proc = None
+        self._server_external = False
 
-        managed_napcat_started = self._napcat_proc is not None
-        if self._napcat_proc and self._napcat_proc.poll() is None:
-            kill_pid_tree(self._napcat_proc.pid)
-        self._napcat_proc = None
-        self._napcat_external = False
-        self._qr_required = False
-
-        if include_external or managed_napcat_started:
-            ext_napcat, ext_bridge = find_external_processes({os.getpid()})
-            pids_to_kill = (ext_bridge + ext_napcat) if include_external else ext_napcat
-            for pid in pids_to_kill:
+        if include_external:
+            for pid in find_external_server_processes({os.getpid()}):
                 kill_pid_tree(pid)
-
-        deadline = time.monotonic() + 3.0
-        while time.monotonic() < deadline:
-            if not is_tcp_port_open(self.settings.onebot_host, self.settings.onebot_port, timeout=0.2):
-                break
-            time.sleep(0.2)
-
-    def _open_webui(self) -> None:
-        url = self._webui_url or read_napcat_webui_url(self.settings.napcat_dir)
-        self._enqueue_log("系统", f"正在打开 NapCat 后台：{url}", "sys")
-        webbrowser.open(url)
-
-    def _open_pwa_qr_dialog(self) -> None:
-        self.settings = load_settings()
-        lan_ip = get_lan_ipv4()
-        tok = self.settings.web_access_token
-        lan_url = f"http://{lan_ip}:{self.settings.web_pwa_port}/?token={tok}"
-
-        dlg = tk.Toplevel(self.root)
-        dlg.title("手机端专属 Web App (PWA)")
-        dlg.configure(bg=self.BG)
-        dlg.geometry("475x575")
-        dlg.resizable(False, False)
-        dlg.transient(self.root)
-        apply_win11_glass_dwm(dlg)
-        try:
-            dlg.attributes("-alpha", self._alpha)
-        except Exception:
-            pass
-
-        mode_var = tk.StringVar(value="lan")
-        qr_img_ref: list[tk.PhotoImage] = []
-
-        wrap = tk.Frame(dlg, bg=self.BG, padx=22, pady=18)
-        wrap.pack(fill=tk.BOTH, expand=True)
-
-        tk.Label(
-            wrap,
-            text="📱 扫码打开你的专属手机端 App",
-            bg=self.BG,
-            fg=self.TEXT_PRIMARY,
-            font=("Microsoft YaHei UI", 13, "bold"),
-        ).pack()
-
-        tk.Label(
-            wrap,
-            text="在家连同一 Wi-Fi 请扫「局域网 1ms 极速码」（零绕路秒开）；出门用流量请扫「4G/5G 外网加密隧道」",
-            bg=self.BG,
-            fg=self.TEXT_SECONDARY,
-            font=("Microsoft YaHei UI", 8),
-            wraplength=400,
-            pady=4,
-        ).pack()
-
-        tab_row = tk.Frame(wrap, bg=self.BG, pady=8)
-        tab_row.pack()
-
-        btn_tab_lan = self._make_button(
-            tab_row,
-            text="📶 同 Wi-Fi 局域网 1ms 极速 (推荐)",
-            command=lambda: _switch("lan"),
-            bg=self.PILL_PRIMARY,
-            hover=self.PILL_PRIMARY_HOVER,
-            padx=12,
-            pady=5,
-            font_size=8,
-        )
-        btn_tab_lan.pack(side=tk.LEFT, padx=4)
-
-        btn_tab_tunnel = self._make_button(
-            tab_row,
-            text="🌐 4G/5G 外网加密隧道",
-            command=lambda: _switch("tunnel"),
-            bg=self.PILL_SLATE,
-            hover=self.PILL_SLATE_HOVER,
-            padx=12,
-            pady=5,
-            font_size=8,
-        )
-        btn_tab_tunnel.pack(side=tk.LEFT, padx=4)
-
-        qr_box = tk.Frame(wrap, bg="#111C2E", highlightbackground="#294366", highlightthickness=1, padx=14, pady=14)
-        qr_box.pack(pady=8)
-        qr_lbl = tk.Label(qr_box, bg="#111C2E", fg=self.TEXT_SECONDARY, font=("Microsoft YaHei UI", 9))
-        qr_lbl.pack()
-
-        url_status_lbl = tk.Label(
-            wrap,
-            text="",
-            bg=self.BG,
-            fg=self.CYAN,
-            font=("Consolas", 8),
-            wraplength=410,
-            pady=4,
-        )
-        url_status_lbl.pack()
-
-        act_row = tk.Frame(wrap, bg=self.BG, pady=8)
-        act_row.pack()
-
-        def _current_url() -> str:
-            if mode_var.get() == "tunnel":
-                return f"{self._tunnel_url}/?token={tok}" if self._tunnel_url else ""
-            return lan_url
-
-        def _render_qr() -> None:
-            if not dlg.winfo_exists():
-                return
-            m = mode_var.get()
-            btn_tab_tunnel.configure(bg=self.PILL_PRIMARY if m == "tunnel" else self.PILL_SLATE)
-            btn_tab_tunnel._base_bg = self.PILL_PRIMARY if m == "tunnel" else self.PILL_SLATE  # type: ignore[attr-defined]
-            btn_tab_lan.configure(bg=self.PILL_PRIMARY if m == "lan" else self.PILL_SLATE)
-            btn_tab_lan._base_bg = self.PILL_PRIMARY if m == "lan" else self.PILL_SLATE  # type: ignore[attr-defined]
-
-            target_u = _current_url()
-            if not target_u:
-                qr_lbl.configure(
-                    image="",
-                    text="\n⏳ 正在建立 Cloudflare 加密隧道（约 3~6 秒）...\n建好后此处会自动刷出二维码\n\n（若在家里同一 Wi-Fi 下，可先点上方『局域网零延迟』直接扫）\n",
-                )
-                url_status_lbl.configure(text="等待隧道分配 https://*.trycloudflare.com ...")
-                return
-
-            try:
-                import segno
-                buf = io.BytesIO()
-                segno.make(target_u, error="m").write(
-                    buf, kind="png", scale=6, border=2, dark="#F1F5F9", light="#111C2E"
-                )
-                b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-                photo = tk.PhotoImage(data=b64)
-                qr_img_ref.clear()
-                qr_img_ref.append(photo)
-                qr_lbl.configure(image=photo, text="")
-                masked = target_u.split("?token=")[0] + "?token=••••••"
-                url_status_lbl.configure(text=masked)
-            except Exception as exc:
-                qr_lbl.configure(image="", text=f"二维码生成失败：{exc}")
-
-        def _switch(new_mode: str) -> None:
-            mode_var.set(new_mode)
-            _render_qr()
-
-        def _copy_link() -> None:
-            u = _current_url() or lan_url
-            dlg.clipboard_clear()
-            dlg.clipboard_append(u)
-            url_status_lbl.configure(text="✓ 已复制完整免密链接到剪贴板！")
-
-        def _open_local() -> None:
-            webbrowser.open(f"http://127.0.0.1:{self.settings.web_pwa_port}/?token={tok}")
-
-        self._make_button(
-            act_row,
-            text="📋 复制免密链接",
-            command=_copy_link,
-            bg=self.PILL_PRIMARY,
-            hover=self.PILL_PRIMARY_HOVER,
-            padx=11,
-            pady=6,
-        ).pack(side=tk.LEFT, padx=4)
-
-        self._make_button(
-            act_row,
-            text="🖥 本机体验",
-            command=_open_local,
-            bg=self.PILL_SLATE,
-            hover=self.PILL_SLATE_HOVER,
-            padx=11,
-            pady=6,
-        ).pack(side=tk.LEFT, padx=4)
-
-        fw_btn = self._make_button(
-            act_row,
-            text="🛡 放行局域网防火墙",
-            command=lambda: _allow_fw(),
-            bg="#1E3A5F",
-            hover="#0284C7",
-            padx=11,
-            pady=6,
-        )
-
-        def _allow_fw() -> None:
-            if request_lan_firewall_allow(self.settings.web_pwa_port):
-                url_status_lbl.configure(text=f"✓ 已请求放行 TCP {self.settings.web_pwa_port} 端口，手机同 Wi-Fi 可直连！")
-                fw_btn.pack_forget()
-
-        def _check_fw_bg() -> None:
-            ok = is_lan_firewall_rule_present(self.settings.web_pwa_port)
-            if not ok:
-                self._ui_queue.put(
-                    lambda: fw_btn.pack(side=tk.LEFT, padx=4) if dlg.winfo_exists() else None
-                )
-
-        threading.Thread(target=_check_fw_bg, daemon=True).start()
-
-        self._qr_refresh_cb = _render_qr
-        dlg.protocol("WM_DELETE_WINDOW", lambda: (setattr(self, "_qr_refresh_cb", None), dlg.destroy()))
-        _render_qr()
 
     def _open_config_folder(self) -> None:
         try:
@@ -2063,7 +1722,7 @@ class LauncherApp:
 
     def _clean_cache_async(self) -> None:
         def _worker() -> None:
-            targets = discover_default_cache_targets(self.settings.project_dir, self.settings.napcat_dir)
+            targets = discover_default_cache_targets(self.settings.project_dir)
             rep = run_safe_cache_cleanup(targets, force_all_expired_zero=True)
             self._enqueue_log("系统", rep.format_human(), "sys")
 
@@ -2075,16 +1734,14 @@ class LauncherApp:
         self.log_text.configure(state=tk.DISABLED)
 
     def _has_running_managed_services(self) -> bool:
-        napcat_alive = self._napcat_proc is not None and self._napcat_proc.poll() is None
-        bridge_alive = self._bridge_proc is not None and self._bridge_proc.poll() is None
-        return napcat_alive or bridge_alive
+        return self._server_proc is not None and self._server_proc.poll() is None
 
     def _on_close_requested(self) -> None:
         if self._has_running_managed_services():
             choice = messagebox.askyesnocancel(
-                "关闭 QQ · Antigravity 私人助理",
-                "助理当前正在运行中。\n\n"
-                "• 点击「是」：停止所有后台服务并彻底退出\n"
+                "关闭 反重力助手",
+                "反重力助手当前正在运行中。\n\n"
+                "• 点击「是」：停止后台服务并彻底退出\n"
                 "• 点击「否」：最小化到任务栏，继续安静值守\n"
                 "• 点击「取消」：返回窗口",
                 parent=self.root,
@@ -2095,7 +1752,6 @@ class LauncherApp:
                 self.root.iconify()
                 return
 
-            # Hide immediately so window never appears frozen while cleaning up process trees
             self._desired_running = False
             self._closing = True
             self.root.withdraw()

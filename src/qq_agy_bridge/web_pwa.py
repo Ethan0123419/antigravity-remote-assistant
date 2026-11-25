@@ -1,12 +1,12 @@
-"""Dedicated Mobile-First Progressive Web App (PWA) server for Antigravity remote control.
+"""Dedicated Mobile-First Progressive Web App (PWA) server for 反重力助手 (Antigravity Assistant).
 
-Runs alongside OneBotBridge on a single HTTP + WebSocket port (default 8765),
-compatible with both local Wi-Fi LAN and Cloudflare Encrypted Quick Tunnels.
-Provides:
-- True token-by-token live streaming responses
+Single HTTP + WebSocket port (default 8765), compatible with both 1ms local Wi-Fi LAN
+and Cloudflare Encrypted Quick Tunnels:
+- Full discovery & live viewer for ALL PC conversations (Antigravity IDE + Codex Desktop + Remote CLI)
+- Token-by-token live streaming responses + mid-stream mobile reconnect recovery
+- Workspace File Explorer + Git Status & Unified Diff Inspector (inspired by Termote & Claude Code UI)
 - Live desktop screen preview & instant HD screenshots
 - Chunked arbitrary file/photo upload & download with path-traversal/secret protection
-- High-entropy token authentication + per-IP brute-force rate limiting
 """
 
 from __future__ import annotations
@@ -42,18 +42,23 @@ from .conversations import (
     list_recent_workspaces,
     load_conversation_detail,
 )
-from .maintenance import discover_default_cache_targets, run_safe_cache_cleanup
-from .onebot import (
+from .desktop_tools import (
     MODEL_ALIASES,
     PROJECT_INBOX_DIR,
     SEND_FILE_RE,
     SEND_IMAGE_RE,
     THOUGHT_TAG_RE,
-    _capture_desktop_fast_jpeg_sync,
-    _is_safe_outbound_file,
-    _prune_inbox,
-    _sanitize_filename,
+    _resolve_inside_workspace,
+    capture_desktop_fast_jpeg_sync,
+    get_workspace_file_diff,
+    inspect_workspace_git,
+    is_safe_outbound_file,
+    list_workspace_directory,
+    prune_inbox,
+    read_workspace_file_preview,
+    sanitize_filename,
 )
+from .maintenance import discover_default_cache_targets, run_safe_cache_cleanup
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +133,7 @@ def extract_pwa_media_and_text(text: str) -> tuple[str, list[Path], list[Path]]:
         raw = m.group(1).strip()
         if raw:
             p = Path(raw).expanduser()
-            if _is_safe_outbound_file(p, image_only=True):
+            if is_safe_outbound_file(p, image_only=True):
                 images.append(p.resolve())
         return ""
 
@@ -136,7 +141,7 @@ def extract_pwa_media_and_text(text: str) -> tuple[str, list[Path], list[Path]]:
         raw = m.group(1).strip()
         if raw:
             p = Path(raw).expanduser()
-            if _is_safe_outbound_file(p, image_only=False):
+            if is_safe_outbound_file(p, image_only=False):
                 files.append(p.resolve())
         return ""
 
@@ -167,7 +172,7 @@ class _UploadState:
 
 
 class WebPwaServer:
-    """Single-port HTTP + WebSocket server for the mobile/desktop PWA client."""
+    """Single-port HTTP + WebSocket server for 反重力助手."""
 
     def __init__(
         self,
@@ -177,12 +182,14 @@ class WebPwaServer:
         *,
         ide_store_dir: Path | None = None,
         cli_store_dir: Path | None = None,
+        codex_store_dir: Path | None = None,
     ) -> None:
         self.config = config
         self.sessions = session_manager
         self.access_token = access_token
         self.ide_store_dir = ide_store_dir
         self.cli_store_dir = cli_store_dir
+        self.codex_store_dir = codex_store_dir
         self._clients: set[ServerConnection] = set()
         self._media_registry: OrderedDict[str, Path] = OrderedDict()
         self._history: list[dict[str, Any]] = []
@@ -191,7 +198,7 @@ class WebPwaServer:
         self._session_epoch: int = 0
         self._inflight_reply: dict[str, Any] | None = None
         self._cancelled_reply_ids: set[str] = set()
-        self._ide_watch_sig: tuple[str, int, int] = ("", 0, 0)
+        self._ide_watch_sig: tuple[str, str, int, int] = ("", "", 0, 0)
 
     def _client_ip(self, connection: ServerConnection, headers: Headers | None = None) -> str:
         if headers is not None:
@@ -256,14 +263,14 @@ class WebPwaServer:
                 return existing_id
         media_id = uuid.uuid4().hex
         self._media_registry[media_id] = resolved
-        while len(self._media_registry) > 200:
+        while len(self._media_registry) > 300:
             self._media_registry.popitem(last=False)
         return media_id
 
     def _append_history(self, item: dict[str, Any]) -> None:
         self._history.append(item)
-        if len(self._history) > 60:
-            self._history = self._history[-60:]
+        if len(self._history) > 300:
+            self._history = self._history[-300:]
 
     async def _broadcast(self, payload: dict[str, Any]) -> None:
         if not self._clients:
@@ -304,7 +311,6 @@ class WebPwaServer:
         parsed = urlsplit(request.path)
         path = parsed.path
 
-        # Allow WebSocket upgrade on /ws
         if path == "/ws":
             return None
 
@@ -338,13 +344,13 @@ class WebPwaServer:
             if cand_tok and self._verify_token(cand_tok, ip, record_failure=False):
                 start_url = f"/?token={quote(cand_tok)}"
             manifest = {
-                "name": "Antigravity 私人助理",
-                "short_name": "Antigravity",
-                "description": "专属远程电脑控制与 AI 私人助理",
+                "name": "反重力助手",
+                "short_name": "反重力助手",
+                "description": "专属远程电脑操控与全会话 AI 编程中枢",
                 "start_url": start_url,
                 "display": "standalone",
-                "background_color": "#060A13",
-                "theme_color": "#060A13",
+                "background_color": "#050811",
+                "theme_color": "#050811",
                 "orientation": "portrait-primary",
                 "icons": [
                     {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
@@ -389,7 +395,7 @@ class WebPwaServer:
 
             media_id = path.removeprefix("/dl/").strip("/")
             target = self._media_registry.get(media_id)
-            if target is None or not _is_safe_outbound_file(target, image_only=False):
+            if target is None or not is_safe_outbound_file(target, image_only=False):
                 return self._http_response(404, "Not Found", b"File Not Found", "text/plain")
 
             body = await asyncio.to_thread(target.read_bytes)
@@ -422,11 +428,12 @@ class WebPwaServer:
             return
 
         self._clients.add(ws)
-        logger.info("Web PWA client connected (%s)", ip)
+        logger.info("反重力助手客户端已连接 (%s)", ip)
         uploads: dict[str, _UploadState] = {}
         live_screen_task: asyncio.Task[None] | None = None
 
         session = self.sessions.get(PWA_SESSION_USER_ID)
+        active_store = session.linked_store if session.linked_ide_id else ("cli" if session.conversation_id else "")
         await ws.send(
             json.dumps(
                 {
@@ -435,7 +442,7 @@ class WebPwaServer:
                     "workspace": str(session.workspace),
                     "active_conversation_id": session.linked_ide_id or session.conversation_id,
                     "active_title": session.active_title or "",
-                    "active_store": "ide" if session.linked_ide_id else ("cli" if session.conversation_id else ""),
+                    "active_store": active_store,
                     "busy": session.is_busy or (self._inflight_reply is not None),
                     "inflight": self._inflight_reply,
                     "cooldowns": session.failover_pool.cooldown_summary(),
@@ -469,7 +476,7 @@ class WebPwaServer:
 
                 elif mtype == "desktop_frame":
                     try:
-                        shot = await asyncio.to_thread(_capture_desktop_fast_jpeg_sync, PROJECT_INBOX_DIR)
+                        shot = await asyncio.to_thread(capture_desktop_fast_jpeg_sync, PROJECT_INBOX_DIR)
                         mid = self.register_media(shot)
                         await ws.send(
                             json.dumps(
@@ -490,7 +497,7 @@ class WebPwaServer:
                             while True:
                                 try:
                                     shot = await asyncio.to_thread(
-                                        _capture_desktop_fast_jpeg_sync, PROJECT_INBOX_DIR, 1366, 74
+                                        capture_desktop_fast_jpeg_sync, PROJECT_INBOX_DIR, 1366, 74
                                     )
                                     mid = self.register_media(shot)
                                     await ws.send(
@@ -512,7 +519,7 @@ class WebPwaServer:
 
                 elif mtype == "upload_init":
                     uid = str(msg.get("upload_id") or uuid.uuid4().hex)
-                    safe_name = _sanitize_filename(str(msg.get("name") or "upload.bin"))
+                    safe_name = sanitize_filename(str(msg.get("name") or "upload.bin"))
                     size = int(msg.get("size") or 0)
                     if size > MAX_UPLOAD_BYTES:
                         await ws.send(json.dumps({"type": "toast", "level": "err", "text": "文件超过 100MB 上限"}))
@@ -551,7 +558,7 @@ class WebPwaServer:
                     if state is None:
                         continue
                     state.close()
-                    _prune_inbox(PROJECT_INBOX_DIR, keep=40)
+                    prune_inbox(PROJECT_INBOX_DIR, keep=40)
                     mid = self.register_media(state.path)
                     is_img = state.path.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
                     await ws.send(
@@ -579,12 +586,14 @@ class WebPwaServer:
                     await self._handle_list_conversations(ws)
 
                 elif mtype == "select_conversation":
+                    max_m = int(msg.get("max_messages") or 200)
                     t = asyncio.create_task(
                         self._handle_select_conversation(
                             ws,
                             str(msg.get("conversation_id") or ""),
                             str(msg.get("store") or "auto"),
-                            only_refresh=False,
+                            only_refresh=bool(msg.get("only_refresh", False)),
+                            max_messages=max(50, min(3000, max_m)),
                         )
                     )
                     self._tasks.add(t)
@@ -593,10 +602,12 @@ class WebPwaServer:
                 elif mtype == "refresh_conversation":
                     s = self.sessions.get(PWA_SESSION_USER_ID)
                     target_cid = str(msg.get("conversation_id") or s.linked_ide_id or s.conversation_id or "")
-                    target_store = "ide" if s.linked_ide_id else "auto"
+                    target_store = str(msg.get("store") or (s.linked_store if s.linked_ide_id else "auto"))
                     if target_cid:
                         t = asyncio.create_task(
-                            self._handle_select_conversation(ws, target_cid, target_store, only_refresh=True)
+                            self._handle_select_conversation(
+                                ws, target_cid, target_store, only_refresh=True, max_messages=200
+                            )
                         )
                         self._tasks.add(t)
                         t.add_done_callback(self._tasks.discard)
@@ -608,6 +619,15 @@ class WebPwaServer:
                     self._tasks.add(t)
                     t.add_done_callback(self._tasks.discard)
 
+                elif mtype == "workspace_inspect":
+                    await self._handle_workspace_inspect(ws, str(msg.get("rel_dir") or ""))
+
+                elif mtype == "workspace_diff":
+                    await self._handle_workspace_diff(ws, str(msg.get("path") or ""))
+
+                elif mtype == "workspace_file":
+                    await self._handle_workspace_file(ws, str(msg.get("path") or ""))
+
                 elif mtype == "chat":
                     t = asyncio.create_task(self._handle_chat(msg))
                     self._tasks.add(t)
@@ -617,7 +637,7 @@ class WebPwaServer:
             for st in uploads.values():
                 st.close()
             self._clients.discard(ws)
-            logger.info("Web PWA client disconnected (%s)", ip)
+            logger.info("反重力助手客户端已断开 (%s)", ip)
 
     def _safe_file_size(self, path: Path) -> int:
         try:
@@ -625,13 +645,50 @@ class WebPwaServer:
         except OSError:
             return 0
 
+    async def _handle_workspace_inspect(self, ws: ServerConnection, rel_dir: str) -> None:
+        session = self.sessions.get(PWA_SESSION_USER_ID)
+        git_info, dir_info = await asyncio.gather(
+            asyncio.to_thread(inspect_workspace_git, session.workspace),
+            asyncio.to_thread(list_workspace_directory, session.workspace, rel_dir),
+        )
+        await ws.send(
+            json.dumps(
+                {
+                    "type": "workspace_state",
+                    "workspace": str(session.workspace),
+                    "git": git_info,
+                    "dir": dir_info,
+                },
+                ensure_ascii=False,
+            )
+        )
+
+    async def _handle_workspace_diff(self, ws: ServerConnection, rel_path: str) -> None:
+        session = self.sessions.get(PWA_SESSION_USER_ID)
+        diff_res = await asyncio.to_thread(get_workspace_file_diff, session.workspace, rel_path)
+        await ws.send(json.dumps({"type": "workspace_diff", **diff_res}, ensure_ascii=False))
+
+    async def _handle_workspace_file(self, ws: ServerConnection, rel_path: str) -> None:
+        session = self.sessions.get(PWA_SESSION_USER_ID)
+        prev = await asyncio.to_thread(read_workspace_file_preview, session.workspace, rel_path)
+        if prev.get("ok"):
+            resolved = _resolve_inside_workspace(session.workspace, rel_path)
+            if resolved is not None and is_safe_outbound_file(resolved, image_only=False):
+                prev["media_id"] = self.register_media(resolved)
+        await ws.send(json.dumps({"type": "workspace_file", **prev}, ensure_ascii=False))
+
     def _convert_detail_to_pwa_history(self, detail: ConversationDetail, model_label: str) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
+        origin_tag = (
+            "Antigravity 电脑端"
+            if detail.store == "ide"
+            else ("Codex 电脑端" if detail.store == "codex" else model_label)
+        )
         for idx, m in enumerate(detail.messages):
             if m.role == "user":
                 atts = []
                 for p in m.image_paths:
-                    if _is_safe_outbound_file(p, image_only=True):
+                    if is_safe_outbound_file(p, image_only=True):
                         atts.append({"media_id": self.register_media(p), "name": p.name, "is_image": True})
                 out.append(
                     {
@@ -646,7 +703,7 @@ class WebPwaServer:
                 clean_txt, extra_imgs, extra_files = extract_pwa_media_and_text(m.text)
                 imgs = []
                 for p in [*m.image_paths, *extra_imgs]:
-                    if _is_safe_outbound_file(p, image_only=True):
+                    if is_safe_outbound_file(p, image_only=True):
                         imgs.append({"media_id": self.register_media(p), "name": p.name})
                 fls = [
                     {"media_id": self.register_media(p), "name": p.name, "size": self._safe_file_size(p)}
@@ -659,7 +716,7 @@ class WebPwaServer:
                         "text": clean_txt,
                         "images": imgs,
                         "files": fls,
-                        "model": "电脑端 IDE" if detail.store == "ide" else model_label,
+                        "model": origin_tag,
                         "ts": m.ts_ms,
                     }
                 )
@@ -668,10 +725,18 @@ class WebPwaServer:
     async def _handle_list_conversations(self, ws: ServerConnection) -> None:
         session = self.sessions.get(PWA_SESSION_USER_ID)
         items = await asyncio.to_thread(
-            list_local_conversations, 40, self.ide_store_dir, self.cli_store_dir
+            list_local_conversations,
+            500,
+            self.ide_store_dir,
+            self.cli_store_dir,
+            self.codex_store_dir,
         )
         workspaces = await asyncio.to_thread(
-            list_recent_workspaces, session.workspace, self.ide_store_dir, self.cli_store_dir
+            list_recent_workspaces,
+            session.workspace,
+            self.ide_store_dir,
+            self.cli_store_dir,
+            self.codex_store_dir,
         )
         await ws.send(
             json.dumps(
@@ -693,14 +758,16 @@ class WebPwaServer:
         store: str,
         *,
         only_refresh: bool = False,
+        max_messages: int = 200,
     ) -> None:
         detail = await asyncio.to_thread(
             load_conversation_detail,
             conversation_id,
             store,
-            100,
+            max_messages,
             self.ide_store_dir,
             self.cli_store_dir,
+            self.codex_store_dir,
         )
         if detail is None:
             await ws.send(json.dumps({"type": "toast", "level": "err", "text": "未找到该对话记录"}, ensure_ascii=False))
@@ -714,6 +781,7 @@ class WebPwaServer:
                 await session.attach_cli_conversation(
                     detail.conversation_id, workspace=detail.workspace, title=detail.title
                 )
+                self._ide_watch_sig = ("", "", 0, 0)
             else:
                 handoff = build_ide_handoff_context(detail)
                 await session.attach_ide_conversation(
@@ -721,15 +789,17 @@ class WebPwaServer:
                     handoff_context=handoff,
                     workspace=detail.workspace,
                     title=detail.title,
+                    store=detail.store,
                 )
                 sig = await asyncio.to_thread(
                     get_transcript_signature,
                     detail.conversation_id,
-                    "ide",
+                    detail.store,
                     self.ide_store_dir,
                     self.cli_store_dir,
+                    self.codex_store_dir,
                 )
-                self._ide_watch_sig = (detail.conversation_id, sig[0], sig[1])
+                self._ide_watch_sig = (detail.store, detail.conversation_id, sig[0], sig[1])
 
         loaded_history = self._convert_detail_to_pwa_history(detail, session.model or "default")
         self._history = loaded_history
@@ -742,6 +812,8 @@ class WebPwaServer:
                 "running": detail.running,
                 "workspace": str(session.workspace),
                 "silent": only_refresh,
+                "has_more": detail.has_more,
+                "total_messages": detail.total_messages,
                 "history": loaded_history,
             }
         )
@@ -756,7 +828,7 @@ class WebPwaServer:
             await ws.send(json.dumps({"type": "toast", "level": "err", "text": str(exc)}, ensure_ascii=False))
             return
 
-        self._ide_watch_sig = ("", 0, 0)
+        self._ide_watch_sig = ("", "", 0, 0)
         self._history.clear()
         await self._broadcast({"type": "clear_history"})
         await self._broadcast(
@@ -790,7 +862,6 @@ class WebPwaServer:
         session = self.sessions.get(PWA_SESSION_USER_ID)
         turn_epoch = self._session_epoch
 
-        # Record user message in history & broadcast to any other open tab
         user_entry = {
             "role": "user",
             "id": client_id,
@@ -809,13 +880,11 @@ class WebPwaServer:
         self._append_history(user_entry)
         await self._broadcast({"type": "user_msg", "item": user_entry})
 
-        # Handle built-in slash commands cleanly
         if raw_text.startswith("/") and not attachments:
             handled = await self._handle_slash_command(session, raw_text)
             if handled:
                 return
 
-        # Build prompt with attached local file paths
         prompt_parts: list[str] = []
         if raw_text:
             prompt_parts.append(raw_text)
@@ -857,7 +926,7 @@ class WebPwaServer:
         async def _on_tool(tool_name: str) -> None:
             if turn_epoch != self._session_epoch:
                 return
-            hint = "正在操作电脑..." if ("mcp" in tool_name.lower() or "command" in tool_name.lower()) else "正在检索处理..."
+            hint = "正在操作电脑..." if ("mcp" in tool_name.lower() or "command" in tool_name.lower()) else "正在检索与思考..."
             inflight_state["status"] = hint
             await self._broadcast({"type": "stream_status", "msg_id": reply_id, "status": hint})
 
@@ -875,7 +944,6 @@ class WebPwaServer:
             if self._inflight_reply is inflight_state:
                 self._inflight_reply = None
 
-        # Discard stale reply if user already switched conversations or started a new chat
         if turn_epoch != self._session_epoch:
             self._cancelled_reply_ids.discard(reply_id)
             return
@@ -935,7 +1003,7 @@ class WebPwaServer:
         arg = parts[1].strip() if len(parts) > 1 else ""
 
         if cmd in {"/screen", "/shot"}:
-            shot = await asyncio.to_thread(_capture_desktop_fast_jpeg_sync, PROJECT_INBOX_DIR)
+            shot = await asyncio.to_thread(capture_desktop_fast_jpeg_sync, PROJECT_INBOX_DIR)
             mid = self.register_media(shot)
             await self._send_sys_reply("当前电脑实时画面：", session.model, images=[{"media_id": mid, "name": shot.name}])
             return True
@@ -943,7 +1011,7 @@ class WebPwaServer:
         if cmd in {"/new", "/reset"}:
             self._session_epoch += 1
             self._inflight_reply = None
-            self._ide_watch_sig = ("", 0, 0)
+            self._ide_watch_sig = ("", "", 0, 0)
             await session.reset()
             self._history.clear()
             await self._broadcast({"type": "clear_history"})
@@ -957,7 +1025,7 @@ class WebPwaServer:
                     "active_store": "",
                 }
             )
-            await self._send_sys_reply(f"好勒，已开启全新对话。\n当前模型：{session.model or '默认'}", session.model)
+            await self._send_sys_reply(f"已开启全新对话。\n当前模型：{session.model or '默认'}", session.model)
             if self.config.agy_prewarm:
                 t = asyncio.create_task(session.prewarm())
                 self._tasks.add(t)
@@ -969,14 +1037,14 @@ class WebPwaServer:
                 chain = " -> ".join(session.failover_pool.models[:5])
                 await self._send_sys_reply(
                     f"当前模型：{session.model or '默认'}\n自动容灾链：{chain}\n\n"
-                    "可点顶部模型胶囊或输入：/model fast | balanced | smart | gemini",
+                    "可点顶部模型胶囊或输入：`/model fast | balanced | smart | gemini`",
                     session.model,
                 )
                 return True
             target = MODEL_ALIASES.get(arg.lower(), arg)
             await session.set_model(target)
             await self._broadcast({"type": "meta_update", "model": session.model, "workspace": str(session.workspace)})
-            await self._send_sys_reply(f"已切换到 {target}，上下文继续保留。", session.model)
+            await self._send_sys_reply(f"已切换到 `{target}`，上下文继续保留。", session.model)
             return True
 
         if cmd == "/clean":
@@ -991,10 +1059,11 @@ class WebPwaServer:
             cooling = session.failover_pool.cooldown_summary()
             cool_str = ", ".join(f"{m}({mins}m)" for m, mins in cooling) if cooling else "全部正常可用"
             await self._send_sys_reply(
-                f"当前模型：{session.model or '默认'}\n"
-                f"额度池：{cool_str}\n"
-                f"会话轮次：{session.num_turns}\n"
-                f"工作目录：{session.workspace}",
+                f"**反重力助手状态**\n"
+                f"- 当前模型：`{session.model or '默认'}`\n"
+                f"- 额度池：{cool_str}\n"
+                f"- 会话轮次：{session.num_turns}\n"
+                f"- 工作目录：`{session.workspace}`",
                 session.model,
             )
             return True
@@ -1006,7 +1075,7 @@ class WebPwaServer:
             try:
                 self._session_epoch += 1
                 self._inflight_reply = None
-                self._ide_watch_sig = ("", 0, 0)
+                self._ide_watch_sig = ("", "", 0, 0)
                 await session.set_workspace(target_dir)
                 await self._broadcast(
                     {
@@ -1017,7 +1086,7 @@ class WebPwaServer:
                         "active_store": "",
                     }
                 )
-                await self._send_sys_reply(f"已切换工作目录：\n{session.workspace}", session.model)
+                await self._send_sys_reply(f"已切换工作目录：\n`{session.workspace}`", session.model)
             except FileNotFoundError as exc:
                 await self._send_sys_reply(str(exc), session.model)
             return True
@@ -1025,7 +1094,7 @@ class WebPwaServer:
         return False
 
     async def _ide_watch_loop(self) -> None:
-        """Auto-push live PC IDE transcript updates when a mobile client is viewing an IDE chat."""
+        """Auto-push live PC Antigravity / Codex transcript updates when viewing a PC chat."""
         while True:
             interval = getattr(self, "ide_watch_interval", 2.5)
             await asyncio.sleep(interval)
@@ -1034,30 +1103,32 @@ class WebPwaServer:
                     continue
                 session = self.sessions.get(PWA_SESSION_USER_ID)
                 ide_cid = session.linked_ide_id
+                watch_store = session.linked_store or "ide"
                 if not ide_cid or session.is_busy or self._inflight_reply is not None:
                     continue
-                # Only auto-replace view while viewing the unbranched PC IDE chat
                 if session.conversation_id:
                     continue
 
                 sig = await asyncio.to_thread(
                     get_transcript_signature,
                     ide_cid,
-                    "ide",
+                    watch_store,
                     self.ide_store_dir,
                     self.cli_store_dir,
+                    self.codex_store_dir,
                 )
-                if sig == (0, 0) or (ide_cid, sig[0], sig[1]) == self._ide_watch_sig:
+                if sig == (0, 0) or (watch_store, ide_cid, sig[0], sig[1]) == self._ide_watch_sig:
                     continue
 
-                self._ide_watch_sig = (ide_cid, sig[0], sig[1])
+                self._ide_watch_sig = (watch_store, ide_cid, sig[0], sig[1])
                 detail = await asyncio.to_thread(
                     load_conversation_detail,
                     ide_cid,
-                    "ide",
-                    100,
+                    watch_store,
+                    200,
                     self.ide_store_dir,
                     self.cli_store_dir,
+                    self.codex_store_dir,
                 )
                 if detail is None or session.linked_ide_id != ide_cid or session.conversation_id:
                     continue
@@ -1074,17 +1145,40 @@ class WebPwaServer:
                         "running": detail.running,
                         "workspace": str(session.workspace),
                         "silent": True,
+                        "has_more": detail.has_more,
+                        "total_messages": detail.total_messages,
                         "history": loaded_history,
                     }
                 )
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                logger.debug("IDE watch loop error: %s", exc)
+                logger.debug("PC transcript watch loop error: %s", exc)
+
+    async def _cache_clean_loop(self) -> None:
+        if self.config.cache_clean_interval_hours <= 0.0:
+            return
+        interval_sec = max(300.0, self.config.cache_clean_interval_hours * 3600.0)
+        await asyncio.sleep(20.0)
+        while True:
+            try:
+                targets = discover_default_cache_targets(PROJECT_ROOT)
+                rep = await asyncio.to_thread(run_safe_cache_cleanup, targets)
+                if rep.deleted_files > 0:
+                    logger.info(
+                        "Periodic cache cleanup removed %d expired files (%.2f MB)",
+                        rep.deleted_files,
+                        rep.freed_mb,
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.debug("Cache cleaner warning: %s", exc)
+            await asyncio.sleep(interval_sec)
 
     async def run(self, stop_event: asyncio.Event | None = None) -> None:
         logger.info(
-            "Starting Web PWA server at http://%s:%d (LAN: http://%s:%d)",
+            "Starting 反重力助手 server at http://%s:%d (LAN: http://%s:%d)",
             self.config.web_pwa_host,
             self.config.web_pwa_port,
             get_lan_ipv4(),
@@ -1095,9 +1189,10 @@ class WebPwaServer:
             self._tasks.add(pw_task)
             pw_task.add_done_callback(self._tasks.discard)
 
-        watch_task = asyncio.create_task(self._ide_watch_loop())
-        self._tasks.add(watch_task)
-        watch_task.add_done_callback(self._tasks.discard)
+        for coro in (self._ide_watch_loop(), self._cache_clean_loop()):
+            bg_task = asyncio.create_task(coro)
+            self._tasks.add(bg_task)
+            bg_task.add_done_callback(self._tasks.discard)
 
         async with websockets.serve(
             self._handle_ws,

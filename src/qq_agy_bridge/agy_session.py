@@ -77,6 +77,7 @@ class AgySession:
         self._persona_injected: bool = False
         self.active_title: str = ""
         self.linked_ide_id: str = ""
+        self.linked_store: str = ""
         self._pending_handoff_context: str = ""
         self._ide_continuation_map: dict[str, str] = {}
 
@@ -235,6 +236,7 @@ class AgySession:
             await self.stop(force_tree=True)
             self.conversation_id = ""
             self.linked_ide_id = ""
+            self.linked_store = ""
             self.active_title = ""
             self._pending_handoff_context = ""
             self.num_turns = 0
@@ -256,6 +258,7 @@ class AgySession:
                 self.workspace = target_ws
             self.conversation_id = ""
             self.linked_ide_id = ""
+            self.linked_store = ""
             self.active_title = "新对话"
             self._pending_handoff_context = ""
             self.num_turns = 0
@@ -274,15 +277,21 @@ class AgySession:
                     self.workspace = cand.resolve()
             self.conversation_id = conversation_id.strip()
             self.linked_ide_id = ""
+            self.linked_store = ""
             self.active_title = title.strip() or f"对话 {self.conversation_id[:8]}"
             self._pending_handoff_context = ""
             self.num_turns = max(1, self.num_turns)
             self._persona_injected = True
 
     async def attach_ide_conversation(
-        self, ide_id: str, handoff_context: str, workspace: str = "", title: str = ""
+        self,
+        ide_id: str,
+        handoff_context: str,
+        workspace: str = "",
+        title: str = "",
+        store: str = "ide",
     ) -> None:
-        """Attach to a PC IDE conversation (reusing any linked CLI continuation or priming handoff context)."""
+        """Attach to a PC Antigravity/Codex conversation (reusing linked continuation or priming handoff context)."""
         await self.cancel_current()
         async with self._lock:
             await self.stop(force_tree=True)
@@ -292,8 +301,10 @@ class AgySession:
                     self.workspace = cand.resolve()
             clean_ide = ide_id.strip()
             self.linked_ide_id = clean_ide
+            self.linked_store = store if store in {"ide", "codex"} else "ide"
             self.active_title = title.strip() or f"电脑对话 {clean_ide[:8]}"
-            existing_cli = self._ide_continuation_map.get(clean_ide, "")
+            map_key = f"{self.linked_store}:{clean_ide}"
+            existing_cli = self._ide_continuation_map.get(map_key) or self._ide_continuation_map.get(clean_ide, "")
             if existing_cli:
                 self.conversation_id = existing_cli
                 self._pending_handoff_context = ""
@@ -316,6 +327,7 @@ class AgySession:
             self.workspace = resolved
             self.conversation_id = ""
             self.linked_ide_id = ""
+            self.linked_store = ""
             self.active_title = ""
             self._pending_handoff_context = ""
             self.num_turns = 0

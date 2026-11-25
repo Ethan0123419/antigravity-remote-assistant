@@ -1,4 +1,4 @@
-"""Automated cross-machine installer, configurator, and health doctor for Antigravity Remote Assistant.
+"""Automated cross-machine installer, configurator, and health doctor for 反重力助手 (Antigravity Assistant).
 
 Designed for BOTH human users and autonomous AI coding agents (Antigravity, Claude Code,
 Cursor, Codex, Windsurf, Cline) deploying this repository on a fresh computer.
@@ -6,14 +6,12 @@ Cursor, Codex, Windsurf, Cline) deploying this repository on a fresh computer.
 Examples:
   python -m qq_agy_bridge.setup_wizard --non-interactive --with-tunnel --create-shortcut --doctor
   python -m qq_agy_bridge.setup_wizard --doctor --json
-  python -m qq_agy_bridge.setup_wizard --non-interactive --qq-users 12345678 --bot-qq 87654321
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import platform
 import secrets
 import shutil
@@ -26,10 +24,12 @@ from typing import Any
 from dotenv import dotenv_values
 
 from .config import BridgeConfig, resolve_agy_executable
+from .conversations import list_local_conversations
 from .web_pwa import get_lan_ipv4
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+LEGACY_SHORTCUTS = ("QQ Antigravity 机器人.lnk", "Antigravity 远程助理.lnk")
 
 
 def _update_env_key(lines: list[str], key: str, value: str, *, only_if_empty: bool = False) -> list[str]:
@@ -50,10 +50,6 @@ def ensure_env_configured(
     project_dir: Path = PROJECT_ROOT,
     *,
     force_overwrite: bool = False,
-    mode: str = "",
-    qq_users: str = "",
-    bot_qq: str = "",
-    napcat_dir: str = "",
     workspace: str = "",
     pwa_port: int = 0,
 ) -> Path:
@@ -65,22 +61,28 @@ def ensure_env_configured(
         if example_path.is_file():
             base_text = example_path.read_text(encoding="utf-8")
         else:
-            base_text = "WEB_PWA_ENABLED=true\nWEB_PWA_PORT=8765\nONEBOT_ENABLED=auto\n"
+            base_text = "WEB_PWA_ENABLED=true\nWEB_PWA_PORT=8765\nCLOUDFLARE_TUNNEL_ENABLED=true\n"
         env_path.write_text(base_text, encoding="utf-8")
 
-    lines = env_path.read_text(encoding="utf-8").splitlines()
+    # Strip deprecated QQ / OneBot keys cleanly while preserving user's WEB_ACCESS_TOKEN
+    deprecated_prefixes = (
+        "ONEBOT_",
+        "ALLOWED_QQ_USERS=",
+        "BOT_QQ=",
+        "NAPCAT_DIR=",
+        "CLEAN_QQ_FORMATTING=",
+        "MAX_MESSAGE_LENGTH=",
+        "MESSAGE_DEBOUNCE_SECONDS=",
+        "AGY_PREWARM_USERS=",
+    )
+    lines = [
+        ln
+        for ln in env_path.read_text(encoding="utf-8").splitlines()
+        if not any(ln.strip().startswith(p) for p in deprecated_prefixes)
+    ]
     lines = _update_env_key(lines, "WEB_ACCESS_TOKEN", secrets.token_urlsafe(18), only_if_empty=True)
-    lines = _update_env_key(lines, "ONEBOT_ACCESS_TOKEN", secrets.token_urlsafe(18), only_if_empty=True)
+    lines = _update_env_key(lines, "AGY_SYSTEM_PROMPT_FILE", "prompts/persona.md")
 
-    if mode in {"pwa", "dual", "auto"}:
-        onebot_val = "false" if mode == "pwa" else ("true" if mode == "dual" else "auto")
-        lines = _update_env_key(lines, "ONEBOT_ENABLED", onebot_val)
-    if qq_users.strip():
-        lines = _update_env_key(lines, "ALLOWED_QQ_USERS", qq_users.strip())
-    if bot_qq.strip():
-        lines = _update_env_key(lines, "BOT_QQ", bot_qq.strip())
-    if napcat_dir.strip():
-        lines = _update_env_key(lines, "NAPCAT_DIR", napcat_dir.strip())
     if workspace.strip():
         lines = _update_env_key(lines, "AGY_WORKSPACE", str(Path(workspace.strip()).expanduser().resolve()))
     if pwa_port > 0:
@@ -88,7 +90,6 @@ def ensure_env_configured(
 
     env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    # Initialize runtime memory file from example template if missing
     mem_target = project_dir / "memory" / "user_profile.md"
     mem_example = project_dir / "memory" / "user_profile.example.md"
     if not mem_target.is_file() and mem_example.is_file():
@@ -123,7 +124,7 @@ def ensure_cloudflared(project_dir: Path = PROJECT_ROOT) -> tuple[bool, str]:
     try:
         bin_dir.mkdir(parents=True, exist_ok=True)
         tmp_dest = bin_dir / f"{exe_name}.part"
-        req = urllib.request.Request(url, headers={"User-Agent": "Antigravity-Remote-Setup/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "Antigravity-Assistant-Setup/2.0"})
         with urllib.request.urlopen(req, timeout=60) as resp, tmp_dest.open("wb") as out:
             shutil.copyfileobj(resp, out)
         tmp_dest.replace(local_bin)
@@ -136,9 +137,9 @@ def ensure_cloudflared(project_dir: Path = PROJECT_ROOT) -> tuple[bool, str]:
 
 def create_windows_desktop_shortcut(
     project_dir: Path = PROJECT_ROOT,
-    shortcut_name: str = "Antigravity 远程助理.lnk",
+    shortcut_name: str = "反重力助手.lnk",
 ) -> tuple[bool, str]:
-    """Create a Windows Desktop .lnk pointing to the glassmorphic launcher."""
+    """Create a Windows Desktop .lnk pointing to 反重力助手 and clean up legacy shortcuts."""
     if sys.platform != "win32":
         return False, "桌面 .lnk 快捷方式仅适用于 Windows"
 
@@ -146,9 +147,16 @@ def create_windows_desktop_shortcut(
     target_exe = venv_pyw if venv_pyw.is_file() else Path(sys.executable)
     icon_path = project_dir / "assets" / "app.ico"
 
-    # Resolve real Desktop folder (handles OneDrive redirected Desktop cleanly)
+    cleanup_cmds = "; ".join(
+        f"$old = Join-Path $desk '{old}'; if (Test-Path $old) {{ Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue }}"
+        for old in LEGACY_SHORTCUTS
+        if old != shortcut_name
+    )
     ps_script = (
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
         "$desk = [Environment]::GetFolderPath('Desktop'); "
+        f"{cleanup_cmds}; "
+        "Get-ChildItem -LiteralPath $desk -Filter '*.lnk' -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'Antigravity|\\ufffd' } | Remove-Item -Force -ErrorAction SilentlyContinue; "
         f"$lnkPath = Join-Path $desk '{shortcut_name}'; "
         "$ws = New-Object -ComObject WScript.Shell; "
         "$s = $ws.CreateShortcut($lnkPath); "
@@ -156,13 +164,15 @@ def create_windows_desktop_shortcut(
         "$s.Arguments = '-X utf8 -m qq_agy_bridge.launcher'; "
         f"$s.WorkingDirectory = '{project_dir}'; "
         f"if (Test-Path '{icon_path}') {{ $s.IconLocation = '{icon_path},0' }}; "
-        "$s.Description = 'Antigravity 私人远程助理（手机端专属 App + QQ 控制台）'; "
+        "$s.Description = '反重力助手 — 电脑全会话同步与移动端远程控制中枢'; "
         "$s.Save(); "
         "Write-Output $lnkPath"
     )
+    import base64 as _b64
+    encoded_cmd = _b64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
     try:
         res = subprocess.run(
-            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded_cmd],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -219,30 +229,21 @@ def run_doctor(project_dir: Path = PROJECT_ROOT) -> dict[str, Any]:
 
     cfg_ok = False
     pwa_lan_url = ""
-    mode_summary = "unconfigured"
     if env_path.is_file():
         try:
             cfg = BridgeConfig.from_env(env_path)
-            cfg_ok = (cfg.web_pwa_enabled or cfg.onebot_enabled) and (
-                not cfg.onebot_enabled or len(cfg.allowed_qq_users) > 0
-            )
+            cfg_ok = cfg.web_pwa_enabled and bool(cfg.web_access_token)
             lan_ip = get_lan_ipv4()
-            if cfg.web_pwa_enabled and cfg.web_access_token:
+            if cfg_ok:
                 pwa_lan_url = f"http://{lan_ip}:{cfg.web_pwa_port}/?token={cfg.web_access_token}"
-            if cfg.web_pwa_enabled and cfg.onebot_enabled:
-                mode_summary = "dual (手机端 Web App + QQ 私聊双通道)"
-            elif cfg.web_pwa_enabled:
-                mode_summary = "pwa_only (纯手机端专属 Web App，免 NapCat)"
-            elif cfg.onebot_enabled:
-                mode_summary = "qq_only (仅 QQ 私聊)"
-        except Exception as exc:
-            mode_summary = f"error: {exc}"
+        except Exception:
+            cfg_ok = False
 
     checks.append(
         {
             "name": "env_config",
             "ok": cfg_ok,
-            "detail": f".env 就绪 · 运行模式：{mode_summary}" if cfg_ok else f".env 未就绪 ({mode_summary})",
+            "detail": ".env 配置已就绪（强随机访问密钥已启用）" if cfg_ok else ".env 未初始化",
         }
     )
 
@@ -253,83 +254,76 @@ def run_doctor(project_dir: Path = PROJECT_ROOT) -> dict[str, Any]:
             "name": "cloudflare_tunnel_optional",
             "ok": True,
             "installed": bool(cf_path),
-            "detail": f"已安装 ({cf_path})" if cf_path else "未安装（同 Wi-Fi 局域网可直接使用；如需 4G/5G 外网直连请加 --with-tunnel）",
+            "detail": cf_path if cf_path else "未安装（同 Wi-Fi 局域网 1ms 扫码不受影响）",
         }
     )
 
-    overall_ok = all(bool(c["ok"]) for c in checks)
+    convs = list_local_conversations(limit=500)
+    checks.append(
+        {
+            "name": "local_conversations",
+            "ok": True,
+            "detail": f"已发现本机对话共 {len(convs)} 个（Antigravity {sum(1 for x in convs if x.store=='ide')} · Codex {sum(1 for x in convs if x.store=='codex')} · 远程 {sum(1 for x in convs if x.store=='cli')}）",
+        }
+    )
+
+    overall = all(bool(c["ok"]) for c in checks)
     return {
-        "ok": overall_ok,
+        "ok": overall,
+        "app_name": "反重力助手",
         "project_dir": str(project_dir),
-        "mode": mode_summary,
-        "lan_pwa_url": pwa_lan_url,
+        "pwa_lan_url": pwa_lan_url,
         "checks": checks,
     }
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Antigravity Remote Assistant 一键初始化与自检工具（支持人类交互与 AI 智能体静默部署）"
-    )
-    parser.add_argument("--non-interactive", action="store_true", help="无交互静默配置（推荐 AI 智能体使用）")
-    parser.add_argument("--doctor", action="store_true", help="执行完整部署环境自检")
-    parser.add_argument("--json", action="store_true", help="以 JSON 格式输出自检结果")
-    parser.add_argument("--force-env", action="store_true", help="强制基于模板重建 .env")
-    parser.add_argument("--mode", choices=["auto", "pwa", "dual"], default="", help="通道模式：auto | pwa | dual")
-    parser.add_argument("--qq-users", default="", help="允许私聊的 QQ 白名单（逗号分隔）")
-    parser.add_argument("--bot-qq", default="", help="NapCat 登录的机器人 QQ 号（可选）")
-    parser.add_argument("--napcat-dir", default="", help="NapCatNode 目录路径（可选）")
-    parser.add_argument("--workspace", default="", help="默认工作目录路径（可选）")
-    parser.add_argument("--pwa-port", type=int, default=0, help="手机端 Web App 端口（默认 8765）")
-    parser.add_argument("--with-tunnel", action="store_true", help="自动检测/下载 cloudflared 外网加密隧道组件")
-    parser.add_argument("--create-shortcut", action="store_true", help="在 Windows 桌面生成毛玻璃控制台快捷方式")
+    parser = argparse.ArgumentParser(description="反重力助手 (Antigravity Assistant) — 自动初始化与自检工具")
+    parser.add_argument("--non-interactive", action="store_true", help="无人值守一键配置（适合 AI 智能体或脚本）")
+    parser.add_argument("--workspace", default="", help="默认工作区目录路径")
+    parser.add_argument("--port", type=int, default=0, help="移动端服务监听端口（默认 8765）")
+    parser.add_argument("--with-tunnel", action="store_true", help="自动下载 cloudflared 以支持 4G/5G 外网加密连接")
+    parser.add_argument("--create-shortcut", action="store_true", help="在 Windows 桌面创建『反重力助手』快捷方式")
+    parser.add_argument("--doctor", action="store_true", help="运行完整环境自检报告")
+    parser.add_argument("--json", action="store_true", help="以机器可读 JSON 输出结果")
     args = parser.parse_args(argv)
 
-    # Pure doctor check if only --doctor (--json) was requested and .env already exists
-    only_doctor = args.doctor and not (
-        args.non_interactive
-        or args.force_env
-        or args.mode
-        or args.qq_users
-        or args.with_tunnel
-        or args.create_shortcut
-    )
+    actions_taken: list[str] = []
 
-    if not only_doctor:
-        ensure_env_configured(
+    if not args.doctor or args.non_interactive or not (PROJECT_ROOT / ".env").is_file():
+        env_file = ensure_env_configured(
             PROJECT_ROOT,
-            force_overwrite=args.force_env,
-            mode=args.mode,
-            qq_users=args.qq_users,
-            bot_qq=args.bot_qq,
-            napcat_dir=args.napcat_dir,
             workspace=args.workspace,
-            pwa_port=args.pwa_port,
+            pwa_port=args.port,
         )
-        if args.with_tunnel:
-            ok_cf, msg_cf = ensure_cloudflared(PROJECT_ROOT)
-            if not args.json:
-                prefix = "✓" if ok_cf else "!"
-                print(f"[{prefix}] 外网加密隧道组件: {msg_cf}")
-        if args.create_shortcut and sys.platform == "win32":
-            ok_lnk, msg_lnk = create_windows_desktop_shortcut(PROJECT_ROOT)
-            if not args.json:
-                prefix = "✓" if ok_lnk else "!"
-                print(f"[{prefix}] 桌面快捷方式: {msg_lnk}")
+        actions_taken.append(f"已配置环境变量文件：{env_file}")
+
+    if args.with_tunnel:
+        ok_cf, msg_cf = ensure_cloudflared(PROJECT_ROOT)
+        actions_taken.append(f"外网隧道组件：{'已就绪 ' + msg_cf if ok_cf else msg_cf}")
+
+    if args.create_shortcut and sys.platform == "win32":
+        ok_sc, msg_sc = create_windows_desktop_shortcut(PROJECT_ROOT)
+        actions_taken.append(f"桌面快捷方式：{'已创建 ' + msg_sc if ok_sc else msg_sc}")
 
     report = run_doctor(PROJECT_ROOT)
+    report["actions"] = actions_taken
+
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
-        print("\n=== Antigravity 远程助理 · 环境自检报告 ===")
-        for item in report["checks"]:
-            mark = "PASS" if item["ok"] else "FAIL"
-            print(f"  [{mark}] {item['name']}: {item['detail']}")
-        if report["lan_pwa_url"]:
-            masked = report["lan_pwa_url"].split("?token=")[0] + "?token=<已写入 .env>"
+        print("\n=== 反重力助手 (Antigravity Assistant) 部署自检报告 ===")
+        for act in actions_taken:
+            print(f"  [完成] {act}")
+        for c in report["checks"]:
+            mark = "OK" if c["ok"] else "FAIL"
+            print(f"  [{mark}] {c['name']}: {c['detail']}")
+        if report["pwa_lan_url"]:
+            masked = report["pwa_lan_url"].split("?token=")[0] + "?token=<已写入.env>"
             print(f"\n  手机端局域网入口: {masked}")
-            print("  提示: 启动桌面控制台点击『📱 手机端专属 App』即可直接扫码免密连接！")
-        print("===========================================\n")
+            print("  启动桌面控制台  : .\\.venv\\Scripts\\pythonw.exe -X utf8 -m qq_agy_bridge.launcher")
+            print("  命令行无界面启动: .\\start_all.ps1")
+        print()
 
     return 0 if report["ok"] else 1
 

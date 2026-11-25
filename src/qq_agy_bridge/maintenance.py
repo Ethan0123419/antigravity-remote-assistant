@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -82,7 +81,6 @@ class ModelFailoverPool:
                 ordered.append(clean)
         self.models: list[str] = ordered
         self.cooldown_seconds = max(30.0, cooldown_seconds)
-        # model_name -> monotonic expiry timestamp
         self._cooldown_until: dict[str, float] = {}
         self._manual_override: str = ""
 
@@ -128,7 +126,6 @@ class ModelFailoverPool:
             if m not in self._cooldown_until:
                 return m
 
-        # If every single model is in cooldown, pick the one whose cooldown expires soonest.
         if self._cooldown_until:
             soonest = min(self._cooldown_until.items(), key=lambda kv: kv[1])[0]
             return soonest
@@ -177,38 +174,11 @@ class CleanupReport:
         return f"已清理 {self.deleted_files} 个过期缓存文件（约 {kb:.1f} KB）。"
 
 
-def discover_default_cache_targets(project_dir: Path, napcat_dir: Path | None = None) -> list[tuple[Path, float, int]]:
-    """Return list of (directory_path, max_age_hours, max_keep_files) safe to clean periodically.
-
-    NEVER includes login/session data (`config`, `NapCat/data`, `memory`, `prompts`).
-    """
-    targets: list[tuple[Path, float, int]] = [
-        # Bridge screenshot & inbound media temp inbox: >24h or >30 files
-        (project_dir / "inbox", 24.0, 30),
+def discover_default_cache_targets(project_dir: Path) -> list[tuple[Path, float, int]]:
+    """Return list of (directory_path, max_age_hours, max_keep_files) safe to clean periodically."""
+    return [
+        (project_dir / "inbox", 24.0, 40),
     ]
-
-    nc_root = napcat_dir or (project_dir.parent / "NapCatNode")
-    if nc_root.is_dir():
-        targets.append((nc_root / "napcat" / "cache", 24.0, 50))
-        targets.append((nc_root / "napcat" / "logs", 72.0, 30))
-        targets.append((nc_root / "napcat" / "temp", 24.0, 40))
-
-    # Optional NTQQ NapCat temp media folders (strictly `temp`, NEVER `data`)
-    custom_temp = os.getenv("NAPCAT_TEMP_DIR", "").strip()
-    candidate_temps: list[Path] = []
-    if custom_temp:
-        candidate_temps.append(Path(custom_temp))
-    candidate_temps.append(Path.home() / "Documents" / "Tencent Files" / "NapCat" / "temp")
-    for drv in "CDEFG":
-        candidate_temps.append(Path(f"{drv}:/qq/Tencent Files/NapCat/temp"))
-    for temp_dir in candidate_temps:
-        try:
-            if temp_dir.is_dir() and not any(t[0] == temp_dir for t in targets):
-                targets.append((temp_dir, 24.0, 80))
-        except OSError:
-            pass
-
-    return targets
 
 
 def run_safe_cache_cleanup(
@@ -236,17 +206,12 @@ def run_safe_cache_cleanup(
             for item in resolved_dir.rglob("*"):
                 if not item.is_file():
                     continue
-                # Double-check no parent between resolved_dir and item is in PROTECTED_DIR_NAMES
                 rel_parts = {p.lower() for p in item.relative_to(resolved_dir).parts[:-1]}
                 if rel_parts & PROTECTED_DIR_NAMES:
-                    continue
-                # Keep active QR code if generated within last 10 minutes
-                if item.name.lower() == "qrcode.png" and (now - item.stat().st_mtime) < 600:
                     continue
                 st = item.stat()
                 all_files.append((st.st_mtime, st.st_size, item))
 
-            # Sort newest first
             all_files.sort(key=lambda t: t[0], reverse=True)
 
             for idx, (mtime, size, fpath) in enumerate(all_files):
@@ -257,10 +222,8 @@ def run_safe_cache_cleanup(
                         report.deleted_files += 1
                         report.freed_bytes += size
                     except OSError:
-                        # File may be currently open/locked by NapCat or Windows; skip safely
                         pass
 
-            # Remove empty subdirectories inside the cache target (bottom-up), keeping root target dir
             for sub in sorted(
                 (p for p in resolved_dir.rglob("*") if p.is_dir()),
                 key=lambda p: len(p.parts),
