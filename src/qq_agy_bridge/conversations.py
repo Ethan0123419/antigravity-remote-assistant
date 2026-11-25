@@ -53,7 +53,11 @@ SYNTHETIC_PING_PROMPTS = (
     "只回复ok两个字母",
     "reply with exactly ok",
     "就回两个字：收到",
+    "只回复两个字",
+    "【只读协作顾问约束】",
+    "【反拍马屁红队审查模式】",
 )
+UNCLOSED_SYS_PREFIX_RE = re.compile(r"^\s*\[(?:系统设定\s*[-—:]|承接电脑端对话上下文\])[\s\S]*$")
 
 
 def _default_ide_dir() -> Path:
@@ -166,6 +170,18 @@ def clean_user_input_text(raw_content: str) -> str:
     text = SYS_BLOCK_RE.sub("", text)
     text = HANDOFF_BLOCK_RE.sub("", text)
     return text.strip()
+
+
+def _clean_display_title(raw_text: str, max_len: int = 60) -> str:
+    """Sanitize truncated DB titles/previews so unclosed `[系统设定 - ...` blocks never leak into UI."""
+    cleaned = clean_user_input_text(raw_text or "")
+    cleaned = UNCLOSED_SYS_PREFIX_RE.sub("", cleaned)
+    cleaned = cleaned.replace("<USER_REQUEST>", "").replace("</USER_REQUEST>", "").strip()
+    if not cleaned:
+        return ""
+    first_ln = next((ln.strip() for ln in cleaned.splitlines() if ln.strip()), "")
+    first_ln = re.sub(r"\s+", " ", first_ln).strip()
+    return first_ln[:max_len]
 
 
 def _is_synthetic_ping(prompt: str) -> bool:
@@ -480,19 +496,21 @@ def _query_antigravity_store(
                         continue
 
                 step_cnt = int(steps or 0)
-                clean_title = str(title or "").strip()
-                clean_preview = str(preview or "").strip()
+                raw_title_str = str(title or "").strip()
+                raw_preview_str = str(preview or "").strip()
+                clean_title = _clean_display_title(raw_title_str, 60)
+                clean_preview = _clean_display_title(raw_preview_str, 90)
 
                 first_prompt, ws_guess, user_turns, synthetic_only = _peek_transcript_summary(brain_dir, cid_str)
                 if synthetic_only:
                     continue
-                if store_key == "cli" and step_cnt <= 4 and _is_synthetic_ping(first_prompt or clean_title):
+                if user_turns == 0 and step_cnt <= 6 and _is_synthetic_ping(clean_title or raw_title_str):
                     continue
 
                 if not clean_title:
-                    clean_title = first_prompt or f"对话 {cid_str[:8]}"
+                    clean_title = _clean_display_title(first_prompt, 60) or f"对话 {cid_str[:8]}"
                 if not clean_preview:
-                    clean_preview = first_prompt or clean_title
+                    clean_preview = _clean_display_title(first_prompt, 90) or clean_title
 
                 ts_ms = _parse_iso_to_ms(str(mod_time or ""))
                 if own_tf.is_file():
@@ -618,12 +636,16 @@ def _query_codex_store(codex_dir: Path, limit: int) -> list[ConversationItem]:
             if not rpath.is_file():
                 continue
 
-            human_title = index_titles.get(cid) or _summarize_codex_title(str(raw_title or ""))
-            if not human_title:
-                # Fallback: peek first user turn from rollout JSONL for brand-new CLI-started Codex threads
+            idx_title = index_titles.get(cid, "").strip()
+            raw_title_str = str(raw_title or "").strip()
+            human_title = idx_title or ("" if _is_synthetic_ping(raw_title_str) else _summarize_codex_title(raw_title_str))
+            if not human_title or _is_synthetic_ping(human_title):
+                # Inspect rollout JSONL user turns so daemon-only threads are skipped while multi-turn human follow-ups survive
+                real_user_title = ""
+                saw_daemon_prompt = _is_synthetic_ping(raw_title_str)
                 try:
                     with rpath.open("r", encoding="utf-8", errors="replace") as rfh:
-                        for _ in range(30):
+                        for _ in range(50):
                             rln = rfh.readline()
                             if not rln:
                                 break
@@ -632,12 +654,19 @@ def _query_codex_store(codex_dir: Path, limit: int) -> list[ConversationItem]:
                                 rpl = robj.get("payload") or {}
                                 if rpl.get("type") == "message" and rpl.get("role") == "user":
                                     rtxt = "\n".join(str(c.get("text") or "") for c in (rpl.get("content") or []) if isinstance(c, dict))
+                                    if _is_synthetic_ping(rtxt):
+                                        saw_daemon_prompt = True
+                                        continue
                                     cu, _ = clean_codex_user_text(rtxt)
-                                    if cu:
-                                        human_title = _summarize_codex_title(cu)
+                                    if cu and not _is_synthetic_ping(cu):
+                                        real_user_title = _summarize_codex_title(cu)
                                         break
                 except Exception:
                     pass
+                if real_user_title:
+                    human_title = idx_title if (idx_title and not _is_synthetic_ping(idx_title)) else real_user_title
+                elif saw_daemon_prompt:
+                    continue
             if not human_title:
                 human_title = f"Codex 对话 {cid[:8]}"
             preview = _summarize_codex_title(str(raw_title or "")) or human_title

@@ -55,8 +55,10 @@
       margin: 0;
       padding: 0;
       width: 100%;
+      max-width: 100vw;
       height: var(--app-h, 100dvh);
       overflow: hidden;
+      overflow-x: hidden;
       overscroll-behavior: none;
       background: var(--bg-main);
       color: var(--text-pri);
@@ -83,8 +85,12 @@
 
     /* ── Floating Circular Liquid-Glass Top Controls (Screenshot 1 & 2 Exact Style) ── */
     .topbar {
+      width: 100%;
+      max-width: 100vw;
+      min-width: 0;
+      overflow: hidden;
       height: calc(var(--top-safe) + 54px);
-      padding: var(--top-safe) 16px 0;
+      padding: var(--top-safe) 14px 0;
       background: linear-gradient(180deg, #000000 68%, rgba(0, 0, 0, 0.88) 88%, rgba(0, 0, 0, 0));
       border-bottom: none;
       display: flex;
@@ -151,17 +157,19 @@
     .conn-dot.offline { background: var(--danger); }
 
     .center-model-btn {
+      flex: 1 1 auto;
       border: none;
       background: transparent;
       color: var(--text-pri);
-      padding: 4px 12px;
+      padding: 4px 8px;
       border-radius: 999px;
       cursor: pointer;
       display: flex;
       flex-direction: column;
       align-items: center;
       min-width: 0;
-      max-width: 58vw;
+      max-width: 100%;
+      overflow: hidden;
       transition: opacity 0.18s, background 0.16s, transform 0.12s;
     }
     body.view-more .center-model-btn { opacity: 0; pointer-events: none; }
@@ -173,10 +181,14 @@
     .header-title-row {
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 5px;
+      width: 100%;
+      min-width: 0;
       max-width: 100%;
     }
     .header-title {
+      min-width: 0;
       font-size: 15px;
       font-weight: 600;
       letter-spacing: -0.2px;
@@ -223,54 +235,91 @@
       top: 0;
       left: 0;
       bottom: 0;
-      width: min(84vw, 326px);
-      background: linear-gradient(90deg, #000000 88%, rgba(8, 8, 10, 0.98) 100%);
+      width: min(84vw, 316px);
+      max-width: min(84vw, 316px);
+      background: #000000;
       z-index: 46;
-      transform: translateX(-103%);
-      transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-      display: grid;
-      grid-template-rows: auto auto minmax(0, 1fr);
-      padding: calc(var(--top-safe) + 14px) 16px 0;
-      border-right: 1px solid rgba(255, 255, 255, 0.045);
-      box-shadow: 24px 0 60px rgba(0, 0, 0, 0.85);
-    }
-    .sidebar-drawer.show { transform: translateX(0); }
-
-    .drawer-primary-nav {
       display: flex;
       flex-direction: column;
-      gap: 4px;
-      margin-bottom: 14px;
+      overflow: hidden;
+      contain: layout paint;
+      visibility: hidden;
+      pointer-events: none;
+      transform: translate3d(-105%, 0, 0);
+      transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 0.26s;
+      padding: calc(var(--top-safe) + 12px) 14px 0;
+      border-right: 1px solid rgba(255, 255, 255, 0.06);
+      box-shadow: none;
+    }
+    .sidebar-drawer.show {
+      visibility: visible;
+      pointer-events: auto;
+      transform: translate3d(0, 0, 0);
+      transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 0s;
+      box-shadow: 24px 0 60px rgba(0, 0, 0, 0.88);
+    }
+
+    .drawer-primary-nav {
+      width: 100%;
+      min-width: 0;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      margin-bottom: 12px;
     }
     .drawer-nav-row {
       width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
       border: none;
       background: transparent;
       color: #f5f5f7;
-      padding: 10px 8px;
+      padding: 9px 10px;
       border-radius: 13px;
-      font-size: 17px;
+      font-size: 16px;
       font-weight: 500;
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
       cursor: pointer;
       text-align: left;
       transition: background 0.14s, transform 0.1s;
     }
     .drawer-nav-row:hover, .drawer-nav-row:active { background: #18181b; }
-    .drawer-nav-row.active { background: #1c1c1f; font-weight: 600; }
+    .drawer-nav-row.active { background: #1c1c1f; font-weight: 600; color: #ffffff; }
     .drawer-nav-ico {
-      width: 24px;
-      height: 24px;
+      width: 22px;
+      height: 22px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       color: #f5f5f7;
       flex-shrink: 0;
     }
+    .drawer-nav-lbl {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .drawer-nav-cnt {
+      font-size: 11.5px;
+      font-weight: 500;
+      color: #98989f;
+      background: rgba(255, 255, 255, 0.065);
+      padding: 1.5px 7px;
+      border-radius: 999px;
+      flex-shrink: 0;
+    }
 
     .drawer-filter-collapse {
+      width: 100%;
+      min-width: 0;
+      flex-shrink: 0;
+      overflow: hidden;
       display: none;
       flex-direction: column;
       gap: 8px;
@@ -336,13 +385,21 @@
 
     .drawer-scroll-zone {
       position: relative;
+      flex: 1;
       min-height: 0;
+      width: 100%;
+      min-width: 0;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
     }
     .drawer-conv-list {
       flex: 1;
+      min-height: 0;
+      width: 100%;
+      min-width: 0;
       overflow-y: auto;
+      overflow-x: hidden;
       display: flex;
       flex-direction: column;
       gap: 1px;
@@ -432,17 +489,20 @@
 
     .conv-item {
       width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
       border: none;
       background: transparent;
       color: #f2f2f7;
-      padding: 11px 8px;
+      padding: 10px 8px;
       border-radius: 12px;
       text-align: left;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
+      gap: 6px;
       position: relative;
       transition: background 0.13s;
     }
@@ -453,12 +513,16 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
+      gap: 6px;
       width: 100%;
+      max-width: 100%;
       min-width: 0;
+      overflow: hidden;
     }
     .conv-item-title {
-      font-size: 15.5px;
+      flex: 1;
+      min-width: 0;
+      font-size: 15px;
       font-weight: 400;
       letter-spacing: -0.1px;
       white-space: nowrap;
@@ -485,6 +549,10 @@
       flex: 1;
       position: relative;
       min-height: 0;
+      min-width: 0;
+      width: 100%;
+      max-width: 100vw;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
     }
@@ -502,17 +570,23 @@
 
     .chat-scroll {
       flex: 1;
+      min-height: 0;
+      min-width: 0;
+      width: 100%;
+      max-width: 100%;
       overflow-y: auto;
       overflow-x: hidden;
-      padding: 16px 16px 26px;
+      padding: 14px 14px 24px;
       display: flex;
       flex-direction: column;
-      gap: 22px;
+      gap: 20px;
       -webkit-overflow-scrolling: touch;
     }
     .chat-scroll > * {
+      flex-shrink: 0;
       width: 100%;
-      max-width: 768px;
+      max-width: min(100%, 768px);
+      min-width: 0;
       margin-left: auto;
       margin-right: auto;
     }
@@ -535,6 +609,10 @@
     .empty-hero {
       margin-top: auto;
       margin-bottom: auto;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -542,6 +620,7 @@
       text-align: center;
       padding: 20px 6px 28px;
     }
+    body.in-conversation .empty-hero { display: none !important; }
     .hero-greet-1 {
       font-size: 21px;
       font-weight: 600;
@@ -561,7 +640,8 @@
     .cont-deck {
       position: relative;
       width: 100%;
-      max-width: 390px;
+      max-width: min(100%, 390px);
+      min-width: 0;
       z-index: 1;
     }
     .cont-deck.has-stack::after {
@@ -579,6 +659,9 @@
     }
     .cont-card {
       width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
       background: #1c1c1e;
       border: 1px solid rgba(255, 255, 255, 0.085);
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 12px 32px rgba(0, 0, 0, 0.6);
@@ -609,20 +692,22 @@
       flex: 1;
       min-width: 0;
       overflow: hidden;
-      mask-image: linear-gradient(90deg, #000000 86%, transparent 100%);
-      -webkit-mask-image: linear-gradient(90deg, #000000 86%, transparent 100%);
     }
     .cont-title {
       font-size: 15px;
       font-weight: 600;
       color: #f5f5f7;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       margin-bottom: 3px;
     }
     .cont-sub {
       font-size: 13.5px;
       color: #98989f;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .cont-dots {
       display: flex;
@@ -644,6 +729,10 @@
 
     /* ── User Message: Authentic ChatGPT iOS #2F2F2F Pill ── */
     .msg-row {
+      flex-shrink: 0;
+      width: 100%;
+      max-width: min(100%, 768px);
+      min-width: 0;
       display: flex;
       flex-direction: column;
       animation: msgFadeIn 0.16s ease-out;
@@ -654,13 +743,14 @@
     }
     .msg-row.user { align-items: flex-end; }
     .msg-row.user .user-pill {
-      max-width: min(78%, 520px);
+      max-width: min(84%, calc(100% - 8px));
+      min-width: 0;
       background: #2f2f2f;
       border: none;
       color: #f5f5f5;
-      padding: 10px 16px;
+      padding: 10px 15px;
       border-radius: 20px;
-      font-size: 16px;
+      font-size: 15.5px;
       line-height: 1.5;
       white-space: pre-wrap;
       word-break: break-word;
@@ -671,6 +761,8 @@
     .msg-row.assistant { align-items: flex-start; }
     .asst-body {
       width: 100%;
+      max-width: 100%;
+      min-width: 0;
       color: var(--text-pri);
       font-size: 15.5px;
       line-height: 1.72;
@@ -703,7 +795,7 @@
       color: var(--text-sec);
     }
     .asst-body hr { border: none; border-top: 1px solid var(--border-hairline); margin: 18px 0; }
-    .asst-body a { color: #93c5fd; text-decoration: underline; text-underline-offset: 3px; }
+    .asst-body a { color: #93c5fd; text-decoration: underline; text-underline-offset: 3px; word-break: break-all; overflow-wrap: anywhere; }
     .asst-body strong { color: #ffffff; font-weight: 600; }
 
     .asst-body code {
@@ -714,10 +806,16 @@
       font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
       font-size: 13.2px;
       color: #f1f5f9;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
 
     /* ── Obsidian Code Card ── */
     .code-card {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
       margin: 14px 0;
       border-radius: 14px;
       overflow: hidden;
@@ -762,9 +860,15 @@
       font-size: 13px;
       line-height: 1.58;
       color: #e4e4e7;
+      white-space: pre;
+      word-break: normal;
+      overflow-wrap: normal;
     }
 
     .table-wrap {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
       overflow-x: auto;
       margin: 14px 0;
       border-radius: 12px;
@@ -977,8 +1081,11 @@
     .more-page {
       flex: 1;
       min-height: 0;
+      width: 100%;
+      max-width: 100vw;
       background: #000000;
       overflow-y: auto;
+      overflow-x: hidden;
       padding: 8px 16px 24px;
       display: none;
       -webkit-overflow-scrolling: touch;
@@ -1096,20 +1203,27 @@
 
     /* Adaptive Composer Outer & Card */
     .composer-outer {
-      padding: 6px 14px 8px;
+      width: 100%;
+      max-width: 100vw;
+      min-width: 0;
+      overflow-x: hidden;
+      padding: 6px 12px 8px;
       background: #000000;
       flex-shrink: 0;
       position: relative;
       z-index: 15;
     }
     .composer-card {
+      width: 100%;
       max-width: 768px;
+      min-width: 0;
+      overflow: hidden;
       margin: 0 auto;
       background: #1c1c1e;
       border: 1px solid rgba(255, 255, 255, 0.08);
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
       border-radius: 26px;
-      padding: 10px 10px 9px 14px;
+      padding: 9px 10px 8px 12px;
       display: flex;
       flex-direction: column;
       gap: 6px;
@@ -1207,30 +1321,34 @@
     .input-box::placeholder { color: #8e8e93; }
 
     .composer-toolbar {
+      width: 100%;
+      min-width: 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 6px;
     }
     .composer-tools-left {
+      flex: 1 1 auto;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       min-width: 0;
       overflow-x: auto;
       scrollbar-width: none;
     }
     .composer-tools-left::-webkit-scrollbar { display: none; }
     .composer-tools-right {
+      flex: 0 0 auto;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 4px;
       flex-shrink: 0;
     }
 
     .plus-btn {
-      width: 34px;
-      height: 34px;
+      width: 32px;
+      height: 32px;
       border-radius: 50%;
       border: 1px solid rgba(255, 255, 255, 0.1);
       background: #2c2c30;
@@ -1249,17 +1367,17 @@
     .plus-btn:active { transform: scale(0.92); }
 
     .composer-pill-btn {
-      height: 32px;
-      padding: 0 11px;
+      height: 30px;
+      padding: 0 9px;
       border-radius: 999px;
       border: 1px solid rgba(255, 255, 255, 0.09);
       background: transparent;
       color: var(--text-sec);
-      font-size: 12.5px;
+      font-size: 12px;
       font-weight: 500;
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
       cursor: pointer;
       white-space: nowrap;
       flex-shrink: 0;
@@ -1796,6 +1914,9 @@
 
     /* ── ChatGPT iOS Collapsible Thought & Execution Accordion ── */
     .thought-accordion {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
       margin-bottom: 10px;
       display: none;
       flex-direction: column;
@@ -1803,6 +1924,8 @@
     }
     .thought-accordion.has-steps { display: flex; }
     .thought-toggle {
+      max-width: 100%;
+      min-width: 0;
       border: none;
       background: transparent;
       color: var(--text-sec);
@@ -1814,6 +1937,8 @@
       gap: 5px;
       cursor: pointer;
       text-align: left;
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
     .thought-toggle:active { color: #ffffff; }
     .thought-chev {
@@ -1821,9 +1946,13 @@
       transition: transform 0.18s ease;
       display: inline-block;
       color: var(--text-muted);
+      flex-shrink: 0;
     }
     .thought-accordion.open .thought-chev { transform: rotate(90deg); }
     .thought-steps-list {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
       display: none;
       flex-direction: column;
       gap: 6px;
@@ -1835,10 +1964,14 @@
     }
     .thought-accordion.open .thought-steps-list { display: flex; }
     .thought-step-item {
+      min-width: 0;
+      max-width: 100%;
       line-height: 1.4;
       display: flex;
       align-items: baseline;
       gap: 6px;
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
     .thought-step-dot {
       width: 5px;
@@ -1874,6 +2007,10 @@
       color: #ffffff;
     }
     .inchat-search-bar {
+      width: 100%;
+      max-width: 100vw;
+      min-width: 0;
+      overflow: hidden;
       display: none;
       align-items: center;
       gap: 6px;
@@ -1884,6 +2021,10 @@
       z-index: 18;
     }
     .inchat-search-bar.show { display: flex; }
+    body.is-home-empty .inchat-search-bar,
+    body.view-more .inchat-search-bar {
+      display: none !important;
+    }
     .inchat-search-input {
       flex: 1;
       background: #242424;
@@ -1991,19 +2132,33 @@
     <div class="drawer-primary-nav">
       <button id="drawerNavHome" type="button" class="drawer-nav-row active">
         <span class="drawer-nav-ico">
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5.5v-6h-5v6H4a1 1 0 0 1-1-1z"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5.5v-6h-5v6H4a1 1 0 0 1-1-1z"/></svg>
         </span>
-        <span>首页</span>
+        <span class="drawer-nav-lbl">首页</span>
       </button>
-      <button id="drawerNavPinned" type="button" class="drawer-nav-row">
+      <button id="drawerNavAgy" type="button" class="drawer-nav-row">
+        <span class="drawer-nav-ico" style="color:#60a5fa">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.95" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8l2.5 5.7 5.7 2.5-5.7 2.5-2.5 5.7-2.5-5.7-5.7-2.5 5.7-2.5z"/><circle cx="19" cy="5" r="1.2" fill="currentColor" stroke="none"/></svg>
+        </span>
+        <span class="drawer-nav-lbl">Antigravity</span>
+        <span id="drawerAgyCnt" class="drawer-nav-cnt" style="display:none"></span>
+      </button>
+      <button id="drawerNavCodex" type="button" class="drawer-nav-row">
+        <span class="drawer-nav-ico" style="color:#a5b4fc">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+        </span>
+        <span class="drawer-nav-lbl">Codex</span>
+        <span id="drawerCodexCnt" class="drawer-nav-cnt" style="display:none"></span>
+      </button>
+      <button id="drawerNavPinned" type="button" class="drawer-nav-row" style="display:none">
         <span id="drawerNavPinnedIco" class="drawer-nav-ico"></span>
-        <span id="drawerNavPinnedLbl">Codex</span>
+        <span id="drawerNavPinnedLbl" class="drawer-nav-lbl">快捷入口</span>
       </button>
       <button id="drawerNavMore" type="button" class="drawer-nav-row">
         <span class="drawer-nav-ico">
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="3"/><circle cx="17" cy="7" r="3"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="3"/><circle cx="17" cy="7" r="3"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/></svg>
         </span>
-        <span>更多</span>
+        <span class="drawer-nav-lbl">更多</span>
       </button>
     </div>
 
@@ -2152,7 +2307,7 @@
             <span>工作区</span>
           </button>
           <button id="qCheckIdeBtn" type="button" class="composer-pill-btn composer-extra-chip" title="扫描电脑端待确认按钮">
-            <span>⚡ 确认检测</span>
+            <span>⚡ 确认</span>
           </button>
         </div>
 
@@ -2652,6 +2807,7 @@
     chatScroll.style.overflowY = 'hidden';
     sidebarDrawer.classList.add('show');
     drawerBackdrop.classList.add('show');
+    syncDrawerNavHighlight();
     if (ws && ws.readyState === 1) {
       ws.send(JSON.stringify({ type: 'list_conversations' }));
     }
@@ -4553,7 +4709,7 @@
     };
   });
 
-  function startNewConversation(workspacePath = '', targetEngine = null) {
+  function startNewConversation(workspacePath = '', targetEngine = null, openPcWindow = true) {
     if (!ws || ws.readyState !== 1) return showToast('尚未连接服务器');
     saveCurrentSlotState();
     closeDrawer();
@@ -4563,21 +4719,102 @@
       type: 'new_conversation',
       workspace: workspacePath,
       target: targetEngine || newChatTarget || 'ide',
+      open_pc_window: Boolean(openPcWindow),
     }));
   }
 
-  $('newChatTopBtn').onclick = () => startNewConversation('', 'ide');
-  $('drawerNewChatBtn').onclick = () => startNewConversation('', 'ide');
+  function enterHomeView() {
+    closeDrawer();
+    convFilter = 'all';
+    activeProjectFilter = '';
+    document.querySelectorAll('.drawer-tab[data-f]').forEach((x) => x.classList.toggle('active', x.dataset.f === 'all'));
+    setMainView('home');
+    if ($('inChatSearchBar').classList.contains('show')) {
+      $('inChatSearchBar').classList.remove('show');
+      $('inChatSearchInput').value = '';
+      clearInChatSearchHighlights();
+    }
+    if (activeConvId || renderedIds.size > 0 || isStreaming) {
+      if (ws && ws.readyState === 1) {
+        startNewConversation('', 'ide', false);
+      } else {
+        activeConvId = '';
+        activeConvStore = '';
+        chatScroll.innerHTML = buildHeroHtml();
+        renderedIds.clear();
+        streamBuffers.clear();
+        rawMessageTexts.clear();
+        renderHeroDeck();
+        syncAppChromeState();
+      }
+    } else {
+      renderHeroDeck();
+      syncAppChromeState();
+    }
+    syncDrawerNavHighlight();
+  }
+
+  function activateEngineEntry(engineKey, fromSidebarTap = false) {
+    const targetStore = engineKey === 'codex' ? 'codex' : 'ide';
+    newChatTarget = targetStore;
+    document.querySelectorAll('.new-target-tab').forEach((x) => x.classList.toggle('active', x.dataset.t === targetStore));
+    if (!activeConvId && $('composerTargetLbl')) {
+      $('composerTargetLbl').textContent = targetStore === 'codex' ? 'Codex' : 'Antigravity';
+    }
+
+    const engineItems = allConvItems.filter((x) => x.store === targetStore);
+    convFilter = targetStore;
+    activeProjectFilter = '';
+    document.querySelectorAll('.drawer-tab[data-f]').forEach((x) => x.classList.toggle('active', x.dataset.f === targetStore));
+    $('drawerFilterBox').classList.add('show');
+    $('drawerSearchToggleBtn').classList.add('active');
+    renderConvList();
+    if ($('convList')) $('convList').scrollTop = 0;
+    syncDrawerNavHighlight();
+
+    if (fromSidebarTap) {
+      return;
+    }
+
+    setMainView('home');
+    if (engineItems.length > 0) {
+      openDrawer();
+      syncDrawerNavHighlight();
+    } else {
+      if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'list_conversations' }));
+      $('wsPickerModal').classList.add('show');
+    }
+  }
+
+  $('newChatTopBtn').onclick = () => startNewConversation('', activeConvStore === 'codex' ? 'codex' : 'ide', true);
+  $('drawerNewChatBtn').onclick = () => {
+    const preferred = convFilter === 'codex' ? 'codex' : (convFilter === 'ide' ? 'ide' : (newChatTarget || 'ide'));
+    startNewConversation('', preferred, true);
+  };
 
   // ── 2x4 Bento Modules + Long-Press Pin to Bottom Tab Bar & Drawer (Screenshots 1, 2, 3) ──
   const BENTO_MODULES = [
     {
-      key: 'files',
-      title: '资料空间',
-      icoSvg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="#f5b82e"><path d="M5 4a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4z" opacity="0.55"/><rect x="3" y="6" width="14" height="16" rx="2.5" fill="#fbbf24"/></svg>',
-      tabSvg: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
-      countFn: () => '',
-      run: () => { setMainView('home'); openWsModal('files'); },
+      key: 'antigravity',
+      title: 'Antigravity',
+      icoSvg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="2.5" width="19" height="19" rx="6" fill="#1d4ed8"/><path d="M12 5.2l2.2 4.8 4.8 2.2-4.8 2.2-2.2 4.8-2.2-4.8-4.8-2.2 4.8-2.2z" fill="#93c5fd"/><circle cx="17.5" cy="6.8" r="1.2" fill="#fff"/></svg>',
+      tabSvg: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8l2.5 5.7 5.7 2.5-5.7 2.5-2.5 5.7-2.5-5.7-5.7-2.5 5.7-2.5z"/></svg>',
+      countFn: () => {
+        const c = allConvItems.filter((x) => x.store === 'ide').length;
+        return c > 0 ? `${c}` : '';
+      },
+      run: () => activateEngineEntry('ide', false),
+    },
+    {
+      key: 'codex',
+      title: 'Codex',
+      icoSvg: '<svg width="25" height="25" viewBox="0 0 24 24" fill="none"><path d="M12 2.5c2.2 0 4 1.3 4.7 3.2 1.9.6 3.3 2.4 3.3 4.5 0 1.4-.6 2.7-1.6 3.6.3 2.2-1 4.4-3.1 5.2-1.1.4-2.2.4-3.3 0-1.1.4-2.2.4-3.3 0-2.1-.8-3.4-3-3.1-5.2-1-.9-1.6-2.2-1.6-3.6 0-2.1 1.4-3.9 3.3-4.5C8 3.8 9.8 2.5 12 2.5z" fill="#6366f1"/><polyline points="9 10 11.5 12.2 9 14.4" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="13" y1="14.4" x2="15.8" y2="14.4" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>',
+      tabSvg: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>',
+      countFn: () => {
+        const c = allConvItems.filter((x) => x.store === 'codex').length;
+        return c > 0 ? `${c}` : '';
+      },
+      run: () => activateEngineEntry('codex', false),
     },
     {
       key: 'projects',
@@ -4593,6 +4830,14 @@
         if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'list_conversations' }));
         $('wsPickerModal').classList.add('show');
       },
+    },
+    {
+      key: 'files',
+      title: '资料空间',
+      icoSvg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="#f5b82e"><path d="M5 4a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4z" opacity="0.55"/><rect x="3" y="6" width="14" height="16" rx="2.5" fill="#fbbf24"/></svg>',
+      tabSvg: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+      countFn: () => '',
+      run: () => { setMainView('home'); openWsModal('files'); },
     },
     {
       key: 'desktop',
@@ -4614,32 +4859,6 @@
       run: () => { setMainView('home'); openWsModal('git'); },
     },
     {
-      key: 'codex',
-      title: 'Codex',
-      icoSvg: '<svg width="25" height="25" viewBox="0 0 24 24" fill="none"><path d="M12 2.5c2.2 0 4 1.3 4.7 3.2 1.9.6 3.3 2.4 3.3 4.5 0 1.4-.6 2.7-1.6 3.6.3 2.2-1 4.4-3.1 5.2-1.1.4-2.2.4-3.3 0-1.1.4-2.2.4-3.3 0-2.1-.8-3.4-3-3.1-5.2-1-.9-1.6-2.2-1.6-3.6 0-2.1 1.4-3.9 3.3-4.5C8 3.8 9.8 2.5 12 2.5z" fill="#6366f1"/><polyline points="9 10 11.5 12.2 9 14.4" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="13" y1="14.4" x2="15.8" y2="14.4" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>',
-      tabSvg: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c2 0 3.7 1.2 4.4 2.9 1.8.6 3.1 2.2 3.1 4.2 0 1.3-.5 2.5-1.4 3.3.2 2.1-.9 4.1-2.9 4.8-1 .4-2.1.4-3.2 0-1.1.4-2.2.4-3.2 0-2-.7-3.1-2.7-2.9-4.8-.9-.8-1.4-2-1.4-3.3 0-2 1.3-3.6 3.1-4.2C8.3 4.2 10 3 12 3z"/><path d="M9.5 11.2c.4-.5 1.1-.5 1.5 0m2 0c.4-.5 1.1-.5 1.5 0"/></svg>',
-      countFn: () => {
-        const c = allConvItems.filter((x) => x.store === 'codex').length;
-        return c > 0 ? `${c}` : '';
-      },
-      run: () => {
-        setMainView('home');
-        const hasCodex = allConvItems.some((x) => x.store === 'codex');
-        if (hasCodex) {
-          convFilter = 'codex';
-          document.querySelectorAll('.drawer-tab[data-f]').forEach((x) => x.classList.toggle('active', x.dataset.f === 'codex'));
-          $('drawerFilterBox').classList.add('show');
-          renderConvList();
-          openDrawer();
-        } else {
-          newChatTarget = 'codex';
-          document.querySelectorAll('.new-target-tab').forEach((x) => x.classList.toggle('active', x.dataset.t === 'codex'));
-          if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'list_conversations' }));
-          $('wsPickerModal').classList.add('show');
-        }
-      },
-    },
-    {
       key: 'approve',
       title: '待办审批',
       icoSvg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#2dd4bf" stroke-width="2.2"/><path d="M9 12.2l2.1 2.2L15.5 10" stroke="#2dd4bf" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -4648,17 +4867,6 @@
       run: () => {
         setMainView('home');
         $('qCheckIdeBtn').click();
-      },
-    },
-    {
-      key: 'custom',
-      title: '自定义',
-      icoSvg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="14" cy="8" r="2.6" fill="#c084fc" stroke="#a855f7"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="9" cy="16" r="2.6" fill="#c084fc" stroke="#a855f7"/></svg>',
-      tabSvg: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="14" cy="8" r="2.5"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="9" cy="16" r="2.5"/></svg>',
-      countFn: () => '',
-      run: () => {
-        setMainView('home');
-        $('modelModal').classList.add('show');
       },
     },
     {
@@ -4678,7 +4886,7 @@
   } catch (_) {}
 
   function getPinnedModule() {
-    return BENTO_MODULES.find((m) => m.key === pinnedTabKey) || BENTO_MODULES[4];
+    return BENTO_MODULES.find((m) => m.key === pinnedTabKey) || BENTO_MODULES[1];
   }
 
   function applyPinnedTabVisual() {
@@ -4687,6 +4895,21 @@
     if ($('tabPinned')) $('tabPinned').title = mod.title;
     if ($('drawerNavPinnedIco')) $('drawerNavPinnedIco').innerHTML = mod.tabSvg;
     if ($('drawerNavPinnedLbl')) $('drawerNavPinnedLbl').textContent = mod.title;
+    if ($('drawerNavPinned')) {
+      // Antigravity & Codex already have permanent peer top-level entries in the sidebar
+      $('drawerNavPinned').style.display = (mod.key === 'antigravity' || mod.key === 'codex') ? 'none' : 'flex';
+    }
+  }
+
+  function syncDrawerNavHighlight() {
+    const isMore = currentMainView === 'more';
+    const agyActive = !isMore && convFilter === 'ide';
+    const cdxActive = !isMore && convFilter === 'codex';
+    const homeActive = !isMore && !agyActive && !cdxActive;
+    if ($('drawerNavHome')) $('drawerNavHome').classList.toggle('active', homeActive);
+    if ($('drawerNavAgy')) $('drawerNavAgy').classList.toggle('active', agyActive);
+    if ($('drawerNavCodex')) $('drawerNavCodex').classList.toggle('active', cdxActive);
+    if ($('drawerNavMore')) $('drawerNavMore').classList.toggle('active', isMore);
   }
 
   function setPinnedTabKey(newKey) {
@@ -4706,14 +4929,18 @@
     currentMainView = viewName === 'more' ? 'more' : 'home';
     $('tabHome').classList.toggle('active', currentMainView === 'home');
     $('tabMore').classList.toggle('active', currentMainView === 'more');
-    $('drawerNavHome').classList.toggle('active', currentMainView === 'home');
-    $('drawerNavMore').classList.toggle('active', currentMainView === 'more');
     if (currentMainView === 'more') {
+      if ($('inChatSearchBar').classList.contains('show')) {
+        $('inChatSearchBar').classList.remove('show');
+        $('inChatSearchInput').value = '';
+        clearInChatSearchHighlights();
+      }
       renderMoreBentoGrid($('moreSearchInput') ? $('moreSearchInput').value : '');
       if (ws && ws.readyState === 1 && !latestWsData) {
         ws.send(JSON.stringify({ type: 'workspace_inspect', rel_dir: '' }));
       }
     }
+    syncDrawerNavHighlight();
     syncAppChromeState();
   }
 
@@ -4845,11 +5072,11 @@
   }
 
   $('tabHome').onclick = () => {
-    closeDrawer();
-    if (currentMainView === 'more') {
+    if (currentMainView === 'more' && (activeConvId || renderedIds.size > 0)) {
+      closeDrawer();
       setMainView('home');
-    } else if (activeConvId || renderedIds.size > 0) {
-      startNewConversation('', activeConvStore || 'ide');
+    } else {
+      enterHomeView();
     }
   };
   $('tabPinned').onclick = () => {
@@ -4862,11 +5089,13 @@
   };
 
   $('drawerNavHome').onclick = () => {
-    closeDrawer();
-    setMainView('home');
-    if (activeConvId || renderedIds.size > 0) {
-      startNewConversation('', 'ide');
-    }
+    enterHomeView();
+  };
+  $('drawerNavAgy').onclick = () => {
+    activateEngineEntry('ide', true);
+  };
+  $('drawerNavCodex').onclick = () => {
+    activateEngineEntry('codex', true);
   };
   $('drawerNavPinned').onclick = () => {
     closeDrawer();
@@ -4921,7 +5150,15 @@
     $('cntIde').textContent = nIde ? `(${nIde})` : '';
     $('cntCodex').textContent = nCodex ? `(${nCodex})` : '';
     $('cntCli').textContent = nCli ? `(${nCli})` : '';
-    $('fltCodexBtn').style.display = nCodex > 0 ? 'inline-block' : 'none';
+    $('fltCodexBtn').style.display = 'inline-block';
+    if ($('drawerAgyCnt')) {
+      $('drawerAgyCnt').textContent = nIde > 0 ? String(nIde) : '';
+      $('drawerAgyCnt').style.display = nIde > 0 ? 'inline-block' : 'none';
+    }
+    if ($('drawerCodexCnt')) {
+      $('drawerCodexCnt').textContent = nCodex > 0 ? String(nCodex) : '';
+      $('drawerCodexCnt').style.display = nCodex > 0 ? 'inline-block' : 'none';
+    }
   }
 
   function renderWorkspaceChips(workspaces, currentWs) {
@@ -5014,16 +5251,36 @@
     });
 
     if (!filtered.length) {
-      listEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:24px;font-size:13px">暂无匹配的聊天记录</div>';
+      listEl.innerHTML = '';
+      const emptyBox = document.createElement('div');
+      emptyBox.style.cssText = 'text-align:center;color:var(--text-muted);padding:24px 12px;font-size:13px;display:flex;flex-direction:column;align-items:center;gap:12px';
+      const emptyMsg = document.createElement('span');
+      emptyMsg.textContent = convFilter === 'ide'
+        ? '暂无 Antigravity 电脑端会话'
+        : (convFilter === 'codex' ? '暂无 Codex 电脑端会话' : '暂无匹配的聊天记录');
+      emptyBox.appendChild(emptyMsg);
+      if (convFilter === 'ide' || convFilter === 'codex') {
+        const ctaBtn = document.createElement('button');
+        ctaBtn.type = 'button';
+        ctaBtn.className = 'pill-btn';
+        ctaBtn.style.cssText = 'background:#fff;color:#000;font-weight:600;padding:7px 14px';
+        ctaBtn.textContent = convFilter === 'codex' ? '+ 新建 Codex 会话' : '+ 新建 Antigravity 会话';
+        ctaBtn.onclick = () => startNewConversation('', convFilter, true);
+        emptyBox.appendChild(ctaBtn);
+      }
+      listEl.appendChild(emptyBox);
       updateDrawerFadeMask();
       return;
     }
     listEl.innerHTML = '';
     const showFilterBadges = $('drawerFilterBox').classList.contains('show');
+    const defaultGrpLabel = convFilter === 'ide'
+      ? `Antigravity 电脑端 (${filtered.length})`
+      : (convFilter === 'codex' ? `Codex 电脑端 (${filtered.length})` : '聊天');
     let lastGroup = '';
     filtered.forEach((it) => {
       const isPinned = pinnedConvIds.has(it.conversation_id);
-      const grp = isPinned ? '置顶' : '聊天';
+      const grp = isPinned ? '置顶' : defaultGrpLabel;
       if (grp !== lastGroup) {
         lastGroup = grp;
         const gEl = document.createElement('div');
@@ -5108,7 +5365,12 @@
   document.querySelectorAll('.drawer-tab[data-f]').forEach((tb) => {
     tb.onclick = () => {
       convFilter = tb.dataset.f || 'all';
+      if (convFilter === 'ide' || convFilter === 'codex') {
+        newChatTarget = convFilter;
+        document.querySelectorAll('.new-target-tab').forEach((x) => x.classList.toggle('active', x.dataset.t === convFilter));
+      }
       document.querySelectorAll('.drawer-tab[data-f]').forEach((x) => x.classList.toggle('active', x === tb));
+      syncDrawerNavHighlight();
       renderConvList();
     };
   });

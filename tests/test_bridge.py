@@ -1483,7 +1483,7 @@ async def test_chatgpt_ios_ui_steps_timeline_and_canvas_sandbox(tmp_path: Path):
     from qq_agy_bridge.conversations import _humanize_tool_step, load_conversation_detail
     from qq_agy_bridge.web_pwa import STATIC_DIR
 
-    assert "antigravity-ios-shell-v11" in STATIC_PWA_SW_JS
+    assert "antigravity-ios-shell-v12" in STATIC_PWA_SW_JS
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     assert 'content="#000000"' in html
     assert 'id="composerCard"' in html
@@ -1492,6 +1492,8 @@ async def test_chatgpt_ios_ui_steps_timeline_and_canvas_sandbox(tmp_path: Path):
     assert 'id="tabbar"' in html
     assert 'id="tabPinned"' in html
     assert 'id="morePage"' in html
+    assert 'id="drawerNavAgy"' in html
+    assert 'id="drawerNavCodex"' in html
     assert "BENTO_MODULES" in html
     assert "cont-deck" in html
     assert 'id="drawerNewChatBtn"' in html
@@ -1691,6 +1693,186 @@ async def test_ide_window_delivery_failure_never_forks_cli_and_watch_syncs(tmp_p
             assert pushed is not None
             assert pushed["history"][-2]["text"] == "电脑端新发送的命令"
             assert pushed["history"][-1]["text"] == "电脑端最新真实回复"
+    finally:
+        stop_event.set()
+        await asyncio.wait_for(pwa_task, timeout=5.0)
+        await sessions.shutdown_all()
+
+
+@pytest.mark.asyncio
+async def test_mobile_sidebar_dual_entries_noise_filtering_and_gentle_home_switch(tmp_path: Path) -> None:
+    """Verify:
+    1. Truncated `[系统设定 - ...` DB titles are stripped cleanly and fall back to human transcript prompt.
+    2. Internal `【只读协作顾问约束】`, `【反拍马屁红队审查模式】`, and `只回复两个字：收到` threads are excluded.
+    3. `new_conversation` with `open_pc_window=False` (Home button) resets cleanly without triggering `pc_window_new_opener`.
+    """
+    from qq_agy_bridge.conversations import _clean_display_title, list_local_conversations
+
+    assert _clean_display_title("[系统设定 - 请在本次对话全程严格遵守，绝不要在回复中提") == ""
+    assert _clean_display_title("[系统设定 - 规则]固定规则[/系统设定]\n帮我优化移动端布局") == "帮我优化移动端布局"
+
+    ide_dir = tmp_path / "ide_clean"
+    cli_dir = tmp_path / "cli_clean"
+    cdx_dir = tmp_path / "cdx_clean"
+    ide_dir.mkdir()
+    cli_dir.mkdir()
+    cdx_dir.mkdir()
+
+    # 1. Genuine IDE chat whose DB title was truncated inside `[系统设定 - ...`
+    good_ide_cid = "good-ide-conv-11223344"
+    good_tf = ide_dir / "brain" / good_ide_cid / ".system_generated" / "logs" / "transcript.jsonl"
+    good_tf.parent.mkdir(parents=True)
+    good_tf.write_text(
+        json.dumps(
+            {
+                "step_index": 0,
+                "type": "USER_INPUT",
+                "content": "[系统设定 - 请在本次对话全程严格遵守]内部规则[/系统设定]\n排查 Antigravity 登录后无法进入",
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    # 2. Synthetic two-word ping IDE chat -> must be filtered out
+    ping_ide_cid = "ping-ide-conv-55667788"
+    ping_tf = ide_dir / "brain" / ping_ide_cid / ".system_generated" / "logs" / "transcript.jsonl"
+    ping_tf.parent.mkdir(parents=True)
+    ping_tf.write_text(
+        json.dumps({"step_index": 0, "type": "USER_INPUT", "content": "只回复两个字：收到"}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    con_ide = sqlite3.connect(ide_dir / "conversation_summaries.db")
+    con_ide.execute(
+        "CREATE TABLE conversation_summaries ("
+        "conversation_id TEXT, title TEXT, preview TEXT, step_count INT, "
+        "last_modified_time TEXT, workspace_uris TEXT, status TEXT, "
+        "source TEXT, app_data_dir TEXT, nesting_depth INT, killed INT)"
+    )
+    con_ide.execute(
+        "INSERT INTO conversation_summaries VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            good_ide_cid,
+            "[系统设定 - 请在本次对话全程严格遵守，绝不要在回复中提",
+            "[系统设定 - 请在本次对话全程严格遵守，绝不要在回复中提",
+            4,
+            "2026-11-25 17:00:00+00:00",
+            "",
+            "CASCADE_RUN_STATUS_IDLE",
+            "",
+            str(ide_dir),
+            0,
+            0,
+        ),
+    )
+    con_ide.execute(
+        "INSERT INTO conversation_summaries VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            ping_ide_cid,
+            "只回复两个字：收到",
+            "收到",
+            2,
+            "2026-11-25 17:01:00+00:00",
+            "",
+            "CASCADE_RUN_STATUS_IDLE",
+            "",
+            str(ide_dir),
+            0,
+            0,
+        ),
+    )
+    con_ide.commit()
+    con_ide.close()
+
+    # 3. Codex store with 1 real thread and 1 internal `codex-astra` read-only advisor thread
+    real_cdx_cid = "cdx-real-thread-0001"
+    astra_cdx_cid = "cdx-astra-daemon-0002"
+    r_real = cdx_dir / f"{real_cdx_cid}.jsonl"
+    r_astra = cdx_dir / f"{astra_cdx_cid}.jsonl"
+    r_real.write_text("{}", encoding="utf-8")
+    r_astra.write_text("{}", encoding="utf-8")
+
+    con_cdx = sqlite3.connect(cdx_dir / "state_5.sqlite")
+    con_cdx.execute(
+        "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT, updated_at INT, source TEXT, cwd TEXT, title TEXT, archived INT)"
+    )
+    con_cdx.execute(
+        "INSERT INTO threads VALUES (?,?,?,?,?,?,?)",
+        (real_cdx_cid, str(r_real), 1795626000, "vscode", str(tmp_path), "客观比较两个协作插件", 0),
+    )
+    con_cdx.execute(
+        "INSERT INTO threads VALUES (?,?,?,?,?,?,?)",
+        (
+            astra_cdx_cid,
+            str(r_astra),
+            1795626100,
+            "exec",
+            str(tmp_path),
+            "【只读协作顾问约束】你正在作为 GPT-6.2 Astra 独立专家，与 Antigravity 协同工作",
+            0,
+        ),
+    )
+    con_cdx.commit()
+    con_cdx.close()
+
+    listed = list_local_conversations(limit=50, ide_dir=ide_dir, cli_dir=cli_dir, codex_dir=cdx_dir)
+    listed_ids = {x.conversation_id: x for x in listed}
+    assert good_ide_cid in listed_ids
+    assert listed_ids[good_ide_cid].title == "排查 Antigravity 登录后无法进入"
+    assert ping_ide_cid not in listed_ids
+    assert real_cdx_cid in listed_ids
+    assert astra_cdx_cid not in listed_ids
+
+    # 4. Gentle Home switch (`open_pc_window=False`) vs explicit New Chat (`open_pc_window=True`)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    opener_calls = 0
+
+    def _spy_opener() -> tuple[bool, str]:
+        nonlocal opener_calls
+        opener_calls += 1
+        return (True, "已在电脑端打开新对话窗口")
+
+    tok = "dual-entry-home-switch-tok"
+    cfg = _make_config(tmp_path, web_pwa_port=port, web_access_token=tok)
+    sessions = SessionManager(cfg, command_override=[sys.executable, str(MOCK_AGY)])
+    pwa = WebPwaServer(
+        cfg,
+        session_manager=sessions,
+        access_token=tok,
+        ide_store_dir=ide_dir,
+        cli_store_dir=cli_dir,
+        codex_store_dir=cdx_dir,
+        pc_window_new_opener=_spy_opener,
+        pc_window_new_sender=lambda _p: (True, good_ide_cid, "OK"),
+    )
+    stop_event = asyncio.Event()
+    pwa_task = asyncio.create_task(pwa.run(stop_event=stop_event))
+    try:
+        await asyncio.sleep(0.2)
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws?token={tok}") as ws:
+            await asyncio.wait_for(ws.recv(), timeout=4.0)  # hello
+            await ws.send(json.dumps({"type": "new_conversation", "workspace": "", "target": "ide", "open_pc_window": False}))
+            saw_clear = False
+            for _ in range(6):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
+                if ev["type"] == "meta_update":
+                    assert ev["active_store"] == "ide"
+                    break
+                if ev["type"] == "clear_history":
+                    saw_clear = True
+            assert saw_clear is True
+            assert opener_calls == 0
+
+            await ws.send(json.dumps({"type": "new_conversation", "workspace": "", "target": "ide", "open_pc_window": True}))
+            for _ in range(6):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
+                if ev["type"] == "toast":
+                    break
+            assert opener_calls == 1
     finally:
         stop_event.set()
         await asyncio.wait_for(pwa_task, timeout=5.0)

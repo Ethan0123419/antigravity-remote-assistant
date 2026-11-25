@@ -1177,6 +1177,7 @@ class WebPwaServer:
                             str(msg.get("workspace") or ""),
                             str(msg.get("target") or "ide"),
                             str(msg.get("req_id") or ""),
+                            open_pc_window=bool(msg.get("open_pc_window", True)),
                         )
                     )
                     self._tasks.add(t)
@@ -1534,7 +1535,13 @@ class WebPwaServer:
         )
 
     async def _handle_new_conversation(
-        self, ws: ServerConnection, workspace: str, target: str = "ide", req_id: str = ""
+        self,
+        ws: ServerConnection,
+        workspace: str,
+        target: str = "ide",
+        req_id: str = "",
+        *,
+        open_pc_window: bool = True,
     ) -> None:
         new_slot = f"new:{uuid.uuid4().hex[:8]}"
         session = self._session_for_slot(new_slot)
@@ -1551,7 +1558,10 @@ class WebPwaServer:
         title_label = "反重力助手"
         toast_note = ""
 
-        if req_target == "ide" and self._pc_window_new_opener is not None:
+        if req_target == "ide" and not open_pc_window:
+            store_mode = "ide" if self._pc_window_new_sender is not None else ""
+            title_label = "反重力助手"
+        elif req_target == "ide" and self._pc_window_new_opener is not None:
             opened, open_note = await asyncio.to_thread(self._pc_window_new_opener)
             if opened:
                 store_mode = "ide"
