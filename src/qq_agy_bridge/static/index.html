@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="referrer" content="no-referrer" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#0D0D0F" />
+  <meta name="theme-color" content="#000000" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -13,22 +13,22 @@
   <title>反重力助手</title>
   <style>
     :root {
-      /* Obsidian Velvet iOS Pro Dark Palette */
-      --bg-main: #0d0d0f;
-      --bg-sidebar: rgba(16, 16, 20, 0.95);
-      --bg-surface: #1a1a1f;
-      --bg-surface-2: #222228;
-      --bg-surface-hover: #2a2a32;
-      --bg-code: #08080a;
-      --bg-code-hdr: #141418;
-      --border-hairline: rgba(255, 255, 255, 0.065);
+      /* Authentic Latest ChatGPT iOS AMOLED Dark Palette */
+      --bg-main: #000000;
+      --bg-sidebar: #171717;
+      --bg-surface: #212121;
+      --bg-surface-2: #2f2f2f;
+      --bg-surface-hover: #383838;
+      --bg-code: #0d0d0d;
+      --bg-code-hdr: #171717;
+      --border-hairline: rgba(255, 255, 255, 0.06);
       --border-subtle: rgba(255, 255, 255, 0.085);
       --border-med: rgba(255, 255, 255, 0.14);
-      --specular-top: inset 0 1px 0 rgba(255, 255, 255, 0.075);
-      --text-pri: #f2f2f5;
-      --text-sec: #a8a8b3;
-      --text-muted: #72727e;
-      --accent-green: #10b981;
+      --specular-top: none;
+      --text-pri: #f5f5f5;
+      --text-sec: #b4b4b4;
+      --text-muted: #7a7a7a;
+      --accent-green: #10a37f;
       --danger: #ef4444;
       --safe-top: env(safe-area-inset-top, 0px);
       --top-safe: var(--safe-top);
@@ -67,30 +67,30 @@
       text-rendering: optimizeLegibility;
     }
 
-    /* Hard opaque top status-bar shield so iOS WebKit samples pure #0D0D0F instead of washing out */
+    /* Hard opaque top status-bar shield so iOS WebKit samples pure #000000 AMOLED black */
     .ios-status-shield {
       position: fixed;
       top: 0;
       left: 0;
       right: 0;
       height: var(--top-safe);
-      background: #0d0d0f;
+      background: #000000;
       z-index: 25;
       pointer-events: none;
     }
 
     button { font-family: inherit; }
 
-    /* ── Crisp Razor-Sharp Solid Obsidian Top Bar (Zero Backdrop-Filter Subpixel Blur) ── */
+    /* ── Authentic ChatGPT iOS Minimalist Top Bar (Seamless Pure Black, Zero Blur) ── */
     .topbar {
-      height: calc(var(--top-safe) + 52px);
+      height: calc(var(--top-safe) + 50px);
       padding: var(--top-safe) 10px 0;
-      background: #0d0d0f;
-      border-bottom: 1px solid var(--border-hairline);
+      background: #000000;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
+      gap: 6px;
       z-index: 20;
       flex-shrink: 0;
       transform: translateZ(0);
@@ -447,7 +447,7 @@
       cursor: pointer;
     }
 
-    /* ── Bespoke Obsidian Hero Empty State + 2x2 Bento Grid ── */
+    /* ── Calm ChatGPT iOS Empty Home Greeting + Starter Pills ── */
     .empty-hero {
       margin-top: auto;
       margin-bottom: auto;
@@ -456,111 +456,72 @@
       align-items: center;
       justify-content: center;
       text-align: center;
-      padding: 20px 6px;
-    }
-    .hero-logo {
-      width: 56px;
-      height: 56px;
-      border-radius: 17px;
-      background: linear-gradient(180deg, #23232a 0%, #141418 100%);
-      border: 1px solid rgba(255, 255, 255, 0.13);
-      box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.16),
-        0 14px 36px rgba(0, 0, 0, 0.65),
-        0 0 42px rgba(255, 255, 255, 0.045);
-      color: #f8fafc;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 18px;
+      padding: 24px 10px;
     }
     .empty-hero h2 {
-      font-size: 22px;
+      font-size: 25px;
       font-weight: 600;
       color: #ffffff;
-      margin: 0 0 6px;
-      letter-spacing: -0.35px;
-    }
-    .hero-sub {
-      font-size: 13px;
-      color: var(--text-muted);
-      margin: 0 0 24px;
-      letter-spacing: 0.1px;
+      margin: 0 0 22px;
+      letter-spacing: -0.45px;
     }
     .suggestion-pills {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 9px;
       width: 100%;
-      max-width: 440px;
+      max-width: 460px;
     }
     .suggest-pill {
-      border: 1px solid var(--border-subtle);
-      background: linear-gradient(180deg, rgba(30, 30, 36, 0.85) 0%, rgba(22, 22, 27, 0.85) 100%);
-      box-shadow: var(--specular-top), 0 4px 16px rgba(0, 0, 0, 0.28);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      background: #171717;
       color: var(--text-pri);
-      padding: 12px 13px;
-      border-radius: 16px;
+      padding: 9.5px 15px;
+      border-radius: 999px;
       cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 7px;
-      text-align: left;
-      transition: transform 0.14s ease, background 0.16s, border-color 0.16s;
+      display: inline-flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+      font-size: 13.5px;
+      font-weight: 500;
+      transition: transform 0.12s ease, background 0.15s;
     }
-    .suggest-pill:hover {
-      border-color: var(--border-med);
-      background: var(--bg-surface-2);
-    }
-    .suggest-pill:active {
-      transform: scale(0.97);
-      background: var(--bg-surface-hover);
-    }
+    .suggest-pill:hover { background: #212121; }
+    .suggest-pill:active { transform: scale(0.96); background: #2a2a2a; }
     .sug-ico {
-      width: 28px;
-      height: 28px;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid var(--border-hairline);
-      color: var(--text-sec);
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      flex-shrink: 0;
     }
     .sug-title {
       font-size: 13.5px;
-      font-weight: 600;
-      color: var(--text-pri);
-      letter-spacing: -0.1px;
-    }
-    .sug-desc {
-      font-size: 11.5px;
-      color: var(--text-muted);
-      line-height: 1.3;
+      font-weight: 500;
+      color: #ececec;
     }
 
-    /* ── User Message: Precision Smoked Capsule ── */
+    /* ── User Message: Authentic ChatGPT iOS #2F2F2F Pill ── */
     .msg-row {
       display: flex;
       flex-direction: column;
-      animation: msgFadeIn 0.18s ease-out;
+      animation: msgFadeIn 0.16s ease-out;
     }
     @keyframes msgFadeIn {
-      from { opacity: 0; transform: translateY(4px); }
+      from { opacity: 0; transform: translateY(3px); }
       to { opacity: 1; transform: translateY(0); }
     }
     .msg-row.user { align-items: flex-end; }
     .msg-row.user .user-pill {
-      max-width: min(82%, 540px);
-      background: linear-gradient(180deg, #25252d 0%, #1e1e25 100%);
-      border: 1px solid rgba(255, 255, 255, 0.085);
-      box-shadow: var(--specular-top), 0 4px 16px rgba(0, 0, 0, 0.28);
-      color: var(--text-pri);
-      padding: 10.5px 16px;
-      border-radius: 22px 22px 6px 22px;
-      font-size: 15.5px;
-      line-height: 1.54;
+      max-width: min(78%, 520px);
+      background: #2f2f2f;
+      border: none;
+      color: #f5f5f5;
+      padding: 10px 16px;
+      border-radius: 20px;
+      font-size: 16px;
+      line-height: 1.5;
       white-space: pre-wrap;
       word-break: break-word;
       overflow-wrap: anywhere;
@@ -801,105 +762,138 @@
     }
     .jump-bottom-btn.show { display: inline-flex; }
 
-    /* ── Pending Attachments Strip ── */
+    /* ── Pending Attachments & Approvals Inside Unified Composer Card ── */
     .att-strip {
       display: none;
-      gap: 8px;
-      padding: 6px 14px 2px;
+      gap: 7px;
+      padding: 0 0 8px;
       overflow-x: auto;
-      max-width: 768px;
       width: 100%;
-      margin: 0 auto;
-      flex-shrink: 0;
+      scrollbar-width: none;
     }
+    .att-strip::-webkit-scrollbar { display: none; }
     .att-badge {
-      background: var(--bg-surface);
-      border: 1px solid var(--border-med);
-      box-shadow: var(--specular-top);
+      background: #2f2f2f;
+      border: 1px solid rgba(255, 255, 255, 0.08);
       color: var(--text-pri);
-      padding: 5px 11px;
-      border-radius: 11px;
+      padding: 5px 10px;
+      border-radius: 10px;
       font-size: 12.5px;
       display: inline-flex;
       align-items: center;
-      gap: 7px;
+      gap: 6px;
       white-space: nowrap;
     }
     .att-badge button {
       background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 0;
     }
 
-    /* ── Precision Floating Glass Bottom Composer ── */
+    /* ── Latest ChatGPT iOS Unified Two-Row Rounded Composer (#212121, 26px) ── */
     .composer-outer {
-      padding: 6px 12px calc((1 - var(--kb-open, 0)) * var(--safe-bot) + 10px);
-      background: var(--bg-main);
+      padding: 6px 12px calc((1 - var(--kb-open, 0)) * var(--safe-bot) + 8px);
+      background: #000000;
       flex-shrink: 0;
       position: relative;
       z-index: 10;
     }
-    .composer-row {
+    .composer-card {
       max-width: 768px;
       margin: 0 auto;
+      background: #212121;
+      border: 1px solid rgba(255, 255, 255, 0.075);
+      border-radius: 26px;
+      padding: 10px 10px 9px 14px;
       display: flex;
-      align-items: flex-end;
-      gap: 9px;
-    }
-
-    .plus-btn {
-      width: 42px;
-      height: 42px;
-      border-radius: 50%;
-      border: 1px solid var(--border-subtle);
-      background: var(--bg-surface);
-      box-shadow: var(--specular-top), 0 4px 14px rgba(0, 0, 0, 0.35);
-      color: var(--text-pri);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      flex-shrink: 0;
-      margin-bottom: 2px;
-      transition: background 0.16s, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.16s;
-    }
-    .plus-btn.open {
-      background: var(--bg-surface-2);
-      border-color: var(--border-med);
-      transform: rotate(45deg);
-    }
-    .plus-btn:active { transform: scale(0.92); }
-
-    .composer-pill {
-      flex: 1;
-      min-width: 0;
-      background: var(--bg-surface);
-      border: 1px solid rgba(255, 255, 255, 0.095);
-      box-shadow: var(--specular-top), 0 8px 26px rgba(0, 0, 0, 0.45);
-      border-radius: 25px;
-      padding: 5px 6px 5px 16px;
-      display: flex;
-      align-items: flex-end;
+      flex-direction: column;
       gap: 6px;
-      transition: border-color 0.18s, background 0.18s;
+      transition: border-color 0.16s, background 0.16s;
     }
-    .composer-pill:focus-within {
-      background: #1e1e24;
-      border-color: rgba(255, 255, 255, 0.2);
+    .composer-card:focus-within {
+      border-color: rgba(255, 255, 255, 0.16);
     }
 
     .input-box {
-      flex: 1;
+      width: 100%;
       background: transparent;
       border: none;
-      padding: 7.5px 0;
+      padding: 2px 4px 2px 0;
       color: var(--text-pri);
       font-size: 16px; /* Prevents iOS auto-zoom */
-      line-height: 1.42;
-      max-height: 136px;
+      line-height: 1.45;
+      max-height: 140px;
       resize: none;
       outline: none;
       font-family: inherit;
     }
-    .input-box::placeholder { color: var(--text-muted); }
+    .input-box::placeholder { color: #8e8e93; }
+
+    .composer-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .composer-tools-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .composer-tools-left::-webkit-scrollbar { display: none; }
+    .composer-tools-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .plus-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: #2f2f2f;
+      color: var(--text-pri);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.15s, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .plus-btn.open {
+      background: #3a3a3a;
+      transform: rotate(45deg);
+    }
+    .plus-btn:active { transform: scale(0.92); }
+
+    .composer-pill-btn {
+      height: 32px;
+      padding: 0 11px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      background: transparent;
+      color: var(--text-sec);
+      font-size: 12.5px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background 0.14s, color 0.14s;
+    }
+    .composer-pill-btn:hover, .composer-pill-btn:active {
+      background: #2f2f2f;
+      color: #ffffff;
+    }
+    .composer-pill-btn.active-target {
+      background: rgba(255, 255, 255, 0.06);
+      color: #ececec;
+    }
 
     .mic-btn {
       width: 34px;
@@ -925,20 +919,17 @@
       border-radius: 50%;
       border: none;
       background: #ffffff;
-      color: #09090b;
-      box-shadow: 0 2px 10px rgba(255, 255, 255, 0.16);
-      display: flex;
+      color: #000000;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
       flex-shrink: 0;
-      margin-bottom: 1px;
-      transition: opacity 0.16s, transform 0.12s, background 0.16s;
+      transition: opacity 0.15s, transform 0.12s, background 0.15s;
     }
     .send-btn.empty:not(.stop) {
-      background: rgba(255, 255, 255, 0.14);
-      color: rgba(255, 255, 255, 0.42);
-      box-shadow: none;
+      background: #383838;
+      color: #171717;
     }
     .send-btn:active { transform: scale(0.9); }
 
@@ -1423,6 +1414,122 @@
     }
     .sys-val { font-size: 16px; font-weight: 700; color: #fff; margin-top: 3px; }
     .sys-lbl { font-size: 11px; color: var(--text-muted); }
+
+    /* ── ChatGPT iOS Collapsible Thought & Execution Accordion ── */
+    .thought-accordion {
+      margin-bottom: 10px;
+      display: none;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .thought-accordion.has-steps { display: flex; }
+    .thought-toggle {
+      border: none;
+      background: transparent;
+      color: var(--text-sec);
+      padding: 3px 0;
+      font-size: 13.5px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      text-align: left;
+    }
+    .thought-toggle:active { color: #ffffff; }
+    .thought-chev {
+      font-size: 12px;
+      transition: transform 0.18s ease;
+      display: inline-block;
+      color: var(--text-muted);
+    }
+    .thought-accordion.open .thought-chev { transform: rotate(90deg); }
+    .thought-steps-list {
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 6px;
+      padding: 4px 0 4px 13px;
+      border-left: 1.5px solid rgba(255, 255, 255, 0.13);
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+    .thought-accordion.open .thought-steps-list { display: flex; }
+    .thought-step-item {
+      line-height: 1.4;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .thought-step-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.35);
+      flex-shrink: 0;
+      transform: translateY(-1px);
+    }
+
+    /* ── Sidebar Projects Section & In-Chat Search Bar ── */
+    .drawer-projects {
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      padding-bottom: 8px;
+      margin-bottom: 8px;
+      border-bottom: 1px solid var(--border-hairline);
+    }
+    .proj-folder-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 10px;
+      border-radius: 10px;
+      font-size: 13px;
+      color: var(--text-sec);
+      cursor: pointer;
+      transition: background 0.13s, color 0.13s;
+    }
+    .proj-folder-row:hover, .proj-folder-row.active {
+      background: #242424;
+      color: #ffffff;
+    }
+    .inchat-search-bar {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      background: #171717;
+      border-bottom: 1px solid var(--border-subtle);
+      flex-shrink: 0;
+      z-index: 18;
+    }
+    .inchat-search-bar.show { display: flex; }
+    .inchat-search-input {
+      flex: 1;
+      background: #242424;
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 6px 11px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      min-width: 0;
+    }
+    .msg-row.search-hit {
+      outline: 1.5px solid rgba(16, 163, 127, 0.65);
+      outline-offset: 6px;
+      border-radius: 14px;
+    }
+
+    /* ── ChatGPT Canvas Sandboxed Preview Sheet ── */
+    .canvas-frame {
+      width: 100%;
+      height: 68dvh;
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      background: #ffffff;
+    }
   </style>
 </head>
 <body>
@@ -1448,6 +1555,9 @@
     </button>
 
     <div class="right-nav-group">
+      <button id="chatSearchToggleBtn" class="nav-icon-btn" title="在本会话中查找">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.2" y2="16.2"></line></svg>
+      </button>
       <button id="syncPcBtn" class="nav-icon-btn" style="display:none" title="同步电脑端最新消息">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="23 4 23 10 17 10"></polyline>
@@ -1457,12 +1567,20 @@
       </button>
       <button id="newChatTopBtn" class="nav-icon-btn" title="发起新对话">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 20h9"></path>
-          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
         </svg>
       </button>
     </div>
   </header>
+
+  <div id="inChatSearchBar" class="inchat-search-bar">
+    <input id="inChatSearchInput" class="inchat-search-input" type="search" placeholder="在本会话中查找消息..." />
+    <span id="inChatSearchCount" style="font-size:12px;color:var(--text-muted);white-space:nowrap">0/0</span>
+    <button type="button" id="inChatPrevBtn" class="pill-btn" style="padding:4px 9px">↑</button>
+    <button type="button" id="inChatNextBtn" class="pill-btn" style="padding:4px 9px">↓</button>
+    <button type="button" id="inChatCloseBtn" class="pill-btn" style="padding:4px 9px">✕</button>
+  </div>
 
   <div id="iosInstallBanner" style="display:none;background:rgba(24,24,30,0.92);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid var(--border-subtle);padding:9px 14px;font-size:12.5px;color:var(--text-pri);align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;z-index:19">
     <span style="line-height:1.45">点底部 <b>分享 → 添加到主屏幕</b>，即可生成永久全屏 iPhone App</span>
@@ -1508,6 +1626,8 @@
       </button>
     </div>
 
+    <div id="drawerProjectsBox" class="drawer-projects"></div>
+
     <div class="drawer-tabs">
       <button class="drawer-tab active" data-f="all">全部 <span id="cntAll"></span></button>
       <button class="drawer-tab" data-f="active">⚡待看 <span id="cntActive"></span></button>
@@ -1525,35 +1645,23 @@
   <div class="chat-wrap">
     <main id="chatScroll" class="chat-scroll">
       <div id="emptyHero" class="empty-hero">
-        <div class="hero-logo">
-          <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
-            <ellipse cx="16" cy="16" rx="13" ry="7.2" transform="rotate(-28 16 16)" stroke="rgba(255,255,255,0.34)" stroke-width="1.3"/>
-            <path d="M16 5.5C16.8 11.6 20.4 15.2 26.5 16C20.4 16.8 16.8 20.4 16 26.5C15.2 20.4 11.6 16.8 5.5 16C11.6 15.2 15.2 11.6 16 5.5Z" fill="#FFFFFF"/>
-            <circle cx="23.5" cy="9.2" r="1.6" fill="#FFFFFF"/>
-          </svg>
-        </div>
         <h2>有什么可以帮你的？</h2>
-        <p class="hero-sub">Antigravity 与 Codex 电脑会话实时直连</p>
         <div class="suggestion-pills">
           <button class="suggest-pill" data-act="chats">
-            <span class="sug-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
+            <span class="sug-ico" style="color:#60a5fa"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
             <span class="sug-title">接力电脑会话</span>
-            <span class="sug-desc">同步并驱动桌面聊天窗口</span>
-          </button>
-          <button class="suggest-pill" data-cmd="/screen">
-            <span class="sug-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span>
-            <span class="sug-title">截取电脑画面</span>
-            <span class="sug-desc">秒级查看当前屏幕工作流</span>
           </button>
           <button class="suggest-pill" data-act="files">
-            <span class="sug-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg></span>
-            <span class="sug-title">查看代码改动</span>
-            <span class="sug-desc">浏览工作区与 Git Diff</span>
+            <span class="sug-ico" style="color:#34d399"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg></span>
+            <span class="sug-title">审阅代码改动</span>
           </button>
           <button class="suggest-pill" data-act="desktop">
-            <span class="sug-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2.5"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></span>
-            <span class="sug-title">实时远程桌面</span>
-            <span class="sug-desc">连续预览电脑实时状态</span>
+            <span class="sug-ico" style="color:#a78bfa"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2.5"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></span>
+            <span class="sug-title">触控远程桌面</span>
+          </button>
+          <button class="suggest-pill" data-cmd="运行全量测试，如果发现报错请直接修复">
+            <span class="sug-ico" style="color:#fbbf24"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></span>
+            <span class="sug-title">跑测试修错</span>
           </button>
         </div>
       </div>
@@ -1564,18 +1672,15 @@
     </button>
   </div>
 
-  <!-- Pending Attachments -->
-  <div id="attStrip" class="att-strip"></div>
-
   <!-- Plus Action Popover -->
   <div id="plusPopover" class="plus-popover">
     <button id="popUploadBtn" class="pop-item">
       <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg></span>
-      <span>上传照片或文件</span>
+      <span>照片与文件</span>
     </button>
     <button id="popShotBtn" class="pop-item">
       <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span>
-      <span>立即截取电脑画面</span>
+      <span>截取电脑画面</span>
     </button>
     <button id="popLiveDeskBtn" class="pop-item">
       <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2.5"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></span>
@@ -1583,7 +1688,7 @@
     </button>
     <button id="popDiffBtn" class="pop-item">
       <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg></span>
-      <span>浏览工作区与 Diff</span>
+      <span>工作区与 Git Diff</span>
     </button>
     <button id="popClipSysBtn" class="pop-item">
       <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path></svg></span>
@@ -1593,9 +1698,12 @@
       <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></span>
       <span>新建电脑 Agent 会话</span>
     </button>
+    <div style="border-top:1px solid var(--border-hairline);margin:3px 6px"></div>
+    <button type="button" class="pop-item" data-qprompt="继续推进完成剩余步骤"><span class="pop-ico">▶</span><span>继续推进当前任务</span></button>
+    <button type="button" class="pop-item" data-qprompt="请仔细自查刚才的改动是否存在边界 Bug 或遗漏，发现直接优化"><span class="pop-ico">🔍</span><span>自查改动并直接优化</span></button>
   </div>
 
-  <!-- Precision Glass Bottom Composer -->
+  <!-- Authentic Latest ChatGPT iOS Unified Two-Row Composer -->
   <footer class="composer-outer">
     <div id="slashMenu" class="slash-menu">
       <button type="button" class="slash-item" data-scmd="/screen"><span class="slash-cmd">/screen</span><span class="slash-desc">立即截取电脑桌面画面</span></button>
@@ -1605,38 +1713,49 @@
       <button type="button" class="slash-item" data-scmd="/new"><span class="slash-cmd">/new</span><span class="slash-desc">开启全新对话上下文</span></button>
     </div>
 
-    <div id="quickStrip" class="quick-strip">
-      <span id="ideApproveInline" style="display:contents"></span>
-      <button type="button" class="q-chip" id="qCheckIdeBtn">⚡ 检测待确认</button>
-      <button type="button" class="q-chip" data-qprompt="继续推进完成剩余步骤">▶ 继续推进</button>
-      <button type="button" class="q-chip" data-qprompt="运行全量测试，如果发现报错请直接修复">🧪 跑测试修错</button>
-      <button type="button" class="q-chip" data-qprompt="请仔细自查刚才的改动是否存在边界 Bug 或遗漏，发现直接优化">🔍 自查优化</button>
-      <button type="button" class="q-chip" id="qClipSysBtn">📋 电脑剪贴板</button>
-    </div>
-
     <input id="filePicker" type="file" multiple hidden />
-    <div class="composer-row">
-      <button id="plusBtn" class="plus-btn" title="更多工具与附件">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-      </button>
-      <div class="composer-pill">
-        <textarea id="msgInput" class="input-box" rows="1" placeholder="发消息给反重力助手"></textarea>
-        <button id="voiceBtn" class="mic-btn" title="语音输入">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-            <line x1="12" y1="19" x2="12" y2="23"></line>
-          </svg>
-        </button>
-        <button id="sendBtn" class="send-btn empty" title="发送">
-          <svg id="sendIconUp" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="19" x2="12" y2="5"></line>
-            <polyline points="5 12 12 5 19 12"></polyline>
-          </svg>
-          <svg id="sendIconStop" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="display:none">
-            <rect x="4" y="4" width="16" height="16" rx="2"></rect>
-          </svg>
-        </button>
+    <div id="composerCard" class="composer-card">
+      <div id="ideApproveInline" style="display:none;gap:6px;flex-wrap:wrap;padding-bottom:2px"></div>
+      <div id="attStrip" class="att-strip"></div>
+
+      <textarea id="msgInput" class="input-box" rows="1" placeholder="询问任何问题"></textarea>
+
+      <div class="composer-toolbar">
+        <div class="composer-tools-left">
+          <button id="plusBtn" type="button" class="plus-btn" title="添加附件与快捷操作">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          </button>
+          <button id="composerTargetBtn" type="button" class="composer-pill-btn active-target" title="切换发送目标引擎或工作区">
+            <span id="composerTargetLbl">Antigravity</span>
+            <span style="font-size:10px;opacity:0.75">▾</span>
+          </button>
+          <button id="qClipSysBtn" type="button" class="composer-pill-btn" title="浏览工作区文件、Git Diff 与电脑剪贴板">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+            <span>工作区</span>
+          </button>
+          <button id="qCheckIdeBtn" type="button" class="composer-pill-btn" title="扫描电脑端待确认按钮">
+            <span>⚡ 确认检测</span>
+          </button>
+        </div>
+
+        <div class="composer-tools-right">
+          <button id="voiceBtn" type="button" class="mic-btn" title="语音听写">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="23"></line>
+            </svg>
+          </button>
+          <button id="sendBtn" type="button" class="send-btn empty" title="发送">
+            <svg id="sendIconUp" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="19" x2="12" y2="5"></line>
+              <polyline points="5 12 12 5 19 12"></polyline>
+            </svg>
+            <svg id="sendIconStop" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="display:none">
+              <rect x="4" y="4" width="16" height="16" rx="2.5"></rect>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   </footer>
@@ -1747,6 +1866,23 @@
   <!-- Fullscreen Image Lightbox -->
   <div id="lightbox" class="overlay center" style="background:rgba(0,0,0,0.92)">
     <img id="lightboxImg" style="max-width:98vw; max-height:94dvh; border-radius:8px; object-fit:contain" />
+  </div>
+
+  <!-- ChatGPT Canvas Sandboxed Preview Sheet (Null-Origin + Strict CSP) -->
+  <div id="canvasModal" class="overlay">
+    <div class="sheet" style="max-width:740px">
+      <div class="sheet-handle"></div>
+      <div class="sheet-hdr">
+        <h3 id="canvasTitle">Canvas 实时预览</h3>
+        <div style="display:flex;gap:6px">
+          <button type="button" id="canvasTabPrev" class="pill-btn" style="background:#fff;color:#000;font-weight:600">预览</button>
+          <button type="button" id="canvasTabSrc" class="pill-btn">源码</button>
+          <button type="button" id="closeCanvasBtn" class="pill-btn">关闭</button>
+        </div>
+      </div>
+      <iframe id="canvasFrame" class="canvas-frame" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
+      <div id="canvasSrcView" class="diff-viewer" style="display:none;max-height:68dvh;overflow:auto"></div>
+    </div>
   </div>
 
 <script>
@@ -1897,6 +2033,8 @@
   let deskTouchMode = false;
   let hasUnreadBelow = false;
   let ideActionPollTimer = null;
+  const branchDraftByReq = new Map();
+  let branchingInFlight = false;
 
   const streamBuffers = new Map();
   const rawMessageTexts = new Map();
@@ -1971,9 +2109,11 @@
     deskBox.innerHTML = '';
     const arr = Array.isArray(actions) ? actions : [];
     if (!arr.length) {
+      inlineBox.style.display = 'none';
       deskBox.style.display = 'none';
       return;
     }
+    inlineBox.style.display = 'flex';
     deskBox.style.display = 'flex';
     arr.forEach((act) => {
       const makeBtn = () => {
@@ -2099,6 +2239,12 @@
     const rttTag = lastRttMs ? ` · ${lastRttMs}ms` : '';
     subInfo.textContent = `${storeTag}${mShort}${wsName ? ' · ' + wsName : ''}${rttTag}`;
     $('syncPcBtn').style.display = (activeConvStore === 'ide' || activeConvStore === 'codex') ? 'inline-flex' : 'none';
+    const tgtLbl = $('composerTargetLbl');
+    if (tgtLbl) {
+      if (activeConvStore === 'ide' || !activeConvStore) tgtLbl.textContent = 'Antigravity';
+      else if (activeConvStore === 'codex') tgtLbl.textContent = 'Codex';
+      else tgtLbl.textContent = mShort;
+    }
   }
 
   function escapeHtml(s) {
@@ -2212,6 +2358,63 @@
     return out.join('');
   }
 
+  function isPreviewableMarkup(lang, codeText) {
+    const l = String(lang || '').toLowerCase();
+    if (l === 'html' || l === 'htm' || l === 'svg') return true;
+    const head = String(codeText || '').trim().slice(0, 120).toLowerCase();
+    return head.startsWith('<!doctype html') || head.startsWith('<html') || head.startsWith('<svg');
+  }
+
+  function buildSandboxedCanvasDoc(rawCode) {
+    const cspPolicy = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none';";
+    const trimmed = String(rawCode || '').trim();
+    const isSvg = trimmed.slice(0, 200).toLowerCase().startsWith('<svg');
+    const sourceHtml = isSvg
+      ? `<!DOCTYPE html><html><head><style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#111;color:#fff}</style></head><body>${trimmed}</body></html>`
+      : trimmed;
+
+    // Parse via offline HTML5 DOMParser (never executes scripts or network requests) so HTML comments like `<!-- <head> -->`
+    // or scripts placed before `<head>` can NEVER bypass or precede the prepended CSP `<meta>` element!
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(sourceHtml, 'text/html');
+    doc.querySelectorAll('base, meta[http-equiv]').forEach((el) => el.remove());
+
+    if (!doc.head) {
+      const h = doc.createElement('head');
+      doc.documentElement.insertBefore(h, doc.documentElement.firstChild);
+    }
+    if (!doc.querySelector('meta[name="viewport"]')) {
+      const vp = doc.createElement('meta');
+      vp.setAttribute('name', 'viewport');
+      vp.setAttribute('content', 'width=device-width,initial-scale=1');
+      doc.head.prepend(vp);
+    }
+    const cs = doc.createElement('meta');
+    cs.setAttribute('charset', 'utf-8');
+    const cspEl = doc.createElement('meta');
+    cspEl.setAttribute('http-equiv', 'Content-Security-Policy');
+    cspEl.setAttribute('content', cspPolicy);
+    doc.head.prepend(cs);
+    doc.head.prepend(cspEl);
+
+    return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+  }
+
+  function openCanvasPreview(rawCode, title = 'Canvas 实时预览') {
+    $('canvasTitle').textContent = title;
+    const trimmed = String(rawCode || '').trim();
+    const frame = $('canvasFrame');
+    frame.setAttribute('sandbox', 'allow-scripts');
+    frame.setAttribute('referrerpolicy', 'no-referrer');
+    frame.srcdoc = buildSandboxedCanvasDoc(trimmed);
+    $('canvasSrcView').textContent = trimmed;
+    frame.style.display = 'block';
+    $('canvasSrcView').style.display = 'none';
+    $('canvasTabPrev').style.cssText = 'background:#fff;color:#000;font-weight:600';
+    $('canvasTabSrc').style.cssText = '';
+    $('canvasModal').classList.add('show');
+  }
+
   function renderRichText(raw) {
     if (!raw) return '';
     const parts = String(raw).split(/(```[\s\S]*?```)/g);
@@ -2228,16 +2431,33 @@
         const lineCount = trimmedCode ? trimmedCode.split('\n').length : 0;
         const code = escapeHtml(trimmedCode);
         const isLong = lineCount > 24;
+        const canPrev = isPreviewableMarkup(lang, trimmedCode);
+        const prevBtnHtml = canPrev
+          ? '<button type="button" class="copy-code-btn preview-canvas-btn" style="margin-right:6px;color:#6ee7b7">👁 预览</button>'
+          : '';
         const expandHtml = isLong
           ? `<button type="button" class="code-expand-bar" data-lines="${lineCount}">展开全部代码（共 ${lineCount} 行）▾</button>`
           : '';
-        return `<div class="code-card${isLong ? ' collapsed' : ''}"><div class="code-hdr"><span>${escapeHtml(lang)}${lineCount > 4 ? ' · ' + lineCount + ' 行' : ''}</span><button type="button" class="copy-code-btn">复制代码</button></div><pre><code>${code}</code></pre>${expandHtml}</div>`;
+        return `<div class="code-card${isLong ? ' collapsed' : ''}"><div class="code-hdr"><span>${escapeHtml(lang)}${lineCount > 4 ? ' · ' + lineCount + ' 行' : ''}</span><div>${prevBtnHtml}<button type="button" class="copy-code-btn">复制代码</button></div></div><pre><code>${code}</code></pre>${expandHtml}</div>`;
       }
       return renderMarkdownBlocks(part);
     }).join('');
   }
 
   chatScroll.addEventListener('click', (e) => {
+    const thToggle = e.target.closest('.thought-toggle');
+    if (thToggle) {
+      const acc = thToggle.closest('.thought-accordion');
+      if (acc) acc.classList.toggle('open');
+      return;
+    }
+    const prevCanvasBtn = e.target.closest('.preview-canvas-btn');
+    if (prevCanvasBtn) {
+      const card = prevCanvasBtn.closest('.code-card');
+      const codeEl = card && card.querySelector('code');
+      if (codeEl) openCanvasPreview(codeEl.textContent, 'Canvas 沙盒预览');
+      return;
+    }
     const sug = e.target.closest('.suggest-pill');
     if (sug) {
       if (sug.dataset.cmd) sendChat(sug.dataset.cmd);
@@ -2261,11 +2481,11 @@
       openLightbox(zoomImg.src);
       return;
     }
-    const codeBtn = e.target.closest('.copy-code-btn');
+    const codeBtn = e.target.closest('.copy-code-btn:not(.preview-canvas-btn)');
     if (codeBtn) {
       const card = codeBtn.closest('.code-card');
       const codeEl = card && card.querySelector('code');
-      if (codeEl) copyTextSafe(codeEl.innerText, codeBtn, '已复制');
+      if (codeEl) copyTextSafe(codeEl.textContent, codeBtn, '已复制');
       return;
     }
     const userCopyBtn = e.target.closest('.copy-user-btn');
@@ -2282,6 +2502,41 @@
         msgInput.dispatchEvent(new Event('input'));
         msgInput.focus();
       }
+      return;
+    }
+    const retryBtn = e.target.closest('.retry-msg-btn');
+    if (retryBtn && retryBtn.dataset.mid) {
+      if (isStreaming) return showToast('请先等待或停止当前生成');
+      const row = document.getElementById('row-' + retryBtn.dataset.mid);
+      let prev = row ? row.previousElementSibling : null;
+      while (prev && !prev.classList.contains('user')) prev = prev.previousElementSibling;
+      const uCopy = prev && prev.querySelector('.copy-user-btn');
+      const rawPrev = uCopy && uCopy.dataset.uid ? rawMessageTexts.get(uCopy.dataset.uid) : '';
+      const pill = prev && prev.querySelector('.user-pill');
+      const retryPrompt = (rawPrev || (pill && pill.textContent) || '').trim();
+      if (retryPrompt) sendChat(retryPrompt);
+      return;
+    }
+    const branchBtn = e.target.closest('.branch-msg-btn');
+    if (branchBtn && branchBtn.dataset.mid) {
+      if (!ws || ws.readyState !== 1) return showToast('尚未连接服务器');
+      if (branchingInFlight) return showToast('正在创建分支新会话，请稍候...');
+      const fullTxt = (rawMessageTexts.get(branchBtn.dataset.mid) || '').trim();
+      if (!fullTxt) return showToast('当前消息暂无可分支正文');
+      const codePoints = Array.from(fullTxt);
+      const snippet = codePoints.slice(0, 600).join('') + (codePoints.length > 600 ? '…' : '');
+      const reqId = 'br-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+      saveCurrentSlotState();
+      branchingInFlight = true;
+      branchDraftByReq.set(
+        reqId,
+        `基于上一条会话结论摘录继续探索新方案：\n> ${snippet.replace(/\n/g, '\n> ')}\n\n我的新想法：`
+      );
+      setTimeout(() => {
+        branchingInFlight = false;
+        branchDraftByReq.delete(reqId);
+      }, 6000);
+      ws.send(JSON.stringify({ type: 'new_conversation', workspace: '', target: activeConvStore || 'ide', req_id: reqId }));
       return;
     }
     const msgBtn = e.target.closest('.copy-msg-btn');
@@ -2333,35 +2588,23 @@
   function buildHeroHtml() {
     return `
       <div id="emptyHero" class="empty-hero">
-        <div class="hero-logo">
-          <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
-            <ellipse cx="16" cy="16" rx="13" ry="7.2" transform="rotate(-28 16 16)" stroke="rgba(255,255,255,0.34)" stroke-width="1.3"/>
-            <path d="M16 5.5C16.8 11.6 20.4 15.2 26.5 16C20.4 16.8 16.8 20.4 16 26.5C15.2 20.4 11.6 16.8 5.5 16C11.6 15.2 15.2 11.6 16 5.5Z" fill="#FFFFFF"/>
-            <circle cx="23.5" cy="9.2" r="1.6" fill="#FFFFFF"/>
-          </svg>
-        </div>
         <h2>有什么可以帮你的？</h2>
-        <p class="hero-sub">Antigravity 与 Codex 电脑会话实时直连</p>
         <div class="suggestion-pills">
           <button class="suggest-pill" data-act="chats">
-            <span class="sug-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
+            <span class="sug-ico" style="color:#60a5fa"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
             <span class="sug-title">接力电脑会话</span>
-            <span class="sug-desc">同步并驱动桌面聊天窗口</span>
-          </button>
-          <button class="suggest-pill" data-cmd="/screen">
-            <span class="sug-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span>
-            <span class="sug-title">截取电脑画面</span>
-            <span class="sug-desc">秒级查看当前屏幕工作流</span>
           </button>
           <button class="suggest-pill" data-act="files">
-            <span class="sug-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg></span>
-            <span class="sug-title">查看代码改动</span>
-            <span class="sug-desc">浏览工作区与 Git Diff</span>
+            <span class="sug-ico" style="color:#34d399"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg></span>
+            <span class="sug-title">审阅代码改动</span>
           </button>
           <button class="suggest-pill" data-act="desktop">
-            <span class="sug-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2.5"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></span>
-            <span class="sug-title">实时远程桌面</span>
-            <span class="sug-desc">连续预览电脑实时状态</span>
+            <span class="sug-ico" style="color:#a78bfa"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2.5"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></span>
+            <span class="sug-title">触控远程桌面</span>
+          </button>
+          <button class="suggest-pill" data-cmd="运行全量测试，如果发现报错请直接修复">
+            <span class="sug-ico" style="color:#fbbf24"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></span>
+            <span class="sug-title">跑测试修错</span>
           </button>
         </div>
       </div>`;
@@ -2459,6 +2702,40 @@
     if (autoScroll) scrollToBottom(true);
   }
 
+  function updateThoughtAccordion(id, steps, liveStatus = '', durationSec = 0) {
+    const acc = document.getElementById('th-' + id);
+    const lbl = document.getElementById('thlbl-' + id);
+    const list = document.getElementById('thlist-' + id);
+    if (!acc || !lbl || !list) return;
+    const arr = Array.isArray(steps) ? steps.filter(Boolean) : [];
+    if (!arr.length && !liveStatus) {
+      acc.classList.remove('has-steps');
+      return;
+    }
+    acc.classList.add('has-steps');
+    if (liveStatus) {
+      const sp = document.createElement('span');
+      sp.className = 'status-shimmer';
+      sp.textContent = liveStatus;
+      lbl.replaceChildren(sp);
+    } else {
+      const durPart = durationSec > 0 ? ` · ${durationSec} 秒` : '';
+      lbl.textContent = `已完成 ${arr.length} 步操作${durPart}`;
+    }
+    list.innerHTML = '';
+    arr.forEach((st) => {
+      const d = document.createElement('div');
+      d.className = 'thought-step-item';
+      const dot = document.createElement('span');
+      dot.className = 'thought-step-dot';
+      const tx = document.createElement('span');
+      tx.textContent = st;
+      d.appendChild(dot);
+      d.appendChild(tx);
+      list.appendChild(d);
+    });
+  }
+
   function ensureAssistantRow(id) {
     const safeId = String(id || '');
     let row = document.getElementById('row-' + safeId);
@@ -2467,6 +2744,25 @@
       row = document.createElement('div');
       row.className = 'msg-row assistant';
       row.id = 'row-' + safeId;
+
+      const thAcc = document.createElement('div');
+      thAcc.className = 'thought-accordion';
+      thAcc.id = 'th-' + safeId;
+      const thBtn = document.createElement('button');
+      thBtn.type = 'button';
+      thBtn.className = 'thought-toggle';
+      const thLbl = document.createElement('span');
+      thLbl.id = 'thlbl-' + safeId;
+      const thChev = document.createElement('span');
+      thChev.className = 'thought-chev';
+      thChev.textContent = '›';
+      thBtn.appendChild(thLbl);
+      thBtn.appendChild(thChev);
+      const thList = document.createElement('div');
+      thList.className = 'thought-steps-list';
+      thList.id = 'thlist-' + safeId;
+      thAcc.appendChild(thBtn);
+      thAcc.appendChild(thList);
 
       const bub = document.createElement('div');
       bub.className = 'asst-body';
@@ -2482,14 +2778,32 @@
       copyBtn.type = 'button';
       copyBtn.className = 'msg-act-btn copy-msg-btn';
       copyBtn.dataset.mid = safeId;
-      copyBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span>复制</span>';
+      copyBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+      copyBtn.title = '复制回复';
+
+      const retryBtn = document.createElement('button');
+      retryBtn.type = 'button';
+      retryBtn.className = 'msg-act-btn retry-msg-btn';
+      retryBtn.dataset.mid = safeId;
+      retryBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>';
+      retryBtn.title = '重新生成';
+
+      const branchBtn = document.createElement('button');
+      branchBtn.type = 'button';
+      branchBtn.className = 'msg-act-btn branch-msg-btn';
+      branchBtn.dataset.mid = safeId;
+      branchBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>';
+      branchBtn.title = '从此处分支新会话';
 
       const orig = document.createElement('span');
       orig.className = 'msg-origin-tag';
       orig.id = 'orig-' + safeId;
 
       act.appendChild(copyBtn);
+      act.appendChild(retryBtn);
+      act.appendChild(branchBtn);
       act.appendChild(orig);
+      row.appendChild(thAcc);
       row.appendChild(bub);
       row.appendChild(act);
       chatScroll.appendChild(row);
@@ -2501,6 +2815,7 @@
     renderedIds.add(item.id);
     rawMessageTexts.set(item.id, item.text || '');
     ensureAssistantRow(item.id);
+    updateThoughtAccordion(item.id, item.steps || [], '', Number(item.duration_sec || 0));
     const bub = document.getElementById('bub-' + item.id);
     const act = document.getElementById('act-' + item.id);
     const orig = document.getElementById('orig-' + item.id);
@@ -2591,12 +2906,13 @@
     streamBuffers.set(inf.msg_id, curText);
     rawMessageTexts.set(inf.msg_id, curText);
     ensureAssistantRow(inf.msg_id);
+    updateThoughtAccordion(inf.msg_id, inf.steps || [], inf.status || '');
     const bub = document.getElementById('bub-' + inf.msg_id);
     if (bub) {
       if (curText) {
         bub.innerHTML = renderRichText(curText) + '<span class="gpt-dot"></span>';
-      } else if (inf.status) {
-        bub.innerHTML = `<span class="status-shimmer">${escapeHtml(inf.status)}</span><span class="gpt-dot"></span>`;
+      } else {
+        bub.innerHTML = '<span class="gpt-dot"></span>';
       }
     }
     scrollToBottom(true);
@@ -3006,6 +3322,9 @@
         }
         if (!data.silent) {
           closeDrawer();
+          if ($('inChatSearchBar').classList.contains('show')) {
+            runInChatSearch($('inChatSearchInput').value);
+          }
           if (activeConvStore === 'ide' && ws && ws.readyState === 1) {
             ws.send(JSON.stringify({ type: 'ide_actions_inspect', conversation_id: activeConvId }));
           }
@@ -3020,7 +3339,23 @@
         activeConvStore = '';
         $('headerTitle').textContent = '反重力助手';
         refreshHeaderSubtitle();
-        restoreSlotDraft(activeSlot);
+        branchingInFlight = false;
+        const matchedBranchDraft = data.req_id ? branchDraftByReq.get(data.req_id) : '';
+        if (data.req_id) branchDraftByReq.delete(data.req_id);
+        if (matchedBranchDraft) {
+          const sk = activeSlot || 'default-chat';
+          slotDrafts[sk] = matchedBranchDraft;
+          msgInput.value = matchedBranchDraft;
+          msgInput.dispatchEvent(new Event('input'));
+          msgInput.focus();
+        } else {
+          restoreSlotDraft(activeSlot);
+        }
+        if ($('inChatSearchBar').classList.contains('show')) {
+          $('inChatSearchBar').classList.remove('show');
+          $('inChatSearchInput').value = '';
+          clearInChatSearchHighlights();
+        }
         chatScroll.innerHTML = buildHeroHtml();
         renderedIds.clear();
         streamBuffers.clear();
@@ -3048,11 +3383,7 @@
       } else if (data.type === 'stream_status') {
         if (data.slot && activeSlot && data.slot !== activeSlot) return;
         ensureAssistantRow(data.msg_id);
-        const cur = streamBuffers.get(data.msg_id) || '';
-        if (!cur) {
-          const bub = document.getElementById('bub-' + data.msg_id);
-          if (bub) bub.innerHTML = `<span class="status-shimmer">${escapeHtml(data.status)}</span><span class="gpt-dot"></span>`;
-        }
+        updateThoughtAccordion(data.msg_id, data.steps || [], data.status || '');
       } else if (data.type === 'stream_reset') {
         if (data.slot && activeSlot && data.slot !== activeSlot) return;
         streamBuffers.set(data.msg_id, '');
@@ -3089,6 +3420,10 @@
         refreshSendBtnVisual();
         showToast(`已添加：${data.name}`);
       } else if (data.type === 'toast') {
+        if (data.req_id && branchDraftByReq.has(data.req_id)) {
+          branchingInFlight = false;
+          branchDraftByReq.delete(data.req_id);
+        }
         showToast(data.text);
       }
     };
@@ -3099,6 +3434,8 @@
       clearInterval(pingTimer);
       clearPongWatchdog();
       ws = null;
+      branchingInFlight = false;
+      branchDraftByReq.clear();
       connDot.className = 'conn-dot offline';
       setStreamingState(false);
       if (ev.code === 4001 || ev.code === 4003) {
@@ -3354,15 +3691,73 @@
     };
   });
 
-  document.querySelectorAll('.q-chip[data-qprompt]').forEach((ch) => {
-    ch.onclick = () => sendChat(ch.dataset.qprompt);
+  document.querySelectorAll('[data-qprompt]').forEach((ch) => {
+    ch.onclick = () => {
+      setPlusOpen(false);
+      sendChat(ch.dataset.qprompt);
+    };
   });
+  $('composerTargetBtn').onclick = () => {
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'list_conversations' }));
+    $('wsPickerModal').classList.add('show');
+  };
   $('qCheckIdeBtn').onclick = () => {
     if (!ws || ws.readyState !== 1) return showToast('正在连接服务器...');
     showToast('正在扫描电脑窗口待确认按钮...');
     ws.send(JSON.stringify({ type: 'ide_actions_inspect', conversation_id: activeConvId || '' }));
   };
-  $('qClipSysBtn').onclick = () => openWsModal('sys');
+  $('qClipSysBtn').onclick = () => openWsModal('git');
+
+  // In-Conversation Search Logic (ChatGPT iOS Search)
+  let inChatMatches = [];
+  let inChatIdx = -1;
+  function clearInChatSearchHighlights() {
+    chatScroll.querySelectorAll('.msg-row.search-hit').forEach((el) => el.classList.remove('search-hit'));
+  }
+  function runInChatSearch(queryStr) {
+    clearInChatSearchHighlights();
+    const q = (queryStr || '').trim().toLowerCase();
+    if (!q) {
+      inChatMatches = [];
+      inChatIdx = -1;
+      $('inChatSearchCount').textContent = '0/0';
+      return;
+    }
+    inChatMatches = Array.from(chatScroll.querySelectorAll('.msg-row')).filter((r) =>
+      (r.innerText || '').toLowerCase().includes(q)
+    );
+    if (!inChatMatches.length) {
+      inChatIdx = -1;
+      $('inChatSearchCount').textContent = '0/0';
+      return;
+    }
+    inChatIdx = inChatMatches.length - 1;
+    jumpToInChatMatch(0);
+  }
+  function jumpToInChatMatch(delta) {
+    if (!inChatMatches.length) return;
+    clearInChatSearchHighlights();
+    inChatIdx = (inChatIdx + delta + inChatMatches.length) % inChatMatches.length;
+    const target = inChatMatches[inChatIdx];
+    target.classList.add('search-hit');
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    $('inChatSearchCount').textContent = `${inChatIdx + 1}/${inChatMatches.length}`;
+  }
+  $('chatSearchToggleBtn').onclick = () => {
+    const bar = $('inChatSearchBar');
+    const open = !bar.classList.contains('show');
+    bar.classList.toggle('show', open);
+    if (open) $('inChatSearchInput').focus();
+    else clearInChatSearchHighlights();
+  };
+  $('inChatSearchInput').addEventListener('input', (e) => runInChatSearch(e.target.value));
+  $('inChatPrevBtn').onclick = () => jumpToInChatMatch(-1);
+  $('inChatNextBtn').onclick = () => jumpToInChatMatch(1);
+  $('inChatCloseBtn').onclick = () => {
+    $('inChatSearchBar').classList.remove('show');
+    $('inChatSearchInput').value = '';
+    clearInChatSearchHighlights();
+  };
 
   // Plus Button Popover with 45deg smooth rotation
   $('plusBtn').onclick = (e) => {
@@ -3491,10 +3886,51 @@
     return '更早';
   }
 
+  let activeProjectFilter = '';
+
+  function renderDrawerProjects() {
+    const box = $('drawerProjectsBox');
+    if (!box) return;
+    const wsCounts = new Map();
+    allConvItems.forEach((it) => {
+      const w = (it.workspace || '').trim();
+      if (!w) return;
+      wsCounts.set(w, (wsCounts.get(w) || 0) + 1);
+    });
+    const topProjects = Array.from(wsCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 4);
+    if (!topProjects.length) {
+      box.style.display = 'none';
+      return;
+    }
+    box.style.display = 'flex';
+    box.innerHTML = '<div class="conv-group-label" style="padding-top:2px">项目工作区</div>';
+    topProjects.forEach(([wsFull, cnt]) => {
+      const shortName = wsFull.split(/[\\/]/).pop() || wsFull;
+      const row = document.createElement('div');
+      row.className = 'proj-folder-row' + (activeProjectFilter === wsFull ? ' active' : '');
+      const left = document.createElement('span');
+      left.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      left.textContent = `📁 ${shortName}`;
+      const right = document.createElement('span');
+      right.style.cssText = 'font-size:11.5px;color:var(--text-muted);flex-shrink:0';
+      right.textContent = activeProjectFilter === wsFull ? '✕ 取消筛选' : String(cnt);
+      row.appendChild(left);
+      row.appendChild(right);
+      row.onclick = () => {
+        activeProjectFilter = activeProjectFilter === wsFull ? '' : wsFull;
+        renderDrawerProjects();
+        renderConvList();
+      };
+      box.appendChild(row);
+    });
+  }
+
   function renderConvList() {
+    renderDrawerProjects();
     const listEl = $('convList');
     const q = convQuery.trim().toLowerCase();
     const filtered = allConvItems.filter((it) => {
+      if (activeProjectFilter && it.workspace !== activeProjectFilter) return false;
       if (convFilter === 'active') {
         if (!isConvAttention(it) && !pinnedConvIds.has(it.conversation_id)) return false;
       } else if (convFilter !== 'all' && it.store !== convFilter) {
@@ -3858,10 +4294,15 @@
       body.innerHTML = `<div style="color:var(--danger);padding:18px">${escapeHtml(data.error || '无法读取文件')}</div>`;
       return;
     }
+    const ext = String(data.name || '').includes('.') ? String(data.name || '').split('.').pop() : '';
+    const canCanvas = !data.is_image && !data.is_binary && isPreviewableMarkup(ext, data.content || '');
+    const canvasBtnHtml = canCanvas
+      ? '<button type="button" id="previewWsCanvasBtn" class="pill-btn" style="color:#6ee7b7;border-color:rgba(16,185,129,0.35)">👁 Canvas 预览</button>'
+      : '';
     const bar = document.createElement('div');
-    bar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px';
+    bar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap';
     const dlHtml = data.media_id ? `<a class="pill-btn" href="${mediaUrl(data.media_id)}" download="${escapeHtml(data.name || '')}" style="text-decoration:none">下载</a>` : '';
-    bar.innerHTML = `<button id="backFromFile" class="pill-btn">⬅ 返回</button><div style="display:flex;gap:6px">${dlHtml}<button id="quoteFileBtn" class="pill-btn" style="background:#fff;color:#0d0d0d">引用到对话</button></div>`;
+    bar.innerHTML = `<button id="backFromFile" class="pill-btn">⬅ 返回</button><div style="display:flex;gap:6px;flex-wrap:wrap">${canvasBtnHtml}${dlHtml}<button id="quoteFileBtn" class="pill-btn" style="background:#fff;color:#0d0d0d">引用到对话</button></div>`;
     body.appendChild(bar);
 
     if (data.is_image && data.media_id) {
@@ -3877,6 +4318,10 @@
       body.appendChild(viewer);
     }
 
+    const prevWsBtn = $('previewWsCanvasBtn');
+    if (prevWsBtn) {
+      prevWsBtn.onclick = () => openCanvasPreview(data.content || '', data.name || 'Canvas 预览');
+    }
     $('backFromFile').onclick = renderWsInspector;
     $('quoteFileBtn').onclick = () => {
       $('wsModal').classList.remove('show');
@@ -3973,7 +4418,7 @@
   };
   $('lightbox').onclick = () => $('lightbox').classList.remove('show');
 
-  ['deskModal', 'modelModal', 'wsModal', 'wsPickerModal'].forEach((mid) => {
+  ['deskModal', 'modelModal', 'wsModal', 'wsPickerModal', 'canvasModal'].forEach((mid) => {
     const el = $(mid);
     el.addEventListener('click', (e) => {
       if (e.target === el) {
@@ -3982,6 +4427,23 @@
       }
     });
   });
+
+  $('closeCanvasBtn').onclick = () => {
+    $('canvasModal').classList.remove('show');
+    $('canvasFrame').srcdoc = '';
+  };
+  $('canvasTabPrev').onclick = () => {
+    $('canvasFrame').style.display = 'block';
+    $('canvasSrcView').style.display = 'none';
+    $('canvasTabPrev').style.cssText = 'background:#fff;color:#000;font-weight:600';
+    $('canvasTabSrc').style.cssText = '';
+  };
+  $('canvasTabSrc').onclick = () => {
+    $('canvasFrame').style.display = 'none';
+    $('canvasSrcView').style.display = 'block';
+    $('canvasTabSrc').style.cssText = 'background:#fff;color:#000;font-weight:600';
+    $('canvasTabPrev').style.cssText = '';
+  };
 
   $('modelBtn').onclick = () => $('modelModal').classList.add('show');
   $('closeModelBtn').onclick = () => $('modelModal').classList.remove('show');

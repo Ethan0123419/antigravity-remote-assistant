@@ -123,6 +123,50 @@ def main() -> None:
                     "num_turns": num_turns,
                 },
             }
+        elif "__TOOL_STEP__" in content:
+            sys.stdout.write(
+                json.dumps(
+                    {
+                        "event": "step_update",
+                        "step_update": {
+                            "conversation_id": conversation_id,
+                            "step_type": "tool",
+                            "state": "ACTIVE",
+                            "tool_name": "edit_file",
+                        },
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+            sys.stdout.flush()
+            html_out = "```html\n<h1>Hello Canvas</h1>\n```"
+            sys.stdout.write(
+                json.dumps(
+                    {
+                        "event": "step_update",
+                        "step_update": {
+                            "conversation_id": conversation_id,
+                            "step_type": "agent_response",
+                            "state": "ACTIVE",
+                            "text_delta": html_out,
+                        },
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+            sys.stdout.flush()
+            res = {
+                "event": "result",
+                "result": {
+                    "conversation_id": conversation_id,
+                    "status": "SUCCESS",
+                    "response": html_out,
+                    "duration_seconds": 0.2,
+                    "num_turns": num_turns,
+                },
+            }
         else:
             reply = f"[turn={num_turns} cwd={os.path.basename(os.getcwd())}] 收到: {content} | 历史条数={len(history)}"
             mid = max(1, len(reply) // 2)

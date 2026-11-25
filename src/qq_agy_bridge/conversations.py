@@ -281,6 +281,55 @@ class ChatMessage:
     step_index: int = 0
     ts_ms: int = 0
     image_paths: list[Path] = field(default_factory=list)
+    steps: list[str] = field(default_factory=list)
+
+
+def _humanize_tool_step(tool_name: str, raw_args: Any = None) -> str:
+    """Format a raw IDE/Codex tool call into a concise, safe ChatGPT-style step label."""
+    tname = (tool_name or "").strip()
+    if not tname:
+        return ""
+    args_dict: dict[str, Any] = {}
+    if isinstance(raw_args, dict):
+        args_dict = raw_args
+    elif isinstance(raw_args, str) and raw_args.strip().startswith("{"):
+        try:
+            parsed = json.loads(raw_args)
+            if isinstance(parsed, dict):
+                args_dict = parsed
+        except Exception:
+            pass
+
+    if tname == "update_focus" and args_dict.get("focus"):
+        return str(args_dict["focus"]).strip()[:56]
+    if tname == "update_steps":
+        return ""
+
+    summary = str(args_dict.get("toolSummary") or args_dict.get("Description") or "").strip()
+    target_path = str(args_dict.get("Path") or args_dict.get("TargetFile") or "").strip()
+    base_name = Path(target_path.replace("\\", "/")).name if target_path else ""
+
+    low = tname.lower()
+    if "read_file" in low or low == "view_file":
+        return f"读取 {base_name}" if base_name else "查阅源码文件"
+    if "edit_file" in low or "replace_file" in low or "apply_patch" in low:
+        return f"修改 {base_name}" if base_name else "修改源码"
+    if "write_file" in low:
+        return f"写入 {base_name}" if base_name else "创建文件"
+    if "search_web" in low or "web_search" in low:
+        q = str(args_dict.get("query") or "").strip()[:32]
+        return f"检索网页：{q}" if q else "联网检索资料"
+    if "grep" in low or "find_by_name" in low:
+        return "搜索代码库定位符号"
+    if "codex-astra" in low:
+        return f"Astra 协同：{summary[:36]}" if summary else "调用 Astra 双核审查"
+    if "windows-mcp" in low:
+        return f"桌面操作：{summary[:36]}" if summary else "执行桌面视觉操作"
+    if "command" in low or "shell" in low or low == "exec_command":
+        return f"终端：{summary[:40]}" if summary else "执行终端命令"
+    if summary:
+        return summary[:48]
+    return f"调用 {tname[:36]}"
 
 
 @dataclass
@@ -696,7 +745,13 @@ def _load_codex_detail(
     pending_commentary: list[str] = []
     pending_commentary_ts: int = 0
     pending_tool_imgs: list[Path] = []
+    pending_steps: list[str] = []
     step_counter = 0
+
+    def _add_step(label: str) -> None:
+        s = (label or "").strip()
+        if s and s not in pending_steps and len(pending_steps) < 16:
+            pending_steps.append(s)
 
     def _add_unique_img(lst: list[Path], cand: Path) -> None:
         try:
@@ -716,7 +771,7 @@ def _load_codex_detail(
         return found
 
     def _flush_commentary_if_needed() -> None:
-        nonlocal pending_commentary, pending_commentary_ts, pending_tool_imgs, step_counter
+        nonlocal pending_commentary, pending_commentary_ts, pending_tool_imgs, pending_steps, step_counter
         if pending_commentary or pending_tool_imgs:
             step_counter += 1
             txt = "\n\n".join(pending_commentary)
@@ -730,11 +785,13 @@ def _load_codex_detail(
                     step_index=step_counter,
                     ts_ms=pending_commentary_ts,
                     image_paths=imgs,
+                    steps=list(pending_steps),
                 )
             )
             pending_commentary = []
             pending_commentary_ts = 0
             pending_tool_imgs = []
+            pending_steps = []
 
     try:
         with rpath.open("r", encoding="utf-8", errors="replace") as fh:
@@ -765,6 +822,7 @@ def _load_codex_detail(
                 ptype = pl.get("type")
                 if ptype in {"custom_tool_call", "function_call"}:
                     raw_in = str(pl.get("input") or pl.get("arguments") or "")
+                    _add_step(_humanize_tool_step(str(pl.get("name") or ptype), raw_in))
                     for vm in CODEX_VIEW_IMG_RE.finditer(raw_in):
                         _add_unique_img(pending_tool_imgs, _uri_to_local_path(vm.group(1)))
                     continue
@@ -811,16 +869,21 @@ def _load_codex_detail(
 
                     phase = str(pl.get("phase") or "")
                     if phase == "commentary":
+                        first_ln = next((ln.strip() for ln in joined.splitlines() if ln.strip()), "")
+                        if first_ln:
+                            _add_step(first_ln[:64])
                         if joined not in pending_commentary:
                             pending_commentary.append(joined)
                             pending_commentary_ts = ts_ms or pending_commentary_ts
                     else:
-                        # Final answer supersedes intermediate commentary for this turn
+                        # Final answer supersedes intermediate commentary for this turn (preserved in `steps`)
                         pending_commentary = []
                         pending_commentary_ts = 0
                         md_imgs = _extract_md_imgs(joined)
                         turn_imgs = list(md_imgs) if md_imgs else list(pending_tool_imgs[-4:])
+                        turn_steps = list(pending_steps)
                         pending_tool_imgs = []
+                        pending_steps = []
                         step_counter += 1
                         if parsed_msgs and parsed_msgs[-1].role == "assistant":
                             prev = parsed_msgs[-1]
@@ -828,6 +891,9 @@ def _load_codex_detail(
                                 prev.text = f"{prev.text}\n\n{joined}".strip()
                             for im in turn_imgs:
                                 _add_unique_img(prev.image_paths, im)
+                            for st_lbl in turn_steps:
+                                if st_lbl not in prev.steps and len(prev.steps) < 16:
+                                    prev.steps.append(st_lbl)
                             if ts_ms > prev.ts_ms:
                                 prev.ts_ms = ts_ms
                         else:
@@ -838,6 +904,7 @@ def _load_codex_detail(
                                     step_index=step_counter,
                                     ts_ms=ts_ms,
                                     image_paths=turn_imgs,
+                                    steps=turn_steps,
                                 )
                             )
 
@@ -1002,6 +1069,7 @@ def load_conversation_detail(
         out_msgs: list[ChatMessage] = []
         skip_next_prewarm_reply = False
         pending_tool_imgs: list[Path] = []
+        pending_steps: list[str] = []
 
         def _append_unique(dst: list[Path], src: list[Path]) -> None:
             for p in src:
@@ -1050,6 +1118,7 @@ def load_conversation_detail(
                 if pending_tool_imgs and out_msgs and out_msgs[-1].role == "assistant":
                     _append_unique(out_msgs[-1].image_paths, pending_tool_imgs[-4:])
                 pending_tool_imgs = []
+                pending_steps = []
                 cleaned_u = clean_user_input_text(str(obj.get("content") or ""))
                 if PREWARM_PROMPT_MARKER in cleaned_u:
                     skip_next_prewarm_reply = True
@@ -1074,7 +1143,13 @@ def load_conversation_detail(
                 if skip_next_prewarm_reply and content in {"就绪", "就绪。", "收到"}:
                     skip_next_prewarm_reply = False
                     pending_tool_imgs = []
+                    pending_steps = []
                     continue
+                for tc in obj.get("tool_calls") or []:
+                    if isinstance(tc, dict):
+                        lbl = _humanize_tool_step(str(tc.get("name") or ""), tc.get("args") or tc.get("arguments"))
+                        if lbl and lbl not in pending_steps and len(pending_steps) < 16:
+                            pending_steps.append(lbl)
                 for md_m in MD_LOCAL_IMG_RE.finditer(content):
                     raw_u = md_m.group(1).strip()
                     if not raw_u.startswith("/dl/"):
@@ -1087,6 +1162,8 @@ def load_conversation_detail(
                 if not content and not combined_imgs:
                     continue
                 pending_tool_imgs = []
+                cur_steps = list(pending_steps)
+                pending_steps = []
                 if out_msgs and out_msgs[-1].role == "assistant":
                     prev = out_msgs[-1]
                     if content and content != prev.text:
@@ -1094,6 +1171,9 @@ def load_conversation_detail(
                     _append_unique(prev.image_paths, combined_imgs)
                     if len(prev.image_paths) > 4:
                         prev.image_paths = prev.image_paths[-4:]
+                    for st_lbl in cur_steps:
+                        if st_lbl not in prev.steps and len(prev.steps) < 16:
+                            prev.steps.append(st_lbl)
                     if ts_ms > prev.ts_ms:
                         prev.ts_ms = ts_ms
                 else:
@@ -1104,6 +1184,7 @@ def load_conversation_detail(
                             step_index=step_idx,
                             ts_ms=ts_ms,
                             image_paths=combined_imgs,
+                            steps=cur_steps,
                         )
                     )
         if pending_tool_imgs:

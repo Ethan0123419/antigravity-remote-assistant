@@ -1474,3 +1474,105 @@ async def test_ergonomic_and_expert_upgrades_e2e(tmp_path: Path) -> None:
         stop_event.set()
         await asyncio.wait_for(pwa_task, timeout=5.0)
         await sessions.shutdown_all()
+
+
+@pytest.mark.asyncio
+async def test_chatgpt_ios_ui_steps_timeline_and_canvas_sandbox(tmp_path: Path):
+    """Verify ChatGPT iOS v10 UI surface, historical & live step timelines, and null-origin Canvas sandbox."""
+    from qq_agy_bridge.beacon import STATIC_PWA_SW_JS
+    from qq_agy_bridge.conversations import _humanize_tool_step, load_conversation_detail
+    from qq_agy_bridge.web_pwa import STATIC_DIR
+
+    assert "antigravity-ios-shell-v10" in STATIC_PWA_SW_JS
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    assert 'content="#000000"' in html
+    assert 'id="composerCard"' in html
+    assert 'id="composerTargetBtn"' in html
+    assert "thought-accordion" in html
+    assert 'id="inChatSearchBar"' in html
+    assert 'id="drawerProjectsBox"' in html
+    assert 'id="canvasFrame"' in html
+    assert 'sandbox="allow-scripts"' in html
+    assert "allow-same-origin" not in html
+    assert "new DOMParser()" in html
+    assert "doc.head.prepend(cspEl)" in html
+
+    # 1. Tool step humanizer & historical Antigravity IDE transcript step extraction
+    assert _humanize_tool_step("read_file", {"Path": "C:/repo/app.py"}) == "读取 app.py"
+    assert _humanize_tool_step("edit_file", {"Path": "C:/repo/index.html"}) == "修改 index.html"
+
+    ide_dir = tmp_path / "ide_store"
+    cid = "ide-steps-conv-001"
+    log_dir = ide_dir / "brain" / cid / ".system_generated" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    transcript_lines = [
+        json.dumps({"type": "USER_INPUT", "step_index": 1, "content": "<USER_REQUEST>帮我修一下样式</USER_REQUEST>"}),
+        json.dumps(
+            {
+                "type": "PLANNER_RESPONSE",
+                "step_index": 2,
+                "content": "",
+                "tool_calls": [
+                    {"name": "read_file", "args": {"Path": "C:/demo/index.html"}},
+                    {"name": "edit_file", "args": {"Path": "C:/demo/index.html"}},
+                ],
+            }
+        ),
+        json.dumps({"type": "PLANNER_RESPONSE", "step_index": 3, "content": "已完成样式优化。"}),
+    ]
+    (log_dir / "transcript.jsonl").write_text("\n".join(transcript_lines) + "\n", encoding="utf-8")
+
+    det = load_conversation_detail(cid, store="ide", ide_dir=ide_dir, cli_dir=tmp_path / "cli", codex_dir=tmp_path / "cdx")
+    assert det is not None and len(det.messages) == 2
+    assert det.messages[1].steps == ["读取 index.html", "修改 index.html"]
+
+    # 2. Live streaming `steps` & `duration_sec` over WebSocket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    tok = "chatgpt-ios-v10-token"
+    cfg = _make_config(tmp_path, web_pwa_port=port, web_access_token=tok)
+    sessions = SessionManager(cfg, command_override=[sys.executable, str(MOCK_AGY)])
+    pwa = WebPwaServer(
+        cfg,
+        session_manager=sessions,
+        access_token=tok,
+        ide_store_dir=ide_dir,
+        cli_store_dir=tmp_path / "cli",
+        codex_store_dir=tmp_path / "cdx",
+    )
+    stop_event = asyncio.Event()
+    pwa_task = asyncio.create_task(pwa.run(stop_event=stop_event))
+    try:
+        await asyncio.sleep(0.2)
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws?token={tok}") as ws:
+            await asyncio.wait_for(ws.recv(), timeout=4.0)  # hello
+            await ws.send(json.dumps({"type": "chat", "text": "__TOOL_STEP__ 写个标题预览"}))
+            saw_status_steps = False
+            end_item = None
+            for _ in range(20):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                if ev["type"] == "stream_status" and ev.get("steps"):
+                    saw_status_steps = True
+                elif ev["type"] == "stream_end":
+                    end_item = ev["item"]
+                    break
+            assert saw_status_steps is True
+            assert end_item is not None
+            assert len(end_item.get("steps") or []) >= 1
+            assert int(end_item.get("duration_sec") or 0) >= 1
+
+            # 3. `new_conversation` echoes `req_id` on `clear_history` so branch-chat drafts never collide
+            await ws.send(json.dumps({"type": "new_conversation", "workspace": "", "target": "cli", "req_id": "br-test-99"}))
+            clear_ev = None
+            for _ in range(10):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
+                if ev["type"] == "clear_history":
+                    clear_ev = ev
+                    break
+            assert clear_ev is not None and clear_ev.get("req_id") == "br-test-99"
+    finally:
+        stop_event.set()
+        await asyncio.wait_for(pwa_task, timeout=5.0)
+        await sessions.shutdown_all()

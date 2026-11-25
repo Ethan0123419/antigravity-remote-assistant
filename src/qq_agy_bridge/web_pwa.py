@@ -629,6 +629,8 @@ class WebPwaServer:
             "model": str(inf.get("model") or ""),
             "text": str(inf.get("text") or ""),
             "status": str(inf.get("status") or ""),
+            "steps": list(inf.get("steps") or []),
+            "started_ms": int(inf.get("started_ms") or 0),
         }
 
     def _build_slots_overview(self) -> dict[str, Any]:
@@ -808,8 +810,8 @@ class WebPwaServer:
                 "description": "专属远程电脑操控与全会话 AI 编程中枢",
                 "start_url": start_url,
                 "display": "standalone",
-                "background_color": "#0D0D0F",
-                "theme_color": "#0D0D0F",
+                "background_color": "#000000",
+                "theme_color": "#000000",
                 "orientation": "portrait-primary",
                 "icons": [
                     {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
@@ -1167,6 +1169,7 @@ class WebPwaServer:
                             ws,
                             str(msg.get("workspace") or ""),
                             str(msg.get("target") or "ide"),
+                            str(msg.get("req_id") or ""),
                         )
                     )
                     self._tasks.add(t)
@@ -1346,6 +1349,7 @@ class WebPwaServer:
                         "text": clean_txt,
                         "images": imgs,
                         "files": fls,
+                        "steps": list(m.steps),
                         "model": origin_tag,
                         "ts": m.ts_ms,
                     }
@@ -1520,14 +1524,16 @@ class WebPwaServer:
         )
 
     async def _handle_new_conversation(
-        self, ws: ServerConnection, workspace: str, target: str = "ide"
+        self, ws: ServerConnection, workspace: str, target: str = "ide", req_id: str = ""
     ) -> None:
         new_slot = f"new:{uuid.uuid4().hex[:8]}"
         session = self._session_for_slot(new_slot)
         try:
             await session.start_new_conversation(workspace=workspace)
         except FileNotFoundError as exc:
-            await ws.send(json.dumps({"type": "toast", "level": "err", "text": str(exc)}, ensure_ascii=False))
+            await ws.send(
+                json.dumps({"type": "toast", "level": "err", "text": str(exc), "req_id": req_id}, ensure_ascii=False)
+            )
             return
 
         req_target = (target or "ide").strip().lower()
@@ -1557,7 +1563,7 @@ class WebPwaServer:
         self._slot_meta[new_slot] = {"conversation_id": "", "title": title_label, "store": store_mode}
         self._ide_watch_sig = ("", "", 0, 0)
 
-        await self._broadcast({"type": "clear_history", "slot": new_slot})
+        await self._broadcast({"type": "clear_history", "slot": new_slot, "req_id": req_id})
         await self._broadcast(
             {
                 "type": "meta_update",
@@ -2151,6 +2157,8 @@ class WebPwaServer:
             "model": initial_model_label,
             "text": "",
             "status": "正在思考...",
+            "steps": [],
+            "started_ms": int(time.time() * 1000),
         }
         self._slot_inflight[chat_slot] = inflight_state
         if not (raw_text.startswith("/") and not attachments):
@@ -2178,9 +2186,21 @@ class WebPwaServer:
 
         async def _on_status(status_txt: str) -> None:
             inflight_state["status"] = status_txt
+            clean_st = status_txt.strip().rstrip(".")
+            if clean_st and clean_st != "正在思考":
+                steps_arr: list[str] = inflight_state.setdefault("steps", [])
+                if not steps_arr or steps_arr[-1] != clean_st:
+                    if len(steps_arr) < 16:
+                        steps_arr.append(clean_st)
             if self._active_slot == chat_slot:
                 await self._broadcast(
-                    {"type": "stream_status", "slot": chat_slot, "msg_id": reply_id, "status": status_txt}
+                    {
+                        "type": "stream_status",
+                        "slot": chat_slot,
+                        "msg_id": reply_id,
+                        "status": status_txt,
+                        "steps": list(inflight_state.get("steps") or []),
+                    }
                 )
 
         async def _on_tool(tool_name: str) -> None:
@@ -2418,6 +2438,8 @@ class WebPwaServer:
             "text": clean_text,
             "images": img_items,
             "files": file_items,
+            "steps": list(inflight_state.get("steps") or []),
+            "duration_sec": max(1, int(round(time.time() - turn_start_sec))),
             "model": result.active_model or session.model or "default",
             "ts": int(time.time() * 1000),
         }
