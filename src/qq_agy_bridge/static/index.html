@@ -1253,13 +1253,13 @@
         <span class="drawer-menu-icon">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         </span>
-        <span>发起新对话</span>
+        <span>新建电脑端对话</span>
       </button>
       <button id="drawerWsPickerBtn" class="drawer-menu-item">
         <span class="drawer-menu-icon">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
         </span>
-        <span>切换项目工作目录</span>
+        <span>按目录 / 引擎新建会话</span>
       </button>
       <button id="drawerDeskBtn" class="drawer-menu-item">
         <span class="drawer-menu-icon">
@@ -1351,8 +1351,8 @@
       <span>浏览工作区与 Diff</span>
     </button>
     <button id="popWsSwitchBtn" class="pop-item">
-      <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></span>
-      <span>切换项目目录</span>
+      <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></span>
+      <span>新建电脑 Agent 会话</span>
     </button>
   </div>
 
@@ -1397,18 +1397,24 @@
     </div>
   </div>
 
-  <!-- Workspace Directory Picker Sheet -->
+  <!-- New PC Agent Chat & Workspace Sheet -->
   <div id="wsPickerModal" class="overlay">
     <div class="sheet" style="max-width:500px">
       <div class="sheet-handle"></div>
       <div class="sheet-hdr">
-        <h3>选择项目工作目录</h3>
+        <h3>新建电脑端 Agent 会话</h3>
         <button id="closeWsPickerBtn" class="pill-btn">关闭</button>
       </div>
+      <div class="drawer-tabs" style="margin-bottom:12px">
+        <button type="button" class="drawer-tab new-target-tab active" data-t="ide">Antigravity 电脑窗口</button>
+        <button type="button" class="drawer-tab new-target-tab" data-t="codex">Codex 电脑会话</button>
+        <button type="button" class="drawer-tab new-target-tab" data-t="cli">远程后台</button>
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">选择工作目录（点击项目直接新建）：</div>
       <div id="wsChips" style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px"></div>
       <div style="display:flex;gap:8px">
-        <input id="customWsInput" class="token-input" placeholder="或输入目录路径，如 F:\Projects\app" />
-        <button id="confirmNewChatBtn" class="pill-btn" style="background:#fff;color:#0d0d0d;font-weight:600;flex-shrink:0">开启新对话</button>
+        <input id="customWsInput" class="token-input" placeholder="可选：自定义目录路径（留空用当前目录）" />
+        <button id="confirmNewChatBtn" class="pill-btn" style="background:#fff;color:#0d0d0d;font-weight:600;flex-shrink:0">立即新建</button>
       </div>
     </div>
   </div>
@@ -2737,16 +2743,28 @@
     }
   };
 
-  // Drawer Actions
-  function startNewConversation(workspacePath = '') {
+  // Drawer & New PC Agent Chat Actions
+  let newChatTarget = 'ide';
+  document.querySelectorAll('.new-target-tab').forEach((btn) => {
+    btn.onclick = () => {
+      newChatTarget = btn.dataset.t || 'ide';
+      document.querySelectorAll('.new-target-tab').forEach((x) => x.classList.toggle('active', x === btn));
+    };
+  });
+
+  function startNewConversation(workspacePath = '', targetEngine = null) {
     if (!ws || ws.readyState !== 1) return showToast('尚未连接服务器');
     closeDrawer();
     $('wsPickerModal').classList.remove('show');
-    ws.send(JSON.stringify({ type: 'new_conversation', workspace: workspacePath }));
+    ws.send(JSON.stringify({
+      type: 'new_conversation',
+      workspace: workspacePath,
+      target: targetEngine || newChatTarget || 'ide',
+    }));
   }
 
-  $('newChatTopBtn').onclick = () => startNewConversation('');
-  $('drawerNewChatBtn').onclick = () => startNewConversation('');
+  $('newChatTopBtn').onclick = () => startNewConversation('', 'ide');
+  $('drawerNewChatBtn').onclick = () => startNewConversation('', 'ide');
   $('drawerWsPickerBtn').onclick = () => {
     closeDrawer();
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'list_conversations' }));
@@ -2756,7 +2774,7 @@
   $('drawerGitBtn').onclick = () => { closeDrawer(); openWsModal(); };
 
   $('closeWsPickerBtn').onclick = () => $('wsPickerModal').classList.remove('show');
-  $('confirmNewChatBtn').onclick = () => startNewConversation($('customWsInput').value.trim());
+  $('confirmNewChatBtn').onclick = () => startNewConversation($('customWsInput').value.trim(), newChatTarget);
 
   function updateConvCounts() {
     const nAll = allConvItems.length;

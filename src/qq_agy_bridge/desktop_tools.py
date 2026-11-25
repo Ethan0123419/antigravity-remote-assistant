@@ -846,3 +846,397 @@ foreach ($el in $root.FindAll([System.Windows.Automation.TreeScope]::Children, [
         return "STOPPED" in (res.stdout or "")
     except Exception:
         return False
+
+
+def open_new_antigravity_ide_chat_window() -> tuple[bool, str]:
+    """Click `+ 新建会话` (`New Conversation`) in the open PC Antigravity Desktop window."""
+    if sys.platform != "win32":
+        return (False, "仅支持 Windows 桌面窗口操作")
+
+    ps_script = r"""
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class AgyNewWin32 {
+    [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, UIntPtr dwExtraInfo);
+    public static void ClickAt(int x, int y) {
+        SetCursorPos(x, y);
+        System.Threading.Thread.Sleep(35);
+        mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(25);
+        mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+    }
+}
+"@
+[AgyNewWin32]::SetProcessDPIAware() | Out-Null
+
+$root = [System.Windows.Automation.AutomationElement]::RootElement
+$agyWin = $null
+foreach ($el in $root.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)) {
+    try {
+        if ($el.Current.NativeWindowHandle -eq 0) { continue }
+        $p = Get-Process -Id $el.Current.ProcessId -ErrorAction SilentlyContinue
+        if ($null -eq $p -or $p.ProcessName -ne 'Antigravity') { continue }
+        $agyWin = $el
+        if ($el.Current.Name -match 'Antigravity') { break }
+    } catch {}
+}
+if ($null -eq $agyWin) {
+    Write-Output "ERR:未检测到打开的 Antigravity 桌面窗口"
+    exit 0
+}
+
+$hwnd = [IntPtr]$agyWin.Current.NativeWindowHandle
+if ([AgyNewWin32]::IsIconic($hwnd)) {
+    [AgyNewWin32]::ShowWindow($hwnd, 9) | Out-Null
+    Start-Sleep -Milliseconds 220
+}
+try { (New-Object -ComObject WScript.Shell).AppActivate($agyWin.Current.ProcessId) | Out-Null } catch {}
+[AgyNewWin32]::BringWindowToTop($hwnd) | Out-Null
+[AgyNewWin32]::SetForegroundWindow($hwnd) | Out-Null
+Start-Sleep -Milliseconds 120
+
+function Activate-El($el) {
+    $r = $el.Current.BoundingRectangle
+    if (-not $r.IsEmpty -and $r.Width -gt 4 -and $r.Height -gt 4) {
+        [AgyNewWin32]::ClickAt([int]($r.Left + [Math]::Min(80, $r.Width / 2)), [int]($r.Top + $r.Height / 2))
+        return $true
+    }
+    $inv = $null
+    if ($el.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$inv)) {
+        $inv.Invoke()
+        return $true
+    }
+    return $false
+}
+
+$sidebarDesc = $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Sidebar")))
+if ($sidebarDesc.Count -eq 0) {
+    $btns = $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)))
+    foreach ($b in $btns) {
+        if ($b.Current.Name -match '切换侧边栏|Toggle Sidebar') {
+            Activate-El $b | Out-Null
+            Start-Sleep -Milliseconds 260
+            break
+        }
+    }
+}
+
+$orCond = New-Object System.Windows.Automation.OrCondition(
+    (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)),
+    (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Hyperlink))
+)
+$candidates = $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, $orCond)
+$newBtn = $null
+foreach ($c in $candidates) {
+    $nm = [string]$c.Current.Name
+    if ($nm -match '新建会话|新建对话|New Conversation|New Chat') {
+        $newBtn = $c
+        break
+    }
+}
+
+if ($null -eq $newBtn) {
+    Write-Output "ERR:未在桌面窗口中找到「新建会话」按钮"
+    exit 0
+}
+
+Activate-El $newBtn | Out-Null
+Start-Sleep -Milliseconds 260
+Write-Output "OK:已在电脑端打开新对话窗口"
+"""
+    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
+    try:
+        res = subprocess.run(
+            ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+            creationflags=CREATE_NO_WINDOW,
+        )
+        for ln in reversed([x.strip() for x in (res.stdout or "").splitlines() if x.strip()]):
+            if ln.startswith("OK:"):
+                return (True, ln.removeprefix("OK:").strip())
+            if ln.startswith("ERR:"):
+                return (False, ln.removeprefix("ERR:").strip())
+        return (False, "打开电脑端新对话未返回确认")
+    except Exception as exc:
+        return (False, f"打开电脑端新对话异常：{exc}")
+
+
+def create_and_send_antigravity_ide_new_chat(
+    prompt: str,
+    ide_store_dir: Path | None = None,
+) -> tuple[bool, str, str]:
+    """Create a brand-new conversation in the open PC Antigravity window, submit `prompt`, and return `(ok, new_cid, note)`."""
+    if sys.platform != "win32":
+        return (False, "", "仅支持 Windows 桌面窗口投递")
+
+    ide_root = ide_store_dir if ide_store_dir is not None else (Path.home() / ".gemini" / "antigravity")
+    brain_dir = ide_root / "brain"
+    before_ids: set[str] = set()
+    if brain_dir.is_dir():
+        try:
+            before_ids = {d.name for d in brain_dir.iterdir() if d.is_dir()}
+        except OSError:
+            pass
+
+    ps_script = r"""
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class AgyCreateWin32 {
+    [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, UIntPtr dwExtraInfo);
+    [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+    public static void ClickAt(int x, int y) {
+        SetCursorPos(x, y);
+        System.Threading.Thread.Sleep(35);
+        mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(25);
+        mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+    }
+    public static void PasteClip() {
+        keybd_event(0x11, 0, 0, UIntPtr.Zero);
+        keybd_event(0x56, 0, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(25);
+        keybd_event(0x56, 0, 0x0002, UIntPtr.Zero);
+        keybd_event(0x11, 0, 0x0002, UIntPtr.Zero);
+    }
+    public static void PressEnter() {
+        keybd_event(0x0D, 0, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(25);
+        keybd_event(0x0D, 0, 0x0002, UIntPtr.Zero);
+    }
+}
+"@
+[AgyCreateWin32]::SetProcessDPIAware() | Out-Null
+
+$promptBytes = [Convert]::FromBase64String($env:AGY_PROMPT_B64)
+$promptText = [System.Text.Encoding]::UTF8.GetString($promptBytes)
+
+$root = [System.Windows.Automation.AutomationElement]::RootElement
+$agyWin = $null
+foreach ($el in $root.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)) {
+    try {
+        if ($el.Current.NativeWindowHandle -eq 0) { continue }
+        $p = Get-Process -Id $el.Current.ProcessId -ErrorAction SilentlyContinue
+        if ($null -eq $p -or $p.ProcessName -ne 'Antigravity') { continue }
+        $agyWin = $el
+        if ($el.Current.Name -match 'Antigravity') { break }
+    } catch {}
+}
+if ($null -eq $agyWin) {
+    Write-Output "ERR:未检测到打开的 Antigravity 桌面端窗口"
+    exit 0
+}
+
+$hwnd = [IntPtr]$agyWin.Current.NativeWindowHandle
+if ([AgyCreateWin32]::IsIconic($hwnd)) {
+    [AgyCreateWin32]::ShowWindow($hwnd, 9) | Out-Null
+    Start-Sleep -Milliseconds 220
+}
+try { (New-Object -ComObject WScript.Shell).AppActivate($agyWin.Current.ProcessId) | Out-Null } catch {}
+[AgyCreateWin32]::BringWindowToTop($hwnd) | Out-Null
+[AgyCreateWin32]::SetForegroundWindow($hwnd) | Out-Null
+Start-Sleep -Milliseconds 140
+
+function Get-ActiveCid($winEl) {
+    $docCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Document
+    )
+    foreach ($d in $winEl.FindAll([System.Windows.Automation.TreeScope]::Descendants, $docCond)) {
+        try {
+            $vp = $d.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+            if ($null -ne $vp) {
+                $u = [string]$vp.Current.Value
+                if ($u -match '/c/([A-Za-z0-9_-]{6,80})') {
+                    return $Matches[1]
+                }
+            }
+        } catch {}
+    }
+    return ""
+}
+
+function Activate-El($el) {
+    $r = $el.Current.BoundingRectangle
+    if (-not $r.IsEmpty -and $r.Width -gt 4 -and $r.Height -gt 4) {
+        [AgyCreateWin32]::ClickAt([int]($r.Left + [Math]::Min(80, $r.Width / 2)), [int]($r.Top + $r.Height / 2))
+        return $true
+    }
+    $inv = $null
+    if ($el.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$inv)) {
+        $inv.Invoke()
+        return $true
+    }
+    return $false
+}
+
+$prevCid = Get-ActiveCid $agyWin
+if ($prevCid -ne "") {
+    $sidebarDesc = $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Sidebar")))
+    if ($sidebarDesc.Count -eq 0) {
+        $btns = $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)))
+        foreach ($b in $btns) {
+            if ($b.Current.Name -match '切换侧边栏|Toggle Sidebar') {
+                Activate-El $b | Out-Null
+                Start-Sleep -Milliseconds 260
+                break
+            }
+        }
+    }
+    $orCond = New-Object System.Windows.Automation.OrCondition(
+        (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)),
+        (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Hyperlink))
+    )
+    $newBtn = $null
+    foreach ($c in $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, $orCond)) {
+        if ([string]$c.Current.Name -match '新建会话|新建对话|New Conversation|New Chat') {
+            $newBtn = $c
+            break
+        }
+    }
+    if ($null -eq $newBtn) {
+        Write-Output "ERR:未找到桌面窗口「新建会话」按钮"
+        exit 0
+    }
+    Activate-El $newBtn | Out-Null
+    for ($i = 0; $i -lt 12; $i++) {
+        Start-Sleep -Milliseconds 160
+        $curCid = Get-ActiveCid $agyWin
+        if ($curCid -ne $prevCid) { break }
+    }
+    $afterClickCid = Get-ActiveCid $agyWin
+    if ($afterClickCid -ne "" -and $afterClickCid -eq $prevCid) {
+        Write-Output "ERR:桌面窗口未能切换到新建会话页"
+        exit 0
+    }
+}
+
+$msgBox = $null
+$comboCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ComboBox)
+foreach ($cb in $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, $comboCond)) {
+    if ($cb.Current.Name -match 'Message input|输入任何问题') { $msgBox = $cb; break }
+}
+if ($null -eq $msgBox) {
+    $editCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
+    foreach ($ed in $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, $editCond)) {
+        if ($ed.Current.Name -match 'Message input|输入任何问题') { $msgBox = $ed; break }
+    }
+}
+if ($null -eq $msgBox) {
+    Write-Output "ERR:未找到新建会话输入框"
+    exit 0
+}
+$boxRect = $msgBox.Current.BoundingRectangle
+if ($boxRect.IsEmpty -or $boxRect.Width -lt 30 -or $boxRect.Height -lt 10) {
+    Write-Output "ERR:新建会话输入框不可见"
+    exit 0
+}
+
+$hadText = $false
+$oldClip = ""
+try {
+    if ([System.Windows.Forms.Clipboard]::ContainsText()) {
+        $hadText = $true
+        $oldClip = [System.Windows.Forms.Clipboard]::GetText()
+    }
+} catch {}
+
+[AgyCreateWin32]::SetForegroundWindow($hwnd) | Out-Null
+[AgyCreateWin32]::ClickAt([int]($boxRect.Left + [Math]::Min(120, $boxRect.Width / 2)), [int]($boxRect.Top + $boxRect.Height / 2))
+Start-Sleep -Milliseconds 140
+
+[System.Windows.Forms.Clipboard]::SetText($promptText)
+Start-Sleep -Milliseconds 60
+[AgyCreateWin32]::PasteClip()
+Start-Sleep -Milliseconds 230
+[AgyCreateWin32]::PressEnter()
+
+$newCid = ""
+for ($w = 0; $w -lt 22; $w++) {
+    Start-Sleep -Milliseconds 180
+    $cand = Get-ActiveCid $agyWin
+    if ($cand -ne "" -and $cand -ne $prevCid) {
+        $newCid = $cand
+        break
+    }
+}
+
+if ($hadText) {
+    try { [System.Windows.Forms.Clipboard]::SetText($oldClip) } catch {}
+}
+
+Write-Output "OK:$newCid"
+"""
+    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
+    env = os.environ.copy()
+    env["AGY_PROMPT_B64"] = base64.b64encode((prompt or "").encode("utf-8")).decode("ascii")
+
+    try:
+        res = subprocess.run(
+            ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=18,
+            creationflags=CREATE_NO_WINDOW,
+        )
+        ok_matched = False
+        new_cid = ""
+        for ln in reversed([x.strip() for x in (res.stdout or "").splitlines() if x.strip()]):
+            if ln.startswith("OK:"):
+                ok_matched = True
+                new_cid = ln.removeprefix("OK:").strip()
+                break
+            if ln.startswith("ERR:"):
+                return (False, "", ln.removeprefix("ERR:").strip())
+
+        if not ok_matched:
+            return (False, "", "新建桌面会话未返回确认")
+
+        # Fallback: if Document URL hadn't updated yet, inspect newly created brain/<uuid> directory
+        if not new_cid and brain_dir.is_dir():
+            for _ in range(10):
+                time.sleep(0.45)
+                try:
+                    candidates = [
+                        d
+                        for d in brain_dir.iterdir()
+                        if d.is_dir() and d.name != "tempmediaStorage" and d.name not in before_ids
+                    ]
+                    if candidates:
+                        candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                        new_cid = candidates[0].name
+                        break
+                except OSError:
+                    pass
+
+        if not new_cid:
+            return (False, "", "未能捕获新建桌面会话 ID")
+
+        return (True, new_cid, "已在电脑端新建 Antigravity 会话并发送")
+    except Exception as exc:
+        return (False, "", f"新建桌面会话异常：{exc}")

@@ -62,11 +62,13 @@ from .desktop_tools import (
     _resolve_inside_workspace,
     cancel_antigravity_ide_window_turn,
     capture_desktop_fast_jpeg_sync,
+    create_and_send_antigravity_ide_new_chat,
     find_codex_cli_executable,
     get_workspace_file_diff,
     inspect_workspace_git,
     is_safe_outbound_file,
     list_workspace_directory,
+    open_new_antigravity_ide_chat_window,
     prune_inbox,
     read_workspace_file_preview,
     sanitize_filename,
@@ -441,6 +443,8 @@ class WebPwaServer:
         codex_store_dir: Path | None = None,
         continuation_map_path: Path | None = None,
         pc_window_sender: Callable[[str, str, str], tuple[bool, str]] | None = None,
+        pc_window_new_opener: Callable[[], tuple[bool, str]] | None = None,
+        pc_window_new_sender: Callable[[str], tuple[bool, str, str]] | None = None,
         pc_window_canceller: Callable[[str], bool] | None = None,
         codex_cli_path: Path | None = None,
     ) -> None:
@@ -454,6 +458,20 @@ class WebPwaServer:
             pc_window_sender
             if pc_window_sender is not None
             else (send_prompt_to_antigravity_ide_window if ide_store_dir is None else None)
+        )
+        self._pc_window_new_opener: Callable[[], tuple[bool, str]] | None = (
+            pc_window_new_opener
+            if pc_window_new_opener is not None
+            else (open_new_antigravity_ide_chat_window if ide_store_dir is None else None)
+        )
+        self._pc_window_new_sender: Callable[[str], tuple[bool, str, str]] | None = (
+            pc_window_new_sender
+            if pc_window_new_sender is not None
+            else (
+                (lambda prompt: create_and_send_antigravity_ide_new_chat(prompt, ide_store_dir))
+                if ide_store_dir is None
+                else None
+            )
         )
         self._pc_window_canceller: Callable[[str], bool] | None = (
             pc_window_canceller
@@ -997,7 +1015,11 @@ class WebPwaServer:
 
                 elif mtype == "new_conversation":
                     t = asyncio.create_task(
-                        self._handle_new_conversation(ws, str(msg.get("workspace") or ""))
+                        self._handle_new_conversation(
+                            ws,
+                            str(msg.get("workspace") or ""),
+                            str(msg.get("target") or "ide"),
+                        )
                     )
                     self._tasks.add(t)
                     t.add_done_callback(self._tasks.discard)
@@ -1274,7 +1296,9 @@ class WebPwaServer:
             }
         )
 
-    async def _handle_new_conversation(self, ws: ServerConnection, workspace: str) -> None:
+    async def _handle_new_conversation(
+        self, ws: ServerConnection, workspace: str, target: str = "ide"
+    ) -> None:
         new_slot = f"new:{uuid.uuid4().hex[:8]}"
         session = self._session_for_slot(new_slot)
         try:
@@ -1283,9 +1307,31 @@ class WebPwaServer:
             await ws.send(json.dumps({"type": "toast", "level": "err", "text": str(exc)}, ensure_ascii=False))
             return
 
+        req_target = (target or "ide").strip().lower()
+        store_mode = ""
+        title_label = "反重力助手"
+        toast_note = ""
+
+        if req_target == "ide" and self._pc_window_new_opener is not None:
+            opened, open_note = await asyncio.to_thread(self._pc_window_new_opener)
+            if opened:
+                store_mode = "ide"
+                title_label = "新建电脑对话"
+                toast_note = "已在电脑端打开新对话窗口"
+            else:
+                store_mode = "ide" if self._pc_window_new_sender is not None else ""
+                toast_note = f"提示：{open_note}，发消息时将自动尝试连接"
+        elif req_target == "codex":
+            store_mode = "codex"
+            title_label = "新建 Codex 对话"
+            toast_note = "已准备新建 Codex 电脑会话"
+        elif req_target == "cli":
+            store_mode = "cli"
+            title_label = "新建远程会话"
+
         self._active_slot = new_slot
         self._slot_history[new_slot] = []
-        self._slot_meta[new_slot] = {"conversation_id": "", "title": "新对话", "store": ""}
+        self._slot_meta[new_slot] = {"conversation_id": "", "title": title_label, "store": store_mode}
         self._ide_watch_sig = ("", "", 0, 0)
 
         await self._broadcast({"type": "clear_history", "slot": new_slot})
@@ -1293,47 +1339,36 @@ class WebPwaServer:
             {
                 "type": "meta_update",
                 "slot": new_slot,
-                "model": session.model or "default",
+                "model": (
+                    "Antigravity 电脑端"
+                    if store_mode == "ide"
+                    else ("Codex 电脑端" if store_mode == "codex" else (session.model or "default"))
+                ),
                 "workspace": str(session.workspace),
                 "active_conversation_id": "",
-                "active_title": "反重力助手",
-                "active_store": "",
+                "active_title": title_label,
+                "active_store": store_mode,
                 "busy": False,
             }
         )
+        if toast_note:
+            await ws.send(json.dumps({"type": "toast", "level": "info", "text": toast_note}, ensure_ascii=False))
 
-    async def _try_run_pc_ide_window_turn(
+    async def _stream_pc_ide_transcript_until_idle(
         self,
         *,
-        chat_slot: str,
+        ide_root: Path,
         ide_cid: str,
-        title: str,
-        prompt_text: str,
+        baseline_lines: int,
+        base_snap: dict[str, Any],
         reply_id: str,
         inflight_state: dict[str, Any],
         turn_start_sec: float,
         on_delta: Callable[[str], Any],
         on_reset: Callable[[], Any],
         on_tool: Callable[[str], Any],
-        on_status: Callable[[str], Any],
     ) -> tuple[TurnResult, list[Path]] | None:
-        """Deliver `prompt_text` directly into the open PC Antigravity IDE window and stream its live transcript."""
-        if self._pc_window_sender is None or not ide_cid:
-            return None
-
-        ide_root = self.ide_store_dir if self.ide_store_dir is not None else _default_ide_dir()
-        base_snap = await asyncio.to_thread(read_ide_live_turn_snapshot, ide_root, ide_cid, 10**9)
-        baseline_lines = int(base_snap.get("total_lines") or 0)
-
-        await on_status("正在向电脑端窗口发送指令...")
-        delivered, note = await asyncio.to_thread(self._pc_window_sender, ide_cid, title, prompt_text)
-        if not delivered:
-            logger.info("PC IDE window delivery unavailable (%s), falling back to CLI: %s", ide_cid[:8], note)
-            return None
-
         inflight_state["pc_ide_cid"] = ide_cid
-        await on_status("电脑端窗口已接收，正在执行...")
-
         poll_sec = max(0.08, float(self.pc_ide_poll_interval))
         accept_deadline = time.monotonic() + max(0.5, float(self.pc_ide_accept_timeout))
         overall_deadline = time.monotonic() + max(30.0, float(self.config.agy_timeout_seconds))
@@ -1411,7 +1446,6 @@ class WebPwaServer:
                 else:
                     if saw_act and not bool(snap.get("last_planner_had_tools")) and quiet_elapsed >= min(1.4, poll_sec * 2.4):
                         break
-
         else:
             return (
                 TurnResult(
@@ -1424,7 +1458,6 @@ class WebPwaServer:
                 list(final_snap.get("images") or []),
             )
 
-        # Final snapshot read + media folder harvest inside `ide_root`
         final_snap = await asyncio.to_thread(read_ide_live_turn_snapshot, ide_root, ide_cid, baseline_lines)
         ide_media = await asyncio.to_thread(harvest_recent_cli_turn_images, ide_root, ide_cid, turn_start_sec)
         merged_imgs: list[Path] = list(final_snap.get("images") or [])
@@ -1448,6 +1481,118 @@ class WebPwaServer:
             merged_imgs,
         )
 
+    async def _try_run_pc_ide_window_turn(
+        self,
+        *,
+        chat_slot: str,
+        ide_cid: str,
+        title: str,
+        prompt_text: str,
+        reply_id: str,
+        inflight_state: dict[str, Any],
+        turn_start_sec: float,
+        on_delta: Callable[[str], Any],
+        on_reset: Callable[[], Any],
+        on_tool: Callable[[str], Any],
+        on_status: Callable[[str], Any],
+    ) -> tuple[TurnResult, list[Path]] | None:
+        """Deliver `prompt_text` directly into the open PC Antigravity IDE window and stream its live transcript."""
+        if self._pc_window_sender is None or not ide_cid:
+            return None
+
+        ide_root = self.ide_store_dir if self.ide_store_dir is not None else _default_ide_dir()
+        base_snap = await asyncio.to_thread(read_ide_live_turn_snapshot, ide_root, ide_cid, 10**9)
+        baseline_lines = int(base_snap.get("total_lines") or 0)
+
+        await on_status("正在向电脑端窗口发送指令...")
+        delivered, note = await asyncio.to_thread(self._pc_window_sender, ide_cid, title, prompt_text)
+        if not delivered:
+            logger.info("PC IDE window delivery unavailable (%s), falling back to CLI: %s", ide_cid[:8], note)
+            return None
+
+        await on_status("电脑端窗口已接收，正在执行...")
+        return await self._stream_pc_ide_transcript_until_idle(
+            ide_root=ide_root,
+            ide_cid=ide_cid,
+            baseline_lines=baseline_lines,
+            base_snap=base_snap,
+            reply_id=reply_id,
+            inflight_state=inflight_state,
+            turn_start_sec=turn_start_sec,
+            on_delta=on_delta,
+            on_reset=on_reset,
+            on_tool=on_tool,
+        )
+
+    async def _try_run_pc_ide_new_chat_turn(
+        self,
+        *,
+        chat_slot: str,
+        session: AgySession,
+        raw_title_seed: str,
+        prompt_text: str,
+        reply_id: str,
+        inflight_state: dict[str, Any],
+        turn_start_sec: float,
+        on_delta: Callable[[str], Any],
+        on_reset: Callable[[], Any],
+        on_tool: Callable[[str], Any],
+        on_status: Callable[[str], Any],
+    ) -> tuple[TurnResult, list[Path]] | None:
+        """Create a brand-new conversation inside the open PC Antigravity window and stream its reply."""
+        if self._pc_window_new_sender is None:
+            return None
+
+        await on_status("正在电脑端新建 Antigravity 对话并发送...")
+        ok, new_cid, note = await asyncio.to_thread(self._pc_window_new_sender, prompt_text)
+        if not ok or not new_cid:
+            logger.info("PC IDE new-chat creation unavailable, falling back to CLI: %s", note)
+            return None
+
+        new_title = (raw_title_seed or "").strip()[:38] or "电脑端新对话"
+        meta_cur = self._slot_meta.setdefault(chat_slot, {})
+        meta_cur["conversation_id"] = new_cid
+        meta_cur["store"] = "ide"
+        meta_cur["title"] = new_title
+        session.linked_ide_id = new_cid
+        session.linked_store = "ide"
+        session.active_title = new_title
+
+        if self._active_slot == chat_slot:
+            await self._broadcast(
+                {
+                    "type": "meta_update",
+                    "slot": chat_slot,
+                    "model": "Antigravity 电脑端",
+                    "workspace": str(session.workspace),
+                    "active_conversation_id": new_cid,
+                    "active_title": new_title,
+                    "active_store": "ide",
+                    "busy": True,
+                }
+            )
+
+        await on_status("电脑端新对话已创建，正在执行...")
+        ide_root = self.ide_store_dir if self.ide_store_dir is not None else _default_ide_dir()
+        empty_snap = {
+            "total_lines": 0,
+            "mtime_ns": 0,
+            "size": 0,
+            "db_running": True,
+        }
+        return await self._stream_pc_ide_transcript_until_idle(
+            ide_root=ide_root,
+            ide_cid=new_cid,
+            baseline_lines=0,
+            base_snap=empty_snap,
+            reply_id=reply_id,
+            inflight_state=inflight_state,
+            turn_start_sec=turn_start_sec,
+            on_delta=on_delta,
+            on_reset=on_reset,
+            on_tool=on_tool,
+        )
+
     async def _try_run_codex_cli_turn(
         self,
         *,
@@ -1460,7 +1605,7 @@ class WebPwaServer:
         on_tool: Callable[[str], Any],
         on_status: Callable[[str], Any],
     ) -> TurnResult | None:
-        """Resume an OpenAI Codex Desktop thread natively via `codex.exe exec resume <id>` when available."""
+        """Start a new (`codex_cid == ""`) or resume an existing OpenAI Codex PC thread via `codex.exe exec`."""
         codex_exe = self._codex_cli_override
         if codex_exe is None and self.codex_store_dir is None:
             codex_exe = await asyncio.to_thread(find_codex_cli_executable)
@@ -1471,9 +1616,12 @@ class WebPwaServer:
         last_msg_file = PROJECT_INBOX_DIR / f"codex_last_{uuid.uuid4().hex[:8]}.txt"
         extra_kwargs: dict[str, Any] = {"creationflags": CREATE_NO_WINDOW} if sys.platform == "win32" else {}
 
-        await on_status("正在唤醒电脑端 Codex 会话...")
-        try:
-            proc = await asyncio.create_subprocess_exec(
+        is_new_thread = not bool(codex_cid)
+        await on_status("正在电脑端创建 Codex 新会话..." if is_new_thread else "正在唤醒电脑端 Codex 会话...")
+        cmd_args = (
+            [str(codex_exe), "exec", "--skip-git-repo-check", "--json", "-o", str(last_msg_file), "-"]
+            if is_new_thread
+            else [
                 str(codex_exe),
                 "exec",
                 "resume",
@@ -1484,6 +1632,11 @@ class WebPwaServer:
                 str(last_msg_file),
                 codex_cid,
                 "-",
+            ]
+        )
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd_args,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -1491,11 +1644,12 @@ class WebPwaServer:
                 **extra_kwargs,
             )
         except Exception as exc:
-            logger.info("Failed starting codex.exe resume (%s): %s", codex_cid[:8], exc)
+            logger.info("Failed starting codex.exe (%s): %s", codex_cid[:8] or "new", exc)
             return None
 
         inflight_state["codex_proc"] = proc
         emitted_blocks: list[str] = []
+        resolved_cid = codex_cid
 
         try:
             if proc.stdin is not None:
@@ -1516,6 +1670,8 @@ class WebPwaServer:
                 except json.JSONDecodeError:
                     continue
                 ev_type = str(ev.get("type") or "")
+                if ev_type == "thread.started" and ev.get("thread_id"):
+                    resolved_cid = str(ev["thread_id"])
                 item = ev.get("item") if isinstance(ev.get("item"), dict) else {}
                 itype = str(item.get("type") or "")
                 if ev_type in {"item.started", "item.updated"} and itype in {"command_execution", "mcp_tool_call"}:
@@ -1532,7 +1688,7 @@ class WebPwaServer:
                 return TurnResult(
                     status="CANCELLED",
                     response="\n\n".join(emitted_blocks),
-                    conversation_id=codex_cid,
+                    conversation_id=resolved_cid,
                     active_model="Codex 电脑端",
                 )
 
@@ -1545,19 +1701,20 @@ class WebPwaServer:
             if rc != 0 and not final_txt:
                 return None
 
-            sig = await asyncio.to_thread(
-                get_transcript_signature,
-                codex_cid,
-                "codex",
-                self.ide_store_dir,
-                self.cli_store_dir,
-                self.codex_store_dir,
-            )
-            self._ide_watch_sig = ("codex", codex_cid, sig[0], sig[1])
+            if resolved_cid:
+                sig = await asyncio.to_thread(
+                    get_transcript_signature,
+                    resolved_cid,
+                    "codex",
+                    self.ide_store_dir,
+                    self.cli_store_dir,
+                    self.codex_store_dir,
+                )
+                self._ide_watch_sig = ("codex", resolved_cid, sig[0], sig[1])
             return TurnResult(
                 status="SUCCESS",
                 response=final_txt,
-                conversation_id=codex_cid,
+                conversation_id=resolved_cid,
                 active_model="Codex 电脑端",
             )
         except Exception as exc:
@@ -1690,8 +1847,9 @@ class WebPwaServer:
         extra_pc_images: list[Path] = []
         result: TurnResult | None = None
 
+        was_brand_new = not bool(slot_cid)
         try:
-            # 1. If viewing a PC Antigravity IDE conversation, deliver directly into the live PC IDE window first!
+            # 1. Existing PC Antigravity IDE conversation -> deliver into live PC IDE window
             if slot_store == "ide" and slot_cid:
                 pc_ide_out = await self._try_run_pc_ide_window_turn(
                     chat_slot=chat_slot,
@@ -1710,8 +1868,27 @@ class WebPwaServer:
                     result, extra_pc_images = pc_ide_out
                     pc_direct_persisted = True
 
-            # 2. If viewing a PC OpenAI Codex conversation, resume natively via `codex.exe exec resume` first!
-            elif slot_store == "codex" and slot_cid:
+            # 2. Brand-new PC Antigravity IDE conversation (tapped `+` or sent from default home screen)
+            elif not slot_cid and slot_store in {"", "ide"} and self._pc_window_new_sender is not None:
+                pc_new_out = await self._try_run_pc_ide_new_chat_turn(
+                    chat_slot=chat_slot,
+                    session=session,
+                    raw_title_seed=raw_text,
+                    prompt_text=prompt_text,
+                    reply_id=reply_id,
+                    inflight_state=inflight_state,
+                    turn_start_sec=turn_start_sec,
+                    on_delta=_on_delta,
+                    on_reset=_on_reset,
+                    on_tool=_on_tool,
+                    on_status=_on_status,
+                )
+                if pc_new_out is not None:
+                    result, extra_pc_images = pc_new_out
+                    pc_direct_persisted = True
+
+            # 3. Existing OR brand-new PC OpenAI Codex conversation (`slot_store == "codex"`)
+            elif slot_store == "codex":
                 cdx_out = await self._try_run_codex_cli_turn(
                     codex_cid=slot_cid,
                     workspace=session.workspace,
@@ -1725,8 +1902,30 @@ class WebPwaServer:
                 if cdx_out is not None:
                     result = cdx_out
                     pc_direct_persisted = True
+                    if not slot_cid and cdx_out.conversation_id:
+                        new_title = raw_text[:38] or "Codex 新对话"
+                        meta_cur = self._slot_meta.setdefault(chat_slot, {})
+                        meta_cur["conversation_id"] = cdx_out.conversation_id
+                        meta_cur["store"] = "codex"
+                        meta_cur["title"] = new_title
+                        session.linked_ide_id = cdx_out.conversation_id
+                        session.linked_store = "codex"
+                        session.active_title = new_title
+                        if self._active_slot == chat_slot:
+                            await self._broadcast(
+                                {
+                                    "type": "meta_update",
+                                    "slot": chat_slot,
+                                    "model": "Codex 电脑端",
+                                    "workspace": str(session.workspace),
+                                    "active_conversation_id": cdx_out.conversation_id,
+                                    "active_title": new_title,
+                                    "active_store": "codex",
+                                    "busy": True,
+                                }
+                            )
 
-            # 3. Fallback to standalone `agy.exe` session when in a mobile/CLI chat or when PC desktop app is closed
+            # 4. Fallback to standalone `agy.exe` session when in a mobile/CLI chat or when PC desktop app is closed
             if result is None:
                 if slot_store in {"ide", "codex"} and (self._pc_window_sender is not None or slot_store == "codex"):
                     await _on_status("桌面窗口未就绪，已切换后台引擎接力处理...")
@@ -1822,6 +2021,14 @@ class WebPwaServer:
                     "text": f"✓ 「{done_title[:18]}」已完成回复",
                 }
             )
+
+        # Refresh conversation sidebar list whenever a brand-new conversation finished its first turn
+        if was_brand_new and self._clients:
+            for cli_ws in list(self._clients):
+                try:
+                    await self._handle_list_conversations(cli_ws)
+                except Exception:
+                    pass
 
     async def _send_sys_reply(
         self, slot_key: str, text: str, model: str = "", images: list[dict] | None = None

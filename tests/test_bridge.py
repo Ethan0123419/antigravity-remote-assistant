@@ -818,3 +818,159 @@ def test_encrypted_ios_pwa_beacon_roundtrip_and_tamper_rejection(tmp_path: Path)
     assert (stage / "beacon.json").is_file()
     manifest_obj = json.loads((stage / "manifest.json").read_text(encoding="utf-8"))
     assert "start_url" not in manifest_obj
+
+
+@pytest.mark.asyncio
+async def test_create_new_pc_ide_conversation_from_mobile_and_continue(tmp_path: Path) -> None:
+    """Verify tapping `new_conversation` on mobile opens a new PC Antigravity window chat,
+    creates a new IDE conversation ID on first prompt, streams live reply, and routes turn 2 to that new PC ID.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    ide_store = tmp_path / "ide_new_pc"
+    ide_store.mkdir(parents=True)
+    db_path = ide_store / "conversation_summaries.db"
+    con = sqlite3.connect(db_path)
+    con.execute(
+        "CREATE TABLE conversation_summaries ("
+        "conversation_id TEXT, title TEXT, preview TEXT, step_count INT, "
+        "last_modified_time TEXT, workspace_uris TEXT, status TEXT, "
+        "source TEXT, app_data_dir TEXT, nesting_depth INT, killed INT)"
+    )
+    con.commit()
+    con.close()
+
+    opened_count = 0
+    created_prompts: list[str] = []
+    followup_calls: list[tuple[str, str, str]] = []
+    new_pc_cid = "new-pc-agent-88889999"
+
+    def _fake_new_opener() -> tuple[bool, str]:
+        nonlocal opened_count
+        opened_count += 1
+        return (True, "已在电脑端打开新对话窗口")
+
+    def _fake_new_sender(prompt: str) -> tuple[bool, str, str]:
+        created_prompts.append(prompt)
+        tf = ide_store / "brain" / new_pc_cid / ".system_generated" / "logs" / "transcript.jsonl"
+        tf.parent.mkdir(parents=True, exist_ok=True)
+
+        def _sim_new() -> None:
+            time.sleep(0.06)
+            c1 = sqlite3.connect(db_path)
+            c1.execute(
+                "INSERT INTO conversation_summaries VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (new_pc_cid, prompt[:24], "", 1, "2026-11-25 08:30:00+00:00", "", "CASCADE_RUN_STATUS_RUNNING", "", str(ide_store), 0, 0),
+            )
+            c1.commit()
+            c1.close()
+            tf.write_text(
+                json.dumps({"step_index": 0, "type": "USER_INPUT", "source": "USER_EXPLICIT", "content": prompt}, ensure_ascii=False)
+                + "\n"
+                + json.dumps({"step_index": 1, "type": "PLANNER_RESPONSE", "source": "MODEL", "content": "已在电脑端成功创建新窗口并完成第一轮回复！"}, ensure_ascii=False)
+                + "\n",
+                encoding="utf-8",
+            )
+            time.sleep(0.12)
+            c2 = sqlite3.connect(db_path)
+            c2.execute("UPDATE conversation_summaries SET status = 'CASCADE_RUN_STATUS_IDLE' WHERE conversation_id = ?", (new_pc_cid,))
+            c2.commit()
+            c2.close()
+
+        import threading
+        threading.Thread(target=_sim_new, daemon=True).start()
+        return (True, new_pc_cid, "已在电脑端新建 Antigravity 会话并发送")
+
+    def _fake_followup_sender(cid: str, title: str, prompt: str) -> tuple[bool, str]:
+        followup_calls.append((cid, title, prompt))
+        tf = ide_store / "brain" / cid / ".system_generated" / "logs" / "transcript.jsonl"
+
+        def _sim_followup() -> None:
+            time.sleep(0.06)
+            c1 = sqlite3.connect(db_path)
+            c1.execute("UPDATE conversation_summaries SET status = 'CASCADE_RUN_STATUS_RUNNING' WHERE conversation_id = ?", (cid,))
+            c1.commit()
+            c1.close()
+            with tf.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"step_index": 2, "type": "USER_INPUT", "source": "USER_EXPLICIT", "content": prompt}, ensure_ascii=False) + "\n")
+                fh.write(json.dumps({"step_index": 3, "type": "PLANNER_RESPONSE", "source": "MODEL", "content": "新窗口第二轮继续执行完毕！"}, ensure_ascii=False) + "\n")
+            time.sleep(0.12)
+            c2 = sqlite3.connect(db_path)
+            c2.execute("UPDATE conversation_summaries SET status = 'CASCADE_RUN_STATUS_IDLE' WHERE conversation_id = ?", (cid,))
+            c2.commit()
+            c2.close()
+
+        import threading
+        threading.Thread(target=_sim_followup, daemon=True).start()
+        return (True, "OK")
+
+    tok = "new-pc-chat-token-77777777"
+    cfg = _make_config(tmp_path, web_pwa_port=port, web_access_token=tok)
+    sessions = SessionManager(cfg, command_override=[sys.executable, "-c", "import sys; sys.exit(99)"])
+    pwa = WebPwaServer(
+        cfg,
+        session_manager=sessions,
+        access_token=tok,
+        ide_store_dir=ide_store,
+        cli_store_dir=tmp_path / "cli_unused2",
+        codex_store_dir=tmp_path / "cdx_unused2",
+        pc_window_new_opener=_fake_new_opener,
+        pc_window_new_sender=_fake_new_sender,
+        pc_window_sender=_fake_followup_sender,
+    )
+    pwa.pc_ide_poll_interval = 0.08
+    stop_event = asyncio.Event()
+    pwa_task = asyncio.create_task(pwa.run(stop_event=stop_event))
+
+    try:
+        await asyncio.sleep(0.2)
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws?token={tok}") as ws:
+            await asyncio.wait_for(ws.recv(), timeout=5.0)  # hello
+
+            # 1. Tap "新建电脑端对话" on mobile
+            await ws.send(json.dumps({"type": "new_conversation", "workspace": "", "target": "ide"}))
+            saw_ide_meta = False
+            for _ in range(8):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                if ev["type"] == "meta_update" and ev.get("active_store") == "ide":
+                    saw_ide_meta = True
+                if ev["type"] == "toast":
+                    break
+            assert opened_count == 1
+            assert saw_ide_meta is True
+
+            # 2. Send first prompt -> creates `new_pc_cid` on PC IDE window!
+            await ws.send(json.dumps({"type": "chat", "text": "帮我在电脑新建一个数据分析项目"}))
+            end1 = None
+            bound_cid = ""
+            for _ in range(30):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                if ev["type"] == "meta_update" and ev.get("active_conversation_id"):
+                    bound_cid = ev["active_conversation_id"]
+                elif ev["type"] == "stream_end":
+                    end1 = ev["item"]
+                    break
+            assert created_prompts == ["帮我在电脑新建一个数据分析项目"]
+            assert bound_cid == new_pc_cid
+            assert end1 is not None
+            assert "已在电脑端成功创建新窗口并完成第一轮回复！" in end1["text"]
+
+            # 3. Send second follow-up prompt -> must route to existing `new_pc_cid` via `pc_window_sender`!
+            await ws.send(json.dumps({"type": "chat", "text": "继续添加可视化图表"}))
+            end2 = None
+            for _ in range(30):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                if ev["type"] == "stream_end":
+                    end2 = ev["item"]
+                    break
+            assert len(followup_calls) == 1
+            assert followup_calls[0][0] == new_pc_cid
+            assert followup_calls[0][2] == "继续添加可视化图表"
+            assert end2 is not None
+            assert "新窗口第二轮继续执行完毕！" in end2["text"]
+    finally:
+        stop_event.set()
+        await asyncio.wait_for(pwa_task, timeout=5.0)
+        await sessions.shutdown_all()
