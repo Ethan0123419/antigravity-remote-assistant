@@ -1895,23 +1895,36 @@
   }
 
   async function fetchBeaconJson() {
+    const candidates = [`./beacon.json?_t=${Date.now()}`];
     if (beaconRepo) {
+      candidates.push(`https://raw.githubusercontent.com/${beaconRepo}/gh-pages/beacon.json?_t=${Date.now()}`);
+    }
+    let newest = null;
+    for (const u of candidates) {
       try {
-        const apiRes = await fetch(
-          `https://api.github.com/repos/${beaconRepo}/contents/beacon.json?ref=gh-pages&_t=${Date.now()}`,
-          { cache: 'no-store', headers: { Accept: 'application/vnd.github.v3+json' } }
-        );
-        if (apiRes.ok) {
-          const meta = await apiRes.json();
-          if (meta && meta.content) {
-            return JSON.parse(atob(String(meta.content).replace(/\s+/g, '')));
+        const r = await fetch(u, { cache: 'no-store' });
+        if (r.ok) {
+          const obj = await r.json();
+          if (obj && obj.ct && (!newest || Number(obj.updated_ms || 0) >= Number(newest.updated_ms || 0))) {
+            newest = obj;
           }
         }
       } catch (_) {}
     }
-    const localRes = await fetch(`./beacon.json?_t=${Date.now()}`, { cache: 'no-store' });
-    if (!localRes.ok) throw new Error('BEACON_NOT_FOUND');
-    return await localRes.json();
+    if (newest) return newest;
+    if (beaconRepo) {
+      const apiRes = await fetch(
+        `https://api.github.com/repos/${beaconRepo}/contents/beacon.json?ref=gh-pages&_t=${Date.now()}`,
+        { cache: 'no-store', headers: { Accept: 'application/vnd.github.v3+json' } }
+      );
+      if (apiRes.ok) {
+        const meta = await apiRes.json();
+        if (meta && meta.content) {
+          return JSON.parse(atob(String(meta.content).replace(/\s+/g, '')));
+        }
+      }
+    }
+    throw new Error('BEACON_NOT_FOUND');
   }
 
   async function resolveRemoteTunnelUrl(forceFresh = false) {
