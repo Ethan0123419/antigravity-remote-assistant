@@ -1634,8 +1634,13 @@
     el._t = setTimeout(() => { el.style.display = 'none'; }, ms);
   }
 
+  function setPlusOpen(open) {
+    plusPopover.classList.toggle('show', Boolean(open));
+    $('plusBtn').classList.toggle('open', Boolean(open));
+  }
+
   function openDrawer() {
-    plusPopover.classList.remove('show');
+    setPlusOpen(false);
     sidebarDrawer.classList.add('show');
     drawerBackdrop.classList.add('show');
     if (ws && ws.readyState === 1) {
@@ -2423,7 +2428,7 @@
         if (typeof data.busy === 'boolean') setStreamingState(data.busy);
         refreshHeaderSubtitle();
       } else if (data.type === 'conversations_list') {
-        activeConvId = data.active_id || activeConvId;
+        if (typeof data.active_id === 'string') activeConvId = data.active_id;
         allConvItems = data.items || [];
         updateConvCounts();
         renderConvList();
@@ -2644,7 +2649,7 @@
   }
 
   function sendChat(overrideText = null) {
-    plusPopover.classList.remove('show');
+    setPlusOpen(false);
     if (!ws || ws.readyState !== 1) {
       handleAppWakeup();
       return showToast('正在重连，请稍候...');
@@ -2740,7 +2745,7 @@
     try { localStorage.setItem('agy_pwa_draft', msgInput.value); } catch (_) {}
     refreshSendBtnVisual();
   });
-  msgInput.addEventListener('focus', () => plusPopover.classList.remove('show'));
+  msgInput.addEventListener('focus', () => setPlusOpen(false));
   msgInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 700) {
       e.preventDefault();
@@ -2749,10 +2754,6 @@
   });
 
   // Plus Button Popover with 45deg smooth rotation
-  function setPlusOpen(open) {
-    plusPopover.classList.toggle('show', open);
-    $('plusBtn').classList.toggle('open', open);
-  }
   $('plusBtn').onclick = (e) => {
     e.stopPropagation();
     setPlusOpen(!plusPopover.classList.contains('show'));
@@ -2925,10 +2926,10 @@
     renderConvList();
   });
 
-  document.querySelectorAll('.drawer-tab').forEach((tb) => {
+  document.querySelectorAll('.drawer-tab[data-f]').forEach((tb) => {
     tb.onclick = () => {
-      convFilter = tb.dataset.f;
-      document.querySelectorAll('.drawer-tab').forEach((x) => x.classList.toggle('active', x === tb));
+      convFilter = tb.dataset.f || 'all';
+      document.querySelectorAll('.drawer-tab[data-f]').forEach((x) => x.classList.toggle('active', x === tb));
       renderConvList();
     };
   });

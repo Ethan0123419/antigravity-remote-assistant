@@ -974,3 +974,116 @@ async def test_create_new_pc_ide_conversation_from_mobile_and_continue(tmp_path:
         stop_event.set()
         await asyncio.wait_for(pwa_task, timeout=5.0)
         await sessions.shutdown_all()
+
+
+@pytest.mark.asyncio
+async def test_duplicate_inflight_chat_guard_and_new_codex_thread(tmp_path: Path) -> None:
+    """Verify:
+    1. Sending a duplicate `chat` frame while the same slot is mid-stream emits a clean toast without corrupting the stream.
+    2. Creating a brand-new `codex` conversation (`target='codex'`) runs `codex exec`, binds `thread_id`, and extracts title from rollout.
+    3. `index.html` scopes `.drawer-tab[data-f]` so `.new-target-tab` onclick handlers are never overwritten.
+    """
+    html_src = (Path(__file__).resolve().parents[1] / "src" / "qq_agy_bridge" / "static" / "index.html").read_text(encoding="utf-8")
+    assert ".drawer-tab[data-f]" in html_src
+    assert "querySelectorAll('.drawer-tab')" not in html_src
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    # Mock `codex` CLI script that emits `thread.started` + `agent_message` and writes rollout JSONL
+    codex_dir = tmp_path / "codex_new"
+    sess_dir = codex_dir / "sessions" / "2026" / "11" / "25"
+    sess_dir.mkdir(parents=True)
+    new_cdx_id = "cdx-brand-new-77889900"
+    rollout = sess_dir / f"rollout-2026-11-25T17-00-00-{new_cdx_id}.jsonl"
+
+    mock_codex_py = tmp_path / "mock_codex.py"
+    mock_codex_py.write_text(
+        "import json, sys\n"
+        "prompt = sys.stdin.read().strip()\n"
+        f"open({str(rollout)!r}, 'w', encoding='utf-8').write("
+        f"json.dumps({{'type':'response_item','payload':{{'type':'message','role':'user','content':[{{'type':'input_text','text':prompt}}]}}}}, ensure_ascii=False) + '\\n')\n"
+        f"print(json.dumps({{'type':'thread.started','thread_id':{new_cdx_id!r}}}), flush=True)\n"
+        "print(json.dumps({'type':'item.completed','item':{'type':'agent_message','text':'Codex 新会话创建成功！'}}, ensure_ascii=False), flush=True)\n",
+        encoding="utf-8",
+    )
+    mock_codex_cmd = tmp_path / ("mock_codex.cmd" if sys.platform == "win32" else "mock_codex.sh")
+    if sys.platform == "win32":
+        mock_codex_cmd.write_text(f'@"{sys.executable}" "{mock_codex_py}" %*\r\n', encoding="utf-8")
+    else:
+        mock_codex_cmd.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{mock_codex_py}" "$@"\n', encoding="utf-8")
+        mock_codex_cmd.chmod(0o755)
+
+    con_cdx = sqlite3.connect(codex_dir / "state_5.sqlite")
+    con_cdx.execute("CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT, updated_at INT, source TEXT, cwd TEXT, title TEXT, archived INT)")
+    con_cdx.execute("INSERT INTO threads VALUES (?,?,?,?,?,?,?)", (new_cdx_id, str(rollout), 1795598000, "exec", str(tmp_path), "", 0))
+    con_cdx.commit()
+    con_cdx.close()
+
+    tok = "guard-and-codex-token-6666"
+    cfg = _make_config(tmp_path, web_pwa_port=port, web_access_token=tok)
+    sessions = SessionManager(cfg, command_override=[sys.executable, str(MOCK_AGY)])
+    pwa = WebPwaServer(
+        cfg,
+        session_manager=sessions,
+        access_token=tok,
+        ide_store_dir=tmp_path / "ide_g",
+        cli_store_dir=tmp_path / "cli_g",
+        codex_store_dir=codex_dir,
+        codex_cli_path=mock_codex_cmd,
+    )
+    stop_event = asyncio.Event()
+    pwa_task = asyncio.create_task(pwa.run(stop_event=stop_event))
+
+    try:
+        await asyncio.sleep(0.2)
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws?token={tok}") as ws:
+            await asyncio.wait_for(ws.recv(), timeout=5.0)  # hello
+
+            # 1. Start slow turn & immediately fire duplicate `chat` on same slot
+            await ws.send(json.dumps({"type": "chat", "text": "第一条慢请求 __SLOW_STREAM__"}))
+            for _ in range(10):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                if ev["type"] == "stream_start":
+                    break
+            await ws.send(json.dumps({"type": "chat", "text": "重复连点第二条"}))
+
+            saw_guard_toast = False
+            saw_end = False
+            for _ in range(20):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                if ev["type"] == "toast" and "正在执行中" in ev["text"]:
+                    saw_guard_toast = True
+                elif ev["type"] == "stream_end":
+                    saw_end = True
+                    break
+            assert saw_guard_toast is True
+            assert saw_end is True
+
+            # 2. Start brand-new Codex PC conversation (`target='codex'`)
+            await ws.send(json.dumps({"type": "new_conversation", "workspace": str(tmp_path), "target": "codex"}))
+            for _ in range(8):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                if ev["type"] == "toast":
+                    break
+
+            await ws.send(json.dumps({"type": "chat", "text": "帮我初始化 Codex 后端服务"}))
+            cdx_end = None
+            for _ in range(25):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                if ev["type"] == "stream_end":
+                    cdx_end = ev["item"]
+                    break
+            assert cdx_end is not None
+            assert "Codex 新会话创建成功！" in cdx_end["text"]
+
+            # Verify empty-title Codex thread peeks human title from rollout JSONL!
+            items = list_local_conversations(limit=20, ide_dir=tmp_path / "ide_g", cli_dir=tmp_path / "cli_g", codex_dir=codex_dir)
+            cdx_item = next((x for x in items if x.conversation_id == new_cdx_id), None)
+            assert cdx_item is not None
+            assert "帮我初始化 Codex 后端服务" in cdx_item.title
+    finally:
+        stop_event.set()
+        await asyncio.wait_for(pwa_task, timeout=5.0)
+        await sessions.shutdown_all()

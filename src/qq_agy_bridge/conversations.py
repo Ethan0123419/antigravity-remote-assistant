@@ -571,6 +571,25 @@ def _query_codex_store(codex_dir: Path, limit: int) -> list[ConversationItem]:
 
             human_title = index_titles.get(cid) or _summarize_codex_title(str(raw_title or ""))
             if not human_title:
+                # Fallback: peek first user turn from rollout JSONL for brand-new CLI-started Codex threads
+                try:
+                    with rpath.open("r", encoding="utf-8", errors="replace") as rfh:
+                        for _ in range(30):
+                            rln = rfh.readline()
+                            if not rln:
+                                break
+                            robj = json.loads(rln)
+                            if robj.get("type") == "response_item":
+                                rpl = robj.get("payload") or {}
+                                if rpl.get("type") == "message" and rpl.get("role") == "user":
+                                    rtxt = "\n".join(str(c.get("text") or "") for c in (rpl.get("content") or []) if isinstance(c, dict))
+                                    cu, _ = clean_codex_user_text(rtxt)
+                                    if cu:
+                                        human_title = _summarize_codex_title(cu)
+                                        break
+                except Exception:
+                    pass
+            if not human_title:
                 human_title = f"Codex 对话 {cid[:8]}"
             preview = _summarize_codex_title(str(raw_title or "")) or human_title
             ts_ms = max(_epoch_to_ms(updated_at), int(_safe_mtime(rpath) * 1000))

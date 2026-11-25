@@ -1741,6 +1741,23 @@ class WebPwaServer:
 
         chat_slot = self._active_slot
         session = self._session_for_slot(chat_slot)
+
+        is_quick_slash = raw_text.startswith("/") and not attachments and raw_text.split()[0].lower() in {
+            "/screen",
+            "/shot",
+            "/status",
+            "/clean",
+        }
+        if chat_slot in self._slot_inflight and not is_quick_slash:
+            await self._broadcast(
+                {
+                    "type": "toast",
+                    "level": "info",
+                    "text": "当前对话正在执行中，请等待完成或先点击停止",
+                }
+            )
+            return
+
         slot_meta = self._slot_meta.get(chat_slot, {})
         slot_store = str(slot_meta.get("store") or (session.linked_store if session.linked_ide_id else ""))
         slot_cid = str(slot_meta.get("conversation_id") or session.linked_ide_id or "")

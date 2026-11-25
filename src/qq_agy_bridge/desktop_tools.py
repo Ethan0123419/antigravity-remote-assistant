@@ -485,6 +485,7 @@ $targetCid = $env:AGY_TARGET_CID
 $targetTitle = $env:AGY_TARGET_TITLE
 $promptBytes = [Convert]::FromBase64String($env:AGY_PROMPT_B64)
 $promptText = [System.Text.Encoding]::UTF8.GetString($promptBytes)
+$ideBrainDir = $env:AGY_IDE_BRAIN_DIR
 
 $root = [System.Windows.Automation.AutomationElement]::RootElement
 $topChildren = $root.FindAll(
@@ -1032,6 +1033,7 @@ public static class AgyCreateWin32 {
 
 $promptBytes = [Convert]::FromBase64String($env:AGY_PROMPT_B64)
 $promptText = [System.Text.Encoding]::UTF8.GetString($promptBytes)
+$ideBrainDir = $env:AGY_IDE_BRAIN_DIR
 
 $root = [System.Windows.Automation.AutomationElement]::RootElement
 $agyWin = $null
@@ -1093,7 +1095,17 @@ function Activate-El($el) {
 }
 
 $prevCid = Get-ActiveCid $agyWin
-if ($prevCid -ne "") {
+$prevHasHistory = $false
+if ($prevCid -ne "" -and $ideBrainDir -ne "") {
+    $prevTf = Join-Path $ideBrainDir "$prevCid\.system_generated\logs\transcript.jsonl"
+    if (Test-Path -LiteralPath $prevTf) {
+        try {
+            if ((Get-Item -LiteralPath $prevTf).Length -gt 0) { $prevHasHistory = $true }
+        } catch { $prevHasHistory = $true }
+    }
+}
+
+if ($prevHasHistory) {
     $sidebarDesc = $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Sidebar")))
     if ($sidebarDesc.Count -eq 0) {
         $btns = $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)))
@@ -1177,7 +1189,7 @@ $newCid = ""
 for ($w = 0; $w -lt 22; $w++) {
     Start-Sleep -Milliseconds 180
     $cand = Get-ActiveCid $agyWin
-    if ($cand -ne "" -and $cand -ne $prevCid) {
+    if ($cand -ne "" -and ((-not $prevHasHistory) -or ($cand -ne $prevCid))) {
         $newCid = $cand
         break
     }
@@ -1192,6 +1204,7 @@ Write-Output "OK:$newCid"
     encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
     env = os.environ.copy()
     env["AGY_PROMPT_B64"] = base64.b64encode((prompt or "").encode("utf-8")).decode("ascii")
+    env["AGY_IDE_BRAIN_DIR"] = str(brain_dir)
 
     try:
         res = subprocess.run(

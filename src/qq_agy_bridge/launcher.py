@@ -575,6 +575,7 @@ class LauncherApp:
         self._server_external = False
         self._desired_running = True
         self._auto_restart_timestamps: list[float] = []
+        self._tunnel_restart_timestamps: list[float] = []
         self._busy = False
         self._closing = False
 
@@ -1447,6 +1448,23 @@ class LauncherApp:
                 self._enqueue_log("系统", "检测到核心服务意外退出，正在自动自愈重启...", "warn")
                 self._launch_server()
                 srv_alive = self._server_proc is not None and self._server_proc.poll() is None
+
+        if (
+            self._desired_running
+            and not self._busy
+            and self.settings.web_pwa_enabled
+            and self.settings.tunnel_enabled
+            and self._tunnel_proc is not None
+            and not tun_alive
+            and not self._closing
+        ):
+            now_t = time.monotonic()
+            self._tunnel_restart_timestamps = [t for t in self._tunnel_restart_timestamps if now_t - t < 180.0]
+            if len(self._tunnel_restart_timestamps) < 4:
+                self._tunnel_restart_timestamps.append(now_t)
+                self._enqueue_log("Tunnel", "检测到外网加密隧道中断，正在自动重连并同步信标...", "warn")
+                self._launch_tunnel()
+                tun_alive = self._tunnel_proc is not None and self._tunnel_proc.poll() is None
 
         self._post_ui(lambda: self._refresh_status_ui(pwa_open, srv_alive, tun_alive))
 
