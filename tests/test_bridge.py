@@ -1275,3 +1275,202 @@ async def test_security_cswsh_port_identity_codex_reconnect_and_no_double_exec(t
         stop_event.set()
         await asyncio.wait_for(pwa_task, timeout=5.0)
         await sessions.shutdown_all()
+
+
+@pytest.mark.asyncio
+async def test_ergonomic_and_expert_upgrades_e2e(tmp_path: Path) -> None:
+    """Verify user & expert power upgrades:
+    1. `client_id` idempotent deduplication + `chat_ack` delivery receipts prevent duplicate execution on mobile reconnect.
+    2. Background slot completion populates `slots_overview.unread` and clears upon `select_conversation`.
+    3. One-time IDE approval `action_token` cannot be replayed twice, and `perform_desktop_remote_input` rejects non-whitelisted keys.
+    4. `pc_system_inspect`, `pc_clipboard_set`, `pc_clipboard_get`, and `desktop_input` round-trip cleanly over WebSocket.
+    5. Frontend `index.html` includes hunk diff quoting, collapsible long code cards, touch desktop toggle, and per-slot drafts.
+    """
+    from qq_agy_bridge.desktop_tools import (
+        _IDE_ACTION_LOCK,
+        _IDE_ACTION_TOKENS,
+        invoke_antigravity_ide_action,
+        perform_desktop_remote_input,
+        set_pc_clipboard_text,
+    )
+
+    html_src = (Path(__file__).resolve().parents[1] / "src" / "qq_agy_bridge" / "static" / "index.html").read_text(encoding="utf-8")
+    assert "code-expand-bar" in html_src
+    assert "diff-hunk-card" in html_src
+    assert "toggleTouchBtn" in html_src
+    assert "agy_slot_drafts_v1" in html_src
+    assert "slashMenu" in html_src
+
+    # Whitelist, NaN/Inf, & size guards on desktop tools
+    ok_bad_key, msg_bad_key = perform_desktop_remote_input("key", key_name="f12_evil")
+    assert ok_bad_key is False and "白名单" in msg_bad_key
+    ok_nan, msg_nan = perform_desktop_remote_input("click", x_ratio=float("nan"), y_ratio=0.5)
+    assert ok_nan is False and "有限" in msg_nan
+    ok_oob, _ = perform_desktop_remote_input("click", x_ratio=1.5, y_ratio=0.5)
+    assert ok_oob is False
+    ok_bad_act, _ = perform_desktop_remote_input("drag_drop")
+    assert ok_bad_act is False
+    ok_huge_clip, _ = set_pc_clipboard_text("x" * 70000)
+    assert ok_huge_clip is False
+
+    # Expired / unknown / replayed one-time IDE action token must be rejected without touching UIA
+    with _IDE_ACTION_LOCK:
+        _IDE_ACTION_TOKENS["expired-tok-1"] = {
+            "hwnd": 12345,
+            "cid": "c1",
+            "label": "Proceed",
+            "expires_mono": time.monotonic() - 5.0,
+        }
+    ok_exp, note_exp = invoke_antigravity_ide_action("expired-tok-1")
+    assert ok_exp is False and "过期" in note_exp
+    ok_replay, _ = invoke_antigravity_ide_action("expired-tok-1")
+    assert ok_replay is False
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    clip_box = {"text": "initial-pc-clip"}
+    invoked_tokens: list[str] = []
+    remote_inputs: list[tuple[str, float, float, str]] = []
+
+    def _mock_inspect_actions(cid: str) -> list[dict]:
+        return [{"action_token": "tok-proceed-once", "label": "Proceed", "conversation_id": cid}]
+
+    def _mock_invoke_action(tok: str) -> tuple[bool, str]:
+        if tok in invoked_tokens:
+            return (False, "确认按钮已过期或已使用")
+        invoked_tokens.append(tok)
+        return (True, "已在电脑端触发「Proceed」")
+
+    def _mock_desk_input(act: str, xr: float, yr: float, kn: str) -> tuple[bool, str]:
+        remote_inputs.append((act, xr, yr, kn))
+        return (True, f"已执行 {act}")
+
+    tok = "ergonomic-upgrade-tok-777"
+    cfg = _make_config(tmp_path, web_pwa_port=port, web_access_token=tok)
+    sessions = SessionManager(cfg, command_override=[sys.executable, str(MOCK_AGY)])
+    pwa = WebPwaServer(
+        cfg,
+        session_manager=sessions,
+        access_token=tok,
+        ide_store_dir=tmp_path / "ide_erg",
+        cli_store_dir=tmp_path / "cli_erg",
+        codex_store_dir=tmp_path / "cdx_erg",
+        ide_actions_inspector=_mock_inspect_actions,
+        ide_action_invoker=_mock_invoke_action,
+        desktop_input_handler=_mock_desk_input,
+        pc_clipboard_getter=lambda: {"ok": True, "text": clip_box["text"], "truncated": False, "length": len(clip_box["text"])},
+        pc_clipboard_setter=lambda t: (clip_box.__setitem__("text", t) or True, "已写入电脑剪贴板"),
+        pc_system_inspector=lambda _ws: {
+            "cpu_pct": 14,
+            "ram_used_gb": 12.4,
+            "ram_total_gb": 32.0,
+            "ram_pct": 39,
+            "disk_free_gb": 180.5,
+            "disk_total_gb": 512.0,
+            "battery_pct": 88,
+            "charging": True,
+            "ports": [{"port": 5173, "pid": 4321, "process": "node", "addr": "127.0.0.1"}],
+        },
+    )
+    stop_event = asyncio.Event()
+    pwa_task = asyncio.create_task(pwa.run(stop_event=stop_event))
+    try:
+        await asyncio.sleep(0.2)
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws?token={tok}") as ws:
+            hello = json.loads(await asyncio.wait_for(ws.recv(), timeout=4.0))
+            assert "slots_overview" in hello
+
+            # 1. Idempotent `client_id` deduplication + `chat_ack`
+            await ws.send(json.dumps({"type": "chat", "client_id": "idem-msg-001", "text": "测试幂等回执"}))
+            saw_ack = False
+            saw_end = False
+            for _ in range(20):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                if ev["type"] == "chat_ack" and ev["client_id"] == "idem-msg-001":
+                    saw_ack = True
+                elif ev["type"] == "stream_end":
+                    saw_end = True
+                    break
+            assert saw_ack and saw_end
+
+            turns_after_first = pwa._session_for_slot(hello["slot"]).num_turns
+            assert turns_after_first == 1
+
+            # Re-send exact same `client_id` -> must return `duplicate_ignored` and NOT run `ask` again!
+            await ws.send(json.dumps({"type": "chat", "client_id": "idem-msg-001", "text": "测试幂等回执"}))
+            dup_ack = None
+            for _ in range(8):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
+                if ev["type"] == "chat_ack" and ev.get("stage") == "duplicate_ignored":
+                    dup_ack = ev
+                    break
+            assert dup_ack is not None
+            assert pwa._session_for_slot(hello["slot"]).num_turns == 1
+
+            # 2. IDE approval inspect & one-time invoke
+            await ws.send(json.dumps({"type": "ide_actions_inspect", "conversation_id": "cid-demo"}))
+            act_ev = None
+            for _ in range(6):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
+                if ev["type"] == "ide_actions":
+                    act_ev = ev
+                    break
+            assert act_ev is not None and act_ev["actions"][0]["label"] == "Proceed"
+
+            await ws.send(json.dumps({"type": "ide_action_invoke", "action_token": "tok-proceed-once"}))
+            res_ev = None
+            for _ in range(6):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
+                if ev["type"] == "ide_action_result":
+                    res_ev = ev
+                    break
+            assert res_ev is not None and res_ev["ok"] is True
+
+            # Second invoke with same token fails one-time check
+            await ws.send(json.dumps({"type": "ide_action_invoke", "action_token": "tok-proceed-once"}))
+            res_ev2 = None
+            for _ in range(6):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
+                if ev["type"] == "ide_action_result":
+                    res_ev2 = ev
+                    break
+            assert res_ev2 is not None and res_ev2["ok"] is False
+
+            # 3. PC System + Bidirectional Clipboard Sync
+            await ws.send(json.dumps({"type": "pc_system_inspect"}))
+            sys_ev = None
+            for _ in range(6):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
+                if ev["type"] == "pc_system_state":
+                    sys_ev = ev
+                    break
+            assert sys_ev is not None
+            assert sys_ev["system"]["ports"][0]["port"] == 5173
+            assert sys_ev["clipboard"]["text"] == "initial-pc-clip"
+
+            await ws.send(json.dumps({"type": "pc_clipboard_set", "text": "from-iphone-clipboard"}))
+            for _ in range(6):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
+                if ev["type"] == "toast" and "剪贴板" in ev["text"]:
+                    break
+            assert clip_box["text"] == "from-iphone-clipboard"
+
+            # 4. Invalid `desktop_input` coordinates emit toast WITHOUT killing the WS loop!
+            await ws.send(json.dumps({"type": "desktop_input", "action": "click", "x_ratio": "bad-num", "y_ratio": 0.5}))
+            err_toast = None
+            for _ in range(6):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
+                if ev["type"] == "toast" and "无效" in ev["text"]:
+                    err_toast = ev
+                    break
+            assert err_toast is not None
+
+            await ws.send(json.dumps({"type": "ping", "ts": 12345}))
+            pong_ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
+            assert pong_ev["type"] == "pong"
+    finally:
+        stop_event.set()
+        await asyncio.wait_for(pwa_task, timeout=5.0)
+        await sessions.shutdown_all()

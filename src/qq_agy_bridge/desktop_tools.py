@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import base64
+import json
 import logging
+import math
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -17,6 +20,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 _DESKTOP_UIA_LOCK = threading.Lock()
+_IDE_ACTION_LOCK = threading.Lock()
+_IDE_ACTION_TOKENS: dict[str, dict[str, Any]] = {}
 
 THOUGHT_TAG_RE = re.compile(
     r"<(?:thought|thinking|analysis)\b[^>]*>.*?</(?:thought|thinking|analysis)>",
@@ -1328,3 +1333,539 @@ Write-Output "OK:$newCid"
             return (True, new_cid, "已在电脑端新建 Antigravity 会话并发送")
         except Exception as exc:
             return (False, "", f"新建桌面会话异常：{exc}")
+
+
+def inspect_antigravity_ide_actions(conversation_id: str = "") -> list[dict[str, Any]]:
+    """Scan open PC Antigravity window for visible approval/proceed buttons and issue one-time action tokens."""
+    if sys.platform != "win32":
+        return []
+
+    ps_script = r"""
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+$reqCid = $env:AGY_REQ_CID
+$exactAllow = @(
+    'proceed', 'accept', 'accept all', 'allow', 'allow once', 'approve',
+    'run', 'run command', 'continue', 'retry', 'confirm',
+    '继续', '接受', '全部接受', '允许', '仅允许一次', '同意', '运行', '执行', '重试', '确认'
+)
+
+$root = [System.Windows.Automation.AutomationElement]::RootElement
+$found = @()
+foreach ($el in $root.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)) {
+    try {
+        $hwnd = [long]$el.Current.NativeWindowHandle
+        if ($hwnd -eq 0) { continue }
+        $p = Get-Process -Id $el.Current.ProcessId -ErrorAction SilentlyContinue
+        if ($null -eq $p -or $p.ProcessName -ne 'Antigravity') { continue }
+
+        $activeCid = ""
+        $docCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Document)
+        foreach ($d in $el.FindAll([System.Windows.Automation.TreeScope]::Descendants, $docCond)) {
+            try {
+                $vp = $d.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+                if ($null -ne $vp -and ([string]$vp.Current.Value -match '/c/([A-Za-z0-9_-]{6,80})')) {
+                    $activeCid = $Matches[1]
+                    break
+                }
+            } catch {}
+        }
+        if ($reqCid -ne "" -and $activeCid -ne "" -and $activeCid -ne $reqCid) { continue }
+
+        $btnCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+        foreach ($b in $el.FindAll([System.Windows.Automation.TreeScope]::Descendants, $btnCond)) {
+            try {
+                if (-not $b.Current.IsEnabled -or $b.Current.IsOffscreen) { continue }
+                $invCheck = $null
+                if (-not $b.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$invCheck)) { continue }
+                $nm = ([string]$b.Current.Name).Trim()
+                if ($exactAllow -notcontains $nm.ToLowerInvariant()) { continue }
+                $r = $b.Current.BoundingRectangle
+                if ($r.IsEmpty -or $r.Width -lt 18 -or $r.Height -lt 14) { continue }
+                $rid = ($b.GetRuntimeId() -join '-')
+                if (-not $rid) { continue }
+                $found += [PSCustomObject]@{
+                    hwnd = $hwnd
+                    cid  = $activeCid
+                    rid  = $rid
+                    label = $nm
+                }
+                if ($found.Count -ge 6) { break }
+            } catch {}
+        }
+    } catch {}
+}
+ConvertTo-Json -InputObject @($found) -Compress
+"""
+    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
+    env = os.environ.copy()
+    env["AGY_REQ_CID"] = (conversation_id or "").strip()
+
+    try:
+        res = subprocess.run(
+            ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=6,
+            creationflags=CREATE_NO_WINDOW,
+        )
+        raw = (res.stdout or "").strip()
+        if not raw or raw == "null":
+            return []
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        if not isinstance(parsed, list):
+            return []
+
+        now_mono = time.monotonic()
+        out: list[dict[str, Any]] = []
+        with _IDE_ACTION_LOCK:
+            expired = [k for k, v in _IDE_ACTION_TOKENS.items() if now_mono > float(v.get("expires_mono", 0.0))]
+            for k in expired:
+                _IDE_ACTION_TOKENS.pop(k, None)
+            while len(_IDE_ACTION_TOKENS) > 48:
+                _IDE_ACTION_TOKENS.pop(next(iter(_IDE_ACTION_TOKENS)), None)
+
+            for item in parsed[:6]:
+                if not isinstance(item, dict):
+                    continue
+                hwnd = int(item.get("hwnd") or 0)
+                label = str(item.get("label") or "").strip()
+                cid = str(item.get("cid") or "").strip()
+                rid = str(item.get("rid") or "").strip()
+                if not hwnd or not label or not rid:
+                    continue
+                tok = secrets.token_urlsafe(18)
+                _IDE_ACTION_TOKENS[tok] = {
+                    "hwnd": hwnd,
+                    "cid": cid,
+                    "rid": rid,
+                    "label": label,
+                    "expires_mono": now_mono + 180.0,
+                }
+                out.append({"action_token": tok, "label": label, "conversation_id": cid})
+        return out
+    except Exception as exc:
+        logger.debug("inspect_antigravity_ide_actions failed: %s", exc)
+        return []
+
+
+def invoke_antigravity_ide_action(action_token: str) -> tuple[bool, str]:
+    """Verify and execute a one-time Antigravity IDE approval/proceed button click."""
+    if sys.platform != "win32":
+        return (False, "仅支持 Windows 桌面操作")
+
+    tok = (action_token or "").strip()
+    if not tok:
+        return (False, "确认令牌无效")
+
+    with _IDE_ACTION_LOCK:
+        spec = _IDE_ACTION_TOKENS.pop(tok, None)
+
+    if spec is None or time.monotonic() > float(spec.get("expires_mono", 0.0)):
+        return (False, "确认按钮已过期或已使用，请重新检测")
+
+    ps_script = r"""
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class AgyActWin32 {
+    [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, UIntPtr dwExtraInfo);
+    public static void ClickAt(int x, int y) {
+        SetCursorPos(x, y);
+        System.Threading.Thread.Sleep(30);
+        mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(25);
+        mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+    }
+}
+"@
+[AgyActWin32]::SetProcessDPIAware() | Out-Null
+$targetHwnd = [IntPtr]([long]$env:AGY_ACT_HWND)
+$expectedCid = $env:AGY_ACT_CID
+$expectedRid = $env:AGY_ACT_RID
+$expectedLabel = $env:AGY_ACT_LABEL
+
+$el = $null
+try { $el = [System.Windows.Automation.AutomationElement]::FromHandle($targetHwnd) } catch {}
+if ($null -eq $el) {
+    Write-Output "ERR:目标 Antigravity 窗口已关闭"
+    exit 0
+}
+$p = Get-Process -Id $el.Current.ProcessId -ErrorAction SilentlyContinue
+if ($null -eq $p -or $p.ProcessName -ne 'Antigravity') {
+    Write-Output "ERR:目标窗口归属校验未通过"
+    exit 0
+}
+
+if ($expectedCid -ne "") {
+    $curCid = ""
+    $docCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Document)
+    foreach ($d in $el.FindAll([System.Windows.Automation.TreeScope]::Descendants, $docCond)) {
+        try {
+            $vp = $d.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+            if ($null -ne $vp -and ([string]$vp.Current.Value -match '/c/([A-Za-z0-9_-]{6,80})')) {
+                $curCid = $Matches[1]
+                break
+            }
+        } catch {}
+    }
+    if ($curCid -ne $expectedCid) {
+        Write-Output "ERR:电脑端当前会话已变化，已安全取消点按"
+        exit 0
+    }
+}
+
+$btnCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+$matchedBtn = $null
+foreach ($b in $el.FindAll([System.Windows.Automation.TreeScope]::Descendants, $btnCond)) {
+    try {
+        if (-not $b.Current.IsEnabled -or $b.Current.IsOffscreen) { continue }
+        $rid = ($b.GetRuntimeId() -join '-')
+        if ($rid -eq $expectedRid -and ([string]$b.Current.Name).Trim() -eq $expectedLabel) {
+            $matchedBtn = $b
+            break
+        }
+    } catch {}
+}
+if ($null -eq $matchedBtn) {
+    Write-Output "ERR:原确认按钮「$expectedLabel」已失效或被新请求替换，请重新检测"
+    exit 0
+}
+
+$inv = $null
+if ($matchedBtn.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$inv)) {
+    $inv.Invoke()
+    Write-Output "OK:已在电脑端安全触发「$expectedLabel」"
+    exit 0
+}
+Write-Output "ERR:该按钮不支持安全无焦点调用，请切到远程桌面手动查看"
+"""
+    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
+    env = os.environ.copy()
+    env["AGY_ACT_HWND"] = str(spec["hwnd"])
+    env["AGY_ACT_CID"] = str(spec["cid"])
+    env["AGY_ACT_RID"] = str(spec.get("rid") or "")
+    env["AGY_ACT_LABEL"] = str(spec["label"])
+
+    with _DESKTOP_UIA_LOCK:
+        try:
+            res = subprocess.run(
+                ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
+                env=env,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=8,
+                creationflags=CREATE_NO_WINDOW,
+            )
+            for ln in reversed([x.strip() for x in (res.stdout or "").splitlines() if x.strip()]):
+                if ln.startswith("OK:"):
+                    return (True, ln.removeprefix("OK:").strip())
+                if ln.startswith("ERR:"):
+                    return (False, ln.removeprefix("ERR:").strip())
+            return (False, "执行确认按钮未返回回执")
+        except Exception as exc:
+            return (False, f"执行确认按钮异常：{exc}")
+
+
+ALLOWED_REMOTE_KEYS: dict[str, int] = {
+    "enter": 0x0D,
+    "esc": 0x1B,
+    "space": 0x20,
+    "tab": 0x09,
+    "up": 0x26,
+    "down": 0x28,
+    "backspace": 0x08,
+}
+
+
+def perform_desktop_remote_input(
+    action: str,
+    x_ratio: float = 0.5,
+    y_ratio: float = 0.5,
+    key_name: str = "",
+) -> tuple[bool, str]:
+    """Perform safe, DPI-accurate remote click/scroll or whitelisted key press on the Windows desktop."""
+    if sys.platform != "win32":
+        return (False, "仅支持 Windows 远程桌面控制")
+
+    act = (action or "").strip().lower()
+    if act not in {"click", "double_click", "right_click", "scroll_up", "scroll_down", "key"}:
+        return (False, f"不支持的远程动作：{act}")
+
+    xr = 0.5
+    yr = 0.5
+    vk = 0
+    if act == "key":
+        k_clean = (key_name or "").strip().lower()
+        if k_clean not in ALLOWED_REMOTE_KEYS:
+            return (False, f"按键不在安全白名单中：{k_clean}")
+        vk = ALLOWED_REMOTE_KEYS[k_clean]
+    else:
+        try:
+            xr_val = float(x_ratio)
+            yr_val = float(y_ratio)
+        except (TypeError, ValueError):
+            return (False, "远程坐标格式无效")
+        if not (math.isfinite(xr_val) and math.isfinite(yr_val)):
+            return (False, "远程坐标必须为有限数值")
+        if xr_val < 0.0 or xr_val > 1.0 or yr_val < 0.0 or yr_val > 1.0:
+            return (False, "远程坐标超出屏幕边界")
+        xr = xr_val
+        yr = yr_val
+
+    ps_script = f"""
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class AgyRemoteInput {{
+    [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, UIntPtr dwExtraInfo);
+    [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+}}
+"@
+[AgyRemoteInput]::SetProcessDPIAware() | Out-Null
+$b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+$px = [int]([Math]::Round($b.Left + ($b.Width - 1) * {xr:.6f}))
+$py = [int]([Math]::Round($b.Top + ($b.Height - 1) * {yr:.6f}))
+$act = "{act}"
+if ($act -eq "click") {{
+    [AgyRemoteInput]::SetCursorPos($px, $py) | Out-Null
+    Start-Sleep -Milliseconds 25
+    [AgyRemoteInput]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 25
+    [AgyRemoteInput]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+    Write-Output "OK:已点击桌面 ($px, $py)"
+}} elseif ($act -eq "double_click") {{
+    [AgyRemoteInput]::SetCursorPos($px, $py) | Out-Null
+    Start-Sleep -Milliseconds 25
+    for ($i = 0; $i -lt 2; $i++) {{
+        [AgyRemoteInput]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 20
+        [AgyRemoteInput]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 45
+    }}
+    Write-Output "OK:已双击桌面 ($px, $py)"
+}} elseif ($act -eq "right_click") {{
+    [AgyRemoteInput]::SetCursorPos($px, $py) | Out-Null
+    Start-Sleep -Milliseconds 25
+    [AgyRemoteInput]::mouse_event(0x0008, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 25
+    [AgyRemoteInput]::mouse_event(0x0010, 0, 0, 0, [UIntPtr]::Zero)
+    Write-Output "OK:已右键点击 ($px, $py)"
+}} elseif ($act -eq "scroll_up" -or $act -eq "scroll_down") {{
+    [AgyRemoteInput]::SetCursorPos($px, $py) | Out-Null
+    Start-Sleep -Milliseconds 20
+    $delta = if ($act -eq "scroll_up") {{ 360 }} else {{ -360 }}
+    [AgyRemoteInput]::mouse_event(0x0800, 0, 0, $delta, [UIntPtr]::Zero)
+    Write-Output "OK:已滚动画面"
+}} elseif ($act -eq "key") {{
+    [AgyRemoteInput]::keybd_event([byte]{vk}, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 25
+    [AgyRemoteInput]::keybd_event([byte]{vk}, 0, 0x0002, [UIntPtr]::Zero)
+    Write-Output "OK:已发送按键 {key_name.upper()}"
+}}
+"""
+    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
+    with _DESKTOP_UIA_LOCK:
+        try:
+            res = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=6,
+                creationflags=CREATE_NO_WINDOW,
+            )
+            for ln in reversed([x.strip() for x in (res.stdout or "").splitlines() if x.strip()]):
+                if ln.startswith("OK:"):
+                    return (True, ln.removeprefix("OK:").strip())
+            return (False, "远程桌面输入未返回确认")
+        except Exception as exc:
+            return (False, f"远程桌面输入异常：{exc}")
+
+
+def get_pc_clipboard_text(max_chars: int = 12000) -> dict[str, Any]:
+    """Read plain text from the PC clipboard safely without persisting sensitive content."""
+    if sys.platform != "win32":
+        return {"ok": False, "text": "", "truncated": False}
+
+    ps_script = r"""
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Windows.Forms
+if ([System.Windows.Forms.Clipboard]::ContainsText()) {
+    $t = [System.Windows.Forms.Clipboard]::GetText()
+    $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($t))
+    Write-Output "CLIP_B64:$b64"
+} else {
+    Write-Output "CLIP_EMPTY"
+}
+"""
+    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
+    with _DESKTOP_UIA_LOCK:
+        try:
+            res = subprocess.run(
+                ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+                creationflags=CREATE_NO_WINDOW,
+            )
+            for ln in reversed([x.strip() for x in (res.stdout or "").splitlines() if x.strip()]):
+                if ln.startswith("CLIP_B64:"):
+                    raw_txt = base64.b64decode(ln.removeprefix("CLIP_B64:")).decode("utf-8", errors="replace")
+                    truncated = len(raw_txt) > max_chars
+                    return {"ok": True, "text": raw_txt[:max_chars], "truncated": truncated, "length": len(raw_txt)}
+                if ln == "CLIP_EMPTY":
+                    return {"ok": True, "text": "", "truncated": False, "length": 0}
+            return {"ok": False, "text": "", "truncated": False}
+        except Exception as exc:
+            return {"ok": False, "text": "", "truncated": False, "error": str(exc)}
+
+
+def set_pc_clipboard_text(text: str) -> tuple[bool, str]:
+    """Write UTF-8 text from mobile directly into the PC Windows clipboard."""
+    if sys.platform != "win32":
+        return (False, "仅支持 Windows 剪贴板同步")
+    val = str(text or "")
+    if not val:
+        return (False, "剪贴板文本为空")
+    if len(val.encode("utf-8")) > 65536:
+        return (False, "文本超过 64KB 安全上限")
+
+    ps_script = r"""
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Windows.Forms
+$bytes = [Convert]::FromBase64String($env:AGY_CLIP_SET_B64)
+$txt = [System.Text.Encoding]::UTF8.GetString($bytes)
+[System.Windows.Forms.Clipboard]::SetText($txt)
+Write-Output "OK"
+"""
+    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
+    env = os.environ.copy()
+    env["AGY_CLIP_SET_B64"] = base64.b64encode(val.encode("utf-8")).decode("ascii")
+    with _DESKTOP_UIA_LOCK:
+        try:
+            res = subprocess.run(
+                ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
+                env=env,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+                creationflags=CREATE_NO_WINDOW,
+            )
+            if "OK" in (res.stdout or ""):
+                return (True, f"已写入电脑剪贴板（{len(val)} 字）")
+            return (False, "写入电脑剪贴板未确认")
+        except Exception as exc:
+            return (False, f"写入电脑剪贴板失败：{exc}")
+
+
+def inspect_pc_system_and_ports(workspace: Path | None = None) -> dict[str, Any]:
+    """Return a fast read-only snapshot of PC CPU/RAM/Disk/Battery & active local dev ports."""
+    target_disk = workspace if (workspace and workspace.exists()) else Path.cwd()
+    disk_free_gb = 0.0
+    disk_total_gb = 0.0
+    try:
+        du = shutil.disk_usage(target_disk)
+        disk_free_gb = round(du.free / (1024**3), 1)
+        disk_total_gb = round(du.total / (1024**3), 1)
+    except OSError:
+        pass
+
+    info: dict[str, Any] = {
+        "cpu_pct": 0,
+        "ram_used_gb": 0.0,
+        "ram_total_gb": 0.0,
+        "ram_pct": 0,
+        "disk_free_gb": disk_free_gb,
+        "disk_total_gb": disk_total_gb,
+        "battery_pct": None,
+        "charging": None,
+        "ports": [],
+    }
+    if sys.platform != "win32":
+        return info
+
+    ps_script = r"""
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+$cpu = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average
+$bat = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue | Select-Object -First 1
+$totalMb = if ($os) { [double]$os.TotalVisibleMemorySize / 1024.0 } else { 0 }
+$freeMb = if ($os) { [double]$os.FreePhysicalMemory / 1024.0 } else { 0 }
+$usedMb = [Math]::Max(0, $totalMb - $freeMb)
+
+$conns = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+    Where-Object { $_.LocalPort -ge 1024 -and $_.LocalPort -lt 49152 } |
+    Sort-Object LocalPort
+$seenPorts = @{}
+$ports = @()
+foreach ($c in $conns) {
+    $pt = [int]$c.LocalPort
+    if ($seenPorts.ContainsKey($pt)) { continue }
+    $p = Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue
+    $pname = if ($p) { [string]$p.ProcessName } else { "" }
+    if ($pname -in @("svchost", "System", "lsass", "services", "wininit", "spoolsv")) { continue }
+    $seenPorts[$pt] = $true
+    $ports += [PSCustomObject]@{
+        port = $pt
+        pid = [int]$c.OwningProcess
+        process = $pname
+        addr = [string]$c.LocalAddress
+    }
+    if ($ports.Count -ge 16) { break }
+}
+
+$out = [PSCustomObject]@{
+    cpu_pct = if ($cpu -and $null -ne $cpu.Average) { [int][Math]::Round($cpu.Average) } else { 0 }
+    ram_used_gb = [Math]::Round($usedMb / 1024.0, 1)
+    ram_total_gb = [Math]::Round($totalMb / 1024.0, 1)
+    ram_pct = if ($totalMb -gt 0) { [int][Math]::Round(($usedMb / $totalMb) * 100) } else { 0 }
+    battery_pct = if ($bat) { [int]$bat.EstimatedChargeRemaining } else { $null }
+    charging = if ($bat) { [bool]($bat.BatteryStatus -eq 2) } else { $null }
+    ports = @($ports)
+}
+ConvertTo-Json -InputObject $out -Depth 4 -Compress
+"""
+    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
+    try:
+        res = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=6,
+            creationflags=CREATE_NO_WINDOW,
+        )
+        raw = (res.stdout or "").strip()
+        if raw:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                info.update(parsed)
+    except Exception as exc:
+        logger.debug("inspect_pc_system_and_ports warning: %s", exc)
+    return info

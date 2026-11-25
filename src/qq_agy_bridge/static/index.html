@@ -1191,6 +1191,238 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+
+    /* ── Ergonomic & Expert Power Upgrades ── */
+    .activity-badge {
+      position: absolute;
+      top: 3px;
+      right: 1px;
+      min-width: 15px;
+      height: 15px;
+      padding: 0 4px;
+      border-radius: 999px;
+      background: var(--accent-green);
+      color: #041b12;
+      font-size: 10px;
+      font-weight: 800;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 0 2px var(--bg-main);
+    }
+
+    .jump-bottom-btn.has-new {
+      width: auto;
+      padding: 0 13px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.92);
+      border-color: rgba(110, 231, 183, 0.55);
+      color: #04160f;
+      font-size: 12px;
+      font-weight: 700;
+      gap: 5px;
+    }
+
+    .user-meta-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 5px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .user-rcpt { opacity: 0.85; }
+    .user-act-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 11px;
+      padding: 2px 5px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .user-act-btn:active { color: var(--text-pri); background: rgba(255,255,255,0.08); }
+
+    .code-card.collapsed pre {
+      max-height: 290px;
+      overflow-y: hidden;
+      mask-image: linear-gradient(180deg, #000 74%, transparent 100%);
+      -webkit-mask-image: linear-gradient(180deg, #000 74%, transparent 100%);
+    }
+    .code-expand-bar {
+      width: 100%;
+      border: none;
+      border-top: 1px solid var(--border-hairline);
+      background: #111116;
+      color: var(--text-sec);
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: center;
+    }
+    .code-expand-bar:active { background: #1a1a22; color: #fff; }
+
+    .quick-strip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow-x: auto;
+      max-width: 768px;
+      margin: 0 auto 7px;
+      padding: 0 2px;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    .quick-strip::-webkit-scrollbar { display: none; }
+    .q-chip {
+      flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.045);
+      border: 1px solid var(--border-subtle);
+      box-shadow: var(--specular-top);
+      color: var(--text-sec);
+      padding: 5px 11px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.14s, color 0.14s, transform 0.1s;
+    }
+    .q-chip:active { transform: scale(0.95); background: rgba(255,255,255,0.11); color: #fff; }
+    .q-chip.approve {
+      background: rgba(16, 185, 129, 0.16);
+      border-color: rgba(16, 185, 129, 0.48);
+      color: #6ee7b7;
+      font-weight: 600;
+    }
+
+    .slash-menu {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: calc(100% + 4px);
+      max-width: 520px;
+      margin: 0 auto;
+      background: rgba(24, 24, 30, 0.96);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border-med);
+      box-shadow: var(--specular-top), 0 14px 40px rgba(0, 0, 0, 0.68);
+      border-radius: 16px;
+      padding: 5px;
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      z-index: 35;
+    }
+    .slash-menu.show { display: flex; }
+    .slash-item {
+      border: none;
+      background: transparent;
+      color: var(--text-pri);
+      padding: 8px 11px;
+      border-radius: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: left;
+    }
+    .slash-item:active, .slash-item:hover { background: rgba(255,255,255,0.08); }
+    .slash-cmd { font-family: "SF Mono", Consolas, monospace; font-weight: 600; color: #fff; }
+    .slash-desc { font-size: 11.5px; color: var(--text-muted); }
+
+    .screen-wrap {
+      position: relative;
+      width: 100%;
+      overflow: hidden;
+      border-radius: 14px;
+    }
+    .screen-wrap.touch-active .screen-frame {
+      border-color: rgba(16, 185, 129, 0.55);
+      cursor: crosshair;
+    }
+    .tap-ripple {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      margin-left: -14px;
+      margin-top: -14px;
+      border-radius: 50%;
+      border: 2px solid #6ee7b7;
+      background: rgba(16, 185, 129, 0.25);
+      pointer-events: none;
+      animation: rippleOut 0.52s ease-out forwards;
+    }
+    @keyframes rippleOut {
+      from { transform: scale(0.4); opacity: 1; }
+      to { transform: scale(1.7); opacity: 0; }
+    }
+    .desk-key-bar {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      margin-top: 9px;
+      padding-bottom: 2px;
+      scrollbar-width: none;
+    }
+    .desk-key-bar::-webkit-scrollbar { display: none; }
+
+    .pin-star-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 13px;
+      padding: 0 4px;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .pin-star-btn.pinned { color: #fbbf24; }
+    .unread-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .diff-hunk-card {
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #08080a;
+      margin-bottom: 8px;
+    }
+    .diff-hunk-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 11px;
+      background: #131318;
+      border-bottom: 1px solid var(--border-hairline);
+      font-family: "SF Mono", Consolas, monospace;
+      font-size: 11.5px;
+      color: #93c5fd;
+    }
+    .sys-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .sys-card {
+      background: rgba(255,255,255,0.035);
+      border: 1px solid var(--border-hairline);
+      border-radius: 12px;
+      padding: 10px;
+    }
+    .sys-val { font-size: 16px; font-weight: 700; color: #fff; margin-top: 3px; }
+    .sys-lbl { font-size: 11px; color: var(--text-muted); }
   </style>
 </head>
 <body>
@@ -1204,6 +1436,7 @@
         <line x1="3" y1="16" x2="15" y2="16"></line>
       </svg>
       <span id="connDot" class="conn-dot"></span>
+      <span id="activityBadge" class="activity-badge"></span>
     </button>
 
     <button id="modelBtn" class="center-model-btn" title="切换模型">
@@ -1277,6 +1510,7 @@
 
     <div class="drawer-tabs">
       <button class="drawer-tab active" data-f="all">全部 <span id="cntAll"></span></button>
+      <button class="drawer-tab" data-f="active">⚡待看 <span id="cntActive"></span></button>
       <button class="drawer-tab" data-f="ide">Antigravity <span id="cntIde"></span></button>
       <button id="fltCodexBtn" class="drawer-tab" data-f="codex">Codex <span id="cntCodex"></span></button>
       <button class="drawer-tab" data-f="cli">远程 <span id="cntCli"></span></button>
@@ -1326,6 +1560,7 @@
     </main>
     <button id="jumpBottomBtn" type="button" class="jump-bottom-btn" title="回到底部">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+      <span id="jumpBtnTxt" style="display:none">有新内容</span>
     </button>
   </div>
 
@@ -1344,11 +1579,15 @@
     </button>
     <button id="popLiveDeskBtn" class="pop-item">
       <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2.5"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></span>
-      <span>打开实时远程桌面</span>
+      <span>触控远程桌面</span>
     </button>
     <button id="popDiffBtn" class="pop-item">
       <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg></span>
       <span>浏览工作区与 Diff</span>
+    </button>
+    <button id="popClipSysBtn" class="pop-item">
+      <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path></svg></span>
+      <span>电脑状态与剪贴板</span>
     </button>
     <button id="popWsSwitchBtn" class="pop-item">
       <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></span>
@@ -1358,6 +1597,23 @@
 
   <!-- Precision Glass Bottom Composer -->
   <footer class="composer-outer">
+    <div id="slashMenu" class="slash-menu">
+      <button type="button" class="slash-item" data-scmd="/screen"><span class="slash-cmd">/screen</span><span class="slash-desc">立即截取电脑桌面画面</span></button>
+      <button type="button" class="slash-item" data-scmd="/status"><span class="slash-cmd">/status</span><span class="slash-desc">查看当前模型与容灾额度池</span></button>
+      <button type="button" class="slash-item" data-sfill="/model "><span class="slash-cmd">/model</span><span class="slash-desc">切换模型 (balanced / fast / smart / gemini)</span></button>
+      <button type="button" class="slash-item" data-scmd="/clean"><span class="slash-cmd">/clean</span><span class="slash-desc">安全清理过期缓存图片</span></button>
+      <button type="button" class="slash-item" data-scmd="/new"><span class="slash-cmd">/new</span><span class="slash-desc">开启全新对话上下文</span></button>
+    </div>
+
+    <div id="quickStrip" class="quick-strip">
+      <span id="ideApproveInline" style="display:contents"></span>
+      <button type="button" class="q-chip" id="qCheckIdeBtn">⚡ 检测待确认</button>
+      <button type="button" class="q-chip" data-qprompt="继续推进完成剩余步骤">▶ 继续推进</button>
+      <button type="button" class="q-chip" data-qprompt="运行全量测试，如果发现报错请直接修复">🧪 跑测试修错</button>
+      <button type="button" class="q-chip" data-qprompt="请仔细自查刚才的改动是否存在边界 Bug 或遗漏，发现直接优化">🔍 自查优化</button>
+      <button type="button" class="q-chip" id="qClipSysBtn">📋 电脑剪贴板</button>
+    </div>
+
     <input id="filePicker" type="file" multiple hidden />
     <div class="composer-row">
       <button id="plusBtn" class="plus-btn" title="更多工具与附件">
@@ -1440,35 +1696,48 @@
       <div class="sheet-handle"></div>
       <div class="sheet-hdr">
         <h3>电脑实时桌面</h3>
-        <div style="display:flex; gap:7px">
+        <div style="display:flex; gap:6px; flex-wrap:wrap">
+          <button id="toggleTouchBtn" class="pill-btn">👆 触控点按</button>
           <button id="toggleLiveBtn" class="pill-btn">实时跟随</button>
           <button id="refreshDeskBtn" class="pill-btn">刷新</button>
           <button id="closeDeskBtn" class="pill-btn">关闭</button>
         </div>
       </div>
-      <img id="deskImg" class="screen-frame" alt="正在获取电脑画面..." />
-      <div id="deskTs" style="font-size:11.5px; color:var(--text-muted); margin-top:8px; text-align:right">点击图片可全屏缩放查看</div>
+      <div id="deskApproveBar" style="display:none;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
+      <div id="screenWrap" class="screen-wrap">
+        <img id="deskImg" class="screen-frame" alt="正在获取电脑画面..." />
+      </div>
+      <div class="desk-key-bar">
+        <button type="button" class="pill-btn desk-kbtn" data-dkey="enter">↵ Enter</button>
+        <button type="button" class="pill-btn desk-kbtn" data-dkey="esc">Esc</button>
+        <button type="button" class="pill-btn desk-kbtn" data-dkey="space">Space</button>
+        <button type="button" class="pill-btn desk-sbtn" data-dact="scroll_up">↑ 上滚</button>
+        <button type="button" class="pill-btn desk-sbtn" data-dact="scroll_down">↓ 下滚</button>
+        <button type="button" class="pill-btn" id="deskDetectBtn">⚡ 检测窗口确认按钮</button>
+      </div>
+      <div id="deskTs" style="font-size:11.5px; color:var(--text-muted); margin-top:7px; text-align:right">缩放模式：点画面放大查看 · 开启「触控点按」可直接远程点击</div>
     </div>
   </div>
 
-  <!-- Workspace File Explorer & Git Diff Sheet -->
+  <!-- Workspace File Explorer, Git Diff & PC System/Clipboard Sheet -->
   <div id="wsModal" class="overlay">
     <div class="sheet">
       <div class="sheet-handle"></div>
       <div class="sheet-hdr">
-        <h3 id="wsModalTitle">工作区文件与变更</h3>
+        <h3 id="wsModalTitle">工作区与电脑中枢</h3>
         <div style="display:flex; gap:7px">
           <button id="refreshWsBtn" class="pill-btn">刷新</button>
           <button id="closeWsBtn" class="pill-btn">关闭</button>
         </div>
       </div>
 
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-shrink:0">
-        <div style="display:flex;gap:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-shrink:0;overflow-x:auto">
+        <div style="display:flex;gap:6px;flex-shrink:0">
           <button id="wsTabGit" class="pill-btn" style="background:#fff;color:#0d0d0d">Git 变更 (<span id="gitCntBadge">0</span>)</button>
           <button id="wsTabFiles" class="pill-btn">目录文件</button>
+          <button id="wsTabSys" class="pill-btn">💻 电脑与剪贴板</button>
         </div>
-        <span id="gitBranchLbl" style="font-size:12px;color:var(--text-sec);font-family:Consolas,monospace"></span>
+        <span id="gitBranchLbl" style="font-size:12px;color:var(--text-sec);font-family:Consolas,monospace;white-space:nowrap"></span>
       </div>
 
       <div id="wsBody" class="insp-body"></div>
@@ -1624,10 +1893,110 @@
   let wsTab = 'git';
   let currentRelDir = '';
   let latestWsData = null;
+  let latestPcSysData = null;
+  let deskTouchMode = false;
+  let hasUnreadBelow = false;
+  let ideActionPollTimer = null;
 
   const streamBuffers = new Map();
   const rawMessageTexts = new Map();
   const renderedIds = new Set();
+  const slotScrollMap = new Map();
+  const outboundQueue = [];
+  let slotsOverview = { running: [], unread: [] };
+
+  let slotDrafts = {};
+  let pinnedConvIds = new Set();
+  try {
+    slotDrafts = JSON.parse(localStorage.getItem('agy_slot_drafts_v1') || '{}') || {};
+  } catch (_) { slotDrafts = {}; }
+  try {
+    const rawPins = JSON.parse(localStorage.getItem('agy_pinned_convs_v1') || '[]');
+    if (Array.isArray(rawPins)) pinnedConvIds = new Set(rawPins);
+  } catch (_) {}
+
+  function saveCurrentSlotState() {
+    const key = activeSlot || 'default-chat';
+    slotDrafts[key] = msgInput.value || '';
+    try { localStorage.setItem('agy_slot_drafts_v1', JSON.stringify(slotDrafts)); } catch (_) {}
+    slotScrollMap.set(key, {
+      top: chatScroll.scrollTop,
+      nearBottom: isNearBottom(160),
+    });
+  }
+
+  function restoreSlotDraft(slotKey) {
+    const key = slotKey || activeSlot || 'default-chat';
+    const saved = Object.prototype.hasOwnProperty.call(slotDrafts, key) ? slotDrafts[key] : '';
+    if (document.activeElement !== msgInput || !msgInput.value) {
+      msgInput.value = saved;
+      msgInput.style.height = 'auto';
+      if (saved) msgInput.style.height = Math.min(msgInput.scrollHeight, 136) + 'px';
+      refreshSendBtnVisual();
+    }
+  }
+
+  function togglePinConv(cid) {
+    if (!cid) return;
+    if (pinnedConvIds.has(cid)) pinnedConvIds.delete(cid);
+    else pinnedConvIds.add(cid);
+    try { localStorage.setItem('agy_pinned_convs_v1', JSON.stringify(Array.from(pinnedConvIds))); } catch (_) {}
+    renderConvList();
+  }
+
+  function applySlotsOverview(ov) {
+    if (!ov || typeof ov !== 'object') return;
+    slotsOverview = {
+      running: Array.isArray(ov.running) ? ov.running : [],
+      unread: Array.isArray(ov.unread) ? ov.unread : [],
+    };
+    const bgRunning = slotsOverview.running.filter((r) => r.slot !== activeSlot).length;
+    const unreadCnt = slotsOverview.unread.length;
+    const totalAttn = bgRunning + unreadCnt;
+    const badge = $('activityBadge');
+    if (totalAttn > 0) {
+      badge.textContent = String(totalAttn);
+      badge.style.display = 'inline-flex';
+    } else {
+      badge.style.display = 'none';
+    }
+    updateConvCounts();
+    if (sidebarDrawer.classList.contains('show')) renderConvList();
+  }
+
+  function renderIdeActionButtons(actions) {
+    const inlineBox = $('ideApproveInline');
+    const deskBox = $('deskApproveBar');
+    inlineBox.innerHTML = '';
+    deskBox.innerHTML = '';
+    const arr = Array.isArray(actions) ? actions : [];
+    if (!arr.length) {
+      deskBox.style.display = 'none';
+      return;
+    }
+    deskBox.style.display = 'flex';
+    arr.forEach((act) => {
+      const makeBtn = () => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'q-chip approve';
+        b.textContent = `✓ 点按电脑「${act.label}」`;
+        b.onclick = () => {
+          if (!ws || ws.readyState !== 1) return showToast('尚未连接');
+          b.disabled = true;
+          b.textContent = `正在触发「${act.label}」...`;
+          ws.send(JSON.stringify({
+            type: 'ide_action_invoke',
+            action_token: act.action_token,
+            conversation_id: activeConvId || '',
+          }));
+        };
+        return b;
+      };
+      inlineBox.appendChild(makeBtn());
+      deskBox.appendChild(makeBtn());
+    });
+  }
 
   function showToast(text, ms = 2400) {
     const el = $('toast');
@@ -1855,8 +2224,14 @@
         } else if (lines.length > 1 && !lines[0].trim()) {
           lines.shift();
         }
-        const code = escapeHtml(lines.join('\n').trim());
-        return `<div class="code-card"><div class="code-hdr"><span>${escapeHtml(lang)}</span><button type="button" class="copy-code-btn">复制代码</button></div><pre><code>${code}</code></pre></div>`;
+        const trimmedCode = lines.join('\n').trim();
+        const lineCount = trimmedCode ? trimmedCode.split('\n').length : 0;
+        const code = escapeHtml(trimmedCode);
+        const isLong = lineCount > 24;
+        const expandHtml = isLong
+          ? `<button type="button" class="code-expand-bar" data-lines="${lineCount}">展开全部代码（共 ${lineCount} 行）▾</button>`
+          : '';
+        return `<div class="code-card${isLong ? ' collapsed' : ''}"><div class="code-hdr"><span>${escapeHtml(lang)}${lineCount > 4 ? ' · ' + lineCount + ' 行' : ''}</span><button type="button" class="copy-code-btn">复制代码</button></div><pre><code>${code}</code></pre>${expandHtml}</div>`;
       }
       return renderMarkdownBlocks(part);
     }).join('');
@@ -1871,6 +2246,16 @@
       else if (sug.dataset.act === 'desktop') openDesktopModal();
       return;
     }
+    const expBtn = e.target.closest('.code-expand-bar');
+    if (expBtn) {
+      const card = expBtn.closest('.code-card');
+      if (card) {
+        const collapsed = card.classList.toggle('collapsed');
+        const n = expBtn.dataset.lines || '';
+        expBtn.textContent = collapsed ? `展开全部代码（共 ${n} 行）▾` : '收起长代码 ▴';
+      }
+      return;
+    }
     const zoomImg = e.target.closest('.chat-img');
     if (zoomImg && zoomImg.src) {
       openLightbox(zoomImg.src);
@@ -1881,6 +2266,22 @@
       const card = codeBtn.closest('.code-card');
       const codeEl = card && card.querySelector('code');
       if (codeEl) copyTextSafe(codeEl.innerText, codeBtn, '已复制');
+      return;
+    }
+    const userCopyBtn = e.target.closest('.copy-user-btn');
+    if (userCopyBtn && userCopyBtn.dataset.uid) {
+      const uTxt = rawMessageTexts.get(userCopyBtn.dataset.uid) || '';
+      if (uTxt) copyTextSafe(uTxt, userCopyBtn, '已复制');
+      return;
+    }
+    const userEditBtn = e.target.closest('.reedit-user-btn');
+    if (userEditBtn && userEditBtn.dataset.uid) {
+      const uTxt = rawMessageTexts.get(userEditBtn.dataset.uid) || '';
+      if (uTxt) {
+        msgInput.value = uTxt;
+        msgInput.dispatchEvent(new Event('input'));
+        msgInput.focus();
+      }
       return;
     }
     const msgBtn = e.target.closest('.copy-msg-btn');
@@ -1895,19 +2296,31 @@
   }
 
   function updateJumpButton() {
-    if (isNearBottom(220)) jumpBottomBtn.classList.remove('show');
-    else jumpBottomBtn.classList.add('show');
+    if (isNearBottom(200)) {
+      hasUnreadBelow = false;
+      jumpBottomBtn.classList.remove('show', 'has-new');
+      $('jumpBtnTxt').style.display = 'none';
+    } else {
+      jumpBottomBtn.classList.add('show');
+      jumpBottomBtn.classList.toggle('has-new', hasUnreadBelow);
+      $('jumpBtnTxt').style.display = hasUnreadBelow ? 'inline' : 'none';
+    }
   }
   chatScroll.addEventListener('scroll', updateJumpButton, { passive: true });
   jumpBottomBtn.onclick = () => {
+    hasUnreadBelow = false;
     chatScroll.scrollTo({ top: chatScroll.scrollHeight, behavior: 'smooth' });
+    updateJumpButton();
   };
 
-  function scrollToBottom(force = false) {
-    if (force || isNearBottom(160)) {
+  function scrollToBottom(force = false, markNew = false) {
+    if (force || isNearBottom(165)) {
+      hasUnreadBelow = false;
       chatScroll.scrollTop = chatScroll.scrollHeight;
-      jumpBottomBtn.classList.remove('show');
+      jumpBottomBtn.classList.remove('show', 'has-new');
+      $('jumpBtnTxt').style.display = 'none';
     } else {
+      if (markNew) hasUnreadBelow = true;
       updateJumpButton();
     }
   }
@@ -1971,13 +2384,26 @@
 
   function setStreamingState(active) {
     isStreaming = active;
-    if (!active) activeStreamMsgId = '';
+    clearInterval(ideActionPollTimer);
+    ideActionPollTimer = null;
+    if (!active) {
+      activeStreamMsgId = '';
+      renderIdeActionButtons([]);
+    } else if (activeConvStore === 'ide' || !activeConvStore) {
+      ideActionPollTimer = setInterval(() => {
+        if (ws && ws.readyState === 1 && isStreaming) {
+          ws.send(JSON.stringify({ type: 'ide_actions_inspect', conversation_id: activeConvId || '' }));
+        }
+      }, 4200);
+    }
     refreshSendBtnVisual();
   }
 
-  function appendUserBubble(item, autoScroll = true) {
-    if (item.id && renderedIds.has(item.id)) return;
-    if (item.id) renderedIds.add(item.id);
+  function appendUserBubble(item, autoScroll = true, initialReceipt = '') {
+    const uid = String(item.id || ('u-hist-' + Math.random().toString(36).slice(2, 8)));
+    if (renderedIds.has(uid)) return;
+    renderedIds.add(uid);
+    if (item.text) rawMessageTexts.set(uid, item.text);
     hideHero();
     const row = document.createElement('div');
     row.className = 'msg-row user';
@@ -2007,6 +2433,28 @@
       pill.textContent = item.text;
       row.appendChild(pill);
     }
+    const meta = document.createElement('div');
+    meta.className = 'user-meta-row';
+    const rcpt = document.createElement('span');
+    rcpt.className = 'user-rcpt';
+    rcpt.id = 'rcpt-' + uid;
+    rcpt.textContent = initialReceipt;
+    meta.appendChild(rcpt);
+    if (item.text) {
+      const cp = document.createElement('button');
+      cp.type = 'button';
+      cp.className = 'user-act-btn copy-user-btn';
+      cp.dataset.uid = uid;
+      cp.textContent = '复制';
+      const ed = document.createElement('button');
+      ed.type = 'button';
+      ed.className = 'user-act-btn reedit-user-btn';
+      ed.dataset.uid = uid;
+      ed.textContent = '重填';
+      meta.appendChild(cp);
+      meta.appendChild(ed);
+    }
+    row.appendChild(meta);
     chatScroll.appendChild(row);
     if (autoScroll) scrollToBottom(true);
   }
@@ -2473,12 +2921,45 @@
         subInfo.dataset.wsName = (data.workspace || '').split(/[\\/]/).pop() || '';
         refreshHeaderSubtitle();
         setStreamingState(Boolean(data.busy));
+        if (data.slots_overview) applySlotsOverview(data.slots_overview);
+        restoreSlotDraft(activeSlot);
+        const savedAnchor = slotScrollMap.get(activeSlot);
         if (Array.isArray(data.history) && data.history.length) {
-          renderHistoryBatch(data.history, false);
+          renderHistoryBatch(data.history, Boolean(savedAnchor && !savedAnchor.nearBottom));
+          if (savedAnchor && !savedAnchor.nearBottom) {
+            chatScroll.scrollTop = savedAnchor.top;
+            updateJumpButton();
+          }
         }
         if (data.inflight) {
           restoreInflightStream(data.inflight);
         }
+        // Flush any non-expired queued messages sent while waking up from lock screen!
+        const nowTs = Date.now();
+        while (outboundQueue.length && ws === wsInstance && wsInstance.readyState === 1) {
+          const qItem = outboundQueue.shift();
+          if (qItem._queuedAt && nowTs - qItem._queuedAt > 120000) continue;
+          const cleanPayload = Object.assign({}, qItem);
+          delete cleanPayload._queuedAt;
+          wsInstance.send(JSON.stringify(cleanPayload));
+        }
+      } else if (data.type === 'slots_overview') {
+        applySlotsOverview(data);
+      } else if (data.type === 'chat_ack') {
+        const rcptEl = document.getElementById('rcpt-' + data.client_id);
+        if (rcptEl && data.label) rcptEl.textContent = data.label;
+      } else if (data.type === 'ide_actions') {
+        renderIdeActionButtons(data.actions || []);
+      } else if (data.type === 'ide_action_result') {
+        showToast(data.note || (data.ok ? '已触发电脑端确认按钮' : '未触发按钮'));
+      } else if (data.type === 'pc_system_state') {
+        latestPcSysData = data;
+        if (wsTab === 'sys') renderWsInspector();
+      } else if (data.type === 'pc_clipboard') {
+        if (!latestPcSysData) latestPcSysData = { system: {}, clipboard: data };
+        else latestPcSysData.clipboard = data;
+        if (wsTab === 'sys') renderWsInspector();
+        if (data.ok && data.text) showToast(`已读取电脑剪贴板（${data.length || data.text.length} 字）`);
       } else if (data.type === 'meta_update') {
         if (data.slot) activeSlot = data.slot;
         if (data.model) currentModelLabel = data.model;
@@ -2495,6 +2976,7 @@
         renderConvList();
         renderWorkspaceChips(data.workspaces || [], data.current_workspace || '');
       } else if (data.type === 'conversation_loaded') {
+        const switchingSlot = !data.silent && data.slot && data.slot !== activeSlot;
         activeSlot = data.slot || activeSlot;
         activeConvId = data.conversation_id || '';
         activeConvStore = data.store || '';
@@ -2504,21 +2986,32 @@
         if (data.workspace) subInfo.dataset.wsName = data.workspace.split(/[\\/]/).pop() || '';
         refreshHeaderSubtitle();
         setStreamingState(Boolean(data.busy));
+        if (data.slots_overview) applySlotsOverview(data.slots_overview);
+        if (switchingSlot) restoreSlotDraft(activeSlot);
         const hist = data.history || [];
+        const savedScroll = slotScrollMap.get(activeSlot);
         if (!hist.length && !data.inflight) {
           chatScroll.innerHTML = `<div class="empty-hero"><div class="hero-logo">✦</div><h2>${escapeHtml(data.title || '空会话')}</h2></div>`;
           renderedIds.clear();
           streamBuffers.clear();
         } else {
-          renderHistoryBatch(hist, Boolean(data.silent));
+          renderHistoryBatch(hist, Boolean(data.silent) || Boolean(savedScroll && !savedScroll.nearBottom));
+          if (!data.silent && savedScroll && !savedScroll.nearBottom) {
+            chatScroll.scrollTop = savedScroll.top;
+            updateJumpButton();
+          }
         }
         if (data.inflight) {
           restoreInflightStream(data.inflight);
         }
         if (!data.silent) {
           closeDrawer();
+          if (activeConvStore === 'ide' && ws && ws.readyState === 1) {
+            ws.send(JSON.stringify({ type: 'ide_actions_inspect', conversation_id: activeConvId }));
+          }
         }
       } else if (data.type === 'clear_history') {
+        if (data.slot) activeSlot = data.slot;
         clearOptimisticPlaceholder();
         setStreamingState(false);
         hasMoreHistory = false;
@@ -2527,6 +3020,7 @@
         activeConvStore = '';
         $('headerTitle').textContent = '反重力助手';
         refreshHeaderSubtitle();
+        restoreSlotDraft(activeSlot);
         chatScroll.innerHTML = buildHeroHtml();
         renderedIds.clear();
         streamBuffers.clear();
@@ -2543,6 +3037,7 @@
         if (data.slot && activeSlot && data.slot !== activeSlot) return;
         appendUserBubble(data.item);
       } else if (data.type === 'stream_start') {
+        if (data.slots_overview) applySlotsOverview(data.slots_overview);
         if (data.slot && activeSlot && data.slot !== activeSlot) return;
         clearOptimisticPlaceholder();
         setStreamingState(true);
@@ -2572,19 +3067,22 @@
         ensureAssistantRow(data.msg_id);
         const bub = document.getElementById('bub-' + data.msg_id);
         if (bub) bub.innerHTML = renderRichText(cur) + '<span class="gpt-dot"></span>';
-        scrollToBottom();
+        scrollToBottom(false, true);
       } else if (data.type === 'stream_end') {
+        if (data.slots_overview) applySlotsOverview(data.slots_overview);
         if (data.slot && activeSlot && data.slot !== activeSlot) return;
         clearOptimisticPlaceholder();
         setStreamingState(false);
         streamBuffers.delete(data.item.id);
-        finalizeAssistantBubble(data.item);
+        finalizeAssistantBubble(data.item, false);
+        scrollToBottom(false, true);
         notifyReplyFinished(data.item.text || '');
       } else if (data.type === 'desktop_frame') {
         const sep = mediaUrl(data.media_id).includes('?') ? '&' : '?';
         const u = mediaUrl(data.media_id) + sep + '_t=' + data.ts;
         $('deskImg').src = u;
-        $('deskTs').textContent = '更新于 ' + new Date(data.ts).toLocaleTimeString() + ' · 点击画面可全屏缩放';
+        const modeHint = deskTouchMode ? '触控模式已开启：点画面直接点击电脑' : '缩放模式：点画面全屏查看';
+        $('deskTs').textContent = '更新于 ' + new Date(data.ts).toLocaleTimeString() + ' · ' + modeHint;
       } else if (data.type === 'upload_done') {
         pendingAttachments.push(data);
         renderPendingAttachments();
@@ -2714,13 +3212,11 @@
 
   function sendChat(overrideText = null) {
     setPlusOpen(false);
-    if (!ws || ws.readyState !== 1) {
-      handleAppWakeup();
-      return showToast('正在重连，请稍候...');
-    }
+    $('slashMenu').classList.remove('show');
     if (isStreaming && overrideText === null) {
-      // Stop ONLY the current conversation's stream without losing any text typed in msgInput!
-      ws.send(JSON.stringify({ type: 'cancel', slot: activeSlot, msg_id: activeStreamMsgId }));
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'cancel', slot: activeSlot, msg_id: activeStreamMsgId }));
+      }
       return;
     }
     const text = overrideText !== null ? overrideText : msgInput.value.trim();
@@ -2730,23 +3226,41 @@
     }
     const clientId = 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     const atts = pendingAttachments.splice(0, pendingAttachments.length);
-
-    appendUserBubble({ id: clientId, role: 'user', text, attachments: atts });
-    showOptimisticPlaceholder();
-    setStreamingState(true);
-
-    ws.send(JSON.stringify({
+    const payload = {
       type: 'chat',
       slot: activeSlot,
       client_id: clientId,
       text,
       attachments: atts,
-    }));
+    };
+
+    const isConnected = Boolean(ws && ws.readyState === 1);
+    appendUserBubble(
+      { id: clientId, role: 'user', text, attachments: atts },
+      true,
+      isConnected ? '发送中...' : '⏳ 重连中，恢复后自动投递'
+    );
+
+    if (isConnected) {
+      showOptimisticPlaceholder();
+      setStreamingState(true);
+      ws.send(JSON.stringify(payload));
+    } else {
+      if (outboundQueue.length >= 5) outboundQueue.shift();
+      outboundQueue.push(Object.assign({ _queuedAt: Date.now() }, payload));
+      handleAppWakeup();
+    }
+
     renderPendingAttachments();
     if (overrideText === null) {
       msgInput.value = '';
       msgInput.style.height = 'auto';
-      try { localStorage.removeItem('agy_pwa_draft'); } catch (_) {}
+      const sk = activeSlot || 'default-chat';
+      slotDrafts[sk] = '';
+      try {
+        localStorage.setItem('agy_slot_drafts_v1', JSON.stringify(slotDrafts));
+        localStorage.removeItem('agy_pwa_draft');
+      } catch (_) {}
       refreshSendBtnVisual();
     }
   }
@@ -2807,7 +3321,15 @@
   msgInput.addEventListener('input', () => {
     msgInput.style.height = 'auto';
     msgInput.style.height = Math.min(msgInput.scrollHeight, 136) + 'px';
-    try { localStorage.setItem('agy_pwa_draft', msgInput.value); } catch (_) {}
+    const sk = activeSlot || 'default-chat';
+    slotDrafts[sk] = msgInput.value;
+    try { localStorage.setItem('agy_slot_drafts_v1', JSON.stringify(slotDrafts)); } catch (_) {}
+    const vTrim = msgInput.value.trim();
+    if (vTrim.startsWith('/') && !vTrim.includes(' ') && vTrim.length <= 10) {
+      $('slashMenu').classList.add('show');
+    } else {
+      $('slashMenu').classList.remove('show');
+    }
     refreshSendBtnVisual();
   });
   msgInput.addEventListener('focus', () => setPlusOpen(false));
@@ -2818,6 +3340,30 @@
     }
   });
 
+  document.querySelectorAll('.slash-item').forEach((it) => {
+    it.onclick = () => {
+      $('slashMenu').classList.remove('show');
+      if (it.dataset.scmd) {
+        msgInput.value = '';
+        sendChat(it.dataset.scmd);
+      } else if (it.dataset.sfill) {
+        msgInput.value = it.dataset.sfill;
+        msgInput.dispatchEvent(new Event('input'));
+        msgInput.focus();
+      }
+    };
+  });
+
+  document.querySelectorAll('.q-chip[data-qprompt]').forEach((ch) => {
+    ch.onclick = () => sendChat(ch.dataset.qprompt);
+  });
+  $('qCheckIdeBtn').onclick = () => {
+    if (!ws || ws.readyState !== 1) return showToast('正在连接服务器...');
+    showToast('正在扫描电脑窗口待确认按钮...');
+    ws.send(JSON.stringify({ type: 'ide_actions_inspect', conversation_id: activeConvId || '' }));
+  };
+  $('qClipSysBtn').onclick = () => openWsModal('sys');
+
   // Plus Button Popover with 45deg smooth rotation
   $('plusBtn').onclick = (e) => {
     e.stopPropagation();
@@ -2827,12 +3373,16 @@
     if (!plusPopover.contains(e.target) && !e.target.closest('#plusBtn')) {
       setPlusOpen(false);
     }
+    if (!e.target.closest('#slashMenu') && e.target !== msgInput) {
+      $('slashMenu').classList.remove('show');
+    }
   });
 
   $('popUploadBtn').onclick = () => { setPlusOpen(false); $('filePicker').click(); };
   $('popShotBtn').onclick = () => { setPlusOpen(false); sendChat('/screen'); };
   $('popLiveDeskBtn').onclick = () => { setPlusOpen(false); openDesktopModal(); };
-  $('popDiffBtn').onclick = () => { setPlusOpen(false); openWsModal(); };
+  $('popDiffBtn').onclick = () => { setPlusOpen(false); openWsModal('git'); };
+  $('popClipSysBtn').onclick = () => { setPlusOpen(false); openWsModal('sys'); };
   $('popWsSwitchBtn').onclick = () => {
     setPlusOpen(false);
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'list_conversations' }));
@@ -2867,6 +3417,7 @@
 
   function startNewConversation(workspacePath = '', targetEngine = null) {
     if (!ws || ws.readyState !== 1) return showToast('尚未连接服务器');
+    saveCurrentSlotState();
     closeDrawer();
     $('wsPickerModal').classList.remove('show');
     ws.send(JSON.stringify({
@@ -2884,17 +3435,28 @@
     $('wsPickerModal').classList.add('show');
   };
   $('drawerDeskBtn').onclick = () => { closeDrawer(); openDesktopModal(); };
-  $('drawerGitBtn').onclick = () => { closeDrawer(); openWsModal(); };
+  $('drawerGitBtn').onclick = () => { closeDrawer(); openWsModal('git'); };
 
   $('closeWsPickerBtn').onclick = () => $('wsPickerModal').classList.remove('show');
   $('confirmNewChatBtn').onclick = () => startNewConversation($('customWsInput').value.trim(), newChatTarget);
 
+  function isConvAttention(it) {
+    if (!it) return false;
+    if (it.running) return true;
+    const slotCand = `${it.store}:${it.conversation_id}`;
+    if (slotsOverview.running.some((r) => r.slot === slotCand || r.conversation_id === it.conversation_id)) return true;
+    if (slotsOverview.unread.some((u) => u.slot === slotCand || u.conversation_id === it.conversation_id)) return true;
+    return false;
+  }
+
   function updateConvCounts() {
     const nAll = allConvItems.length;
+    const nAct = allConvItems.filter((x) => isConvAttention(x) || pinnedConvIds.has(x.conversation_id)).length;
     const nIde = allConvItems.filter((x) => x.store === 'ide').length;
     const nCodex = allConvItems.filter((x) => x.store === 'codex').length;
     const nCli = allConvItems.filter((x) => x.store === 'cli').length;
     $('cntAll').textContent = nAll ? `(${nAll})` : '';
+    $('cntActive').textContent = nAct ? `(${nAct})` : '';
     $('cntIde').textContent = nIde ? `(${nIde})` : '';
     $('cntCodex').textContent = nCodex ? `(${nCodex})` : '';
     $('cntCli').textContent = nCli ? `(${nCli})` : '';
@@ -2933,11 +3495,22 @@
     const listEl = $('convList');
     const q = convQuery.trim().toLowerCase();
     const filtered = allConvItems.filter((it) => {
-      if (convFilter !== 'all' && it.store !== convFilter) return false;
+      if (convFilter === 'active') {
+        if (!isConvAttention(it) && !pinnedConvIds.has(it.conversation_id)) return false;
+      } else if (convFilter !== 'all' && it.store !== convFilter) {
+        return false;
+      }
       if (!q) return true;
       const hay = `${it.title || ''} ${it.preview || ''} ${it.workspace || ''}`.toLowerCase();
       return hay.includes(q);
     });
+    filtered.sort((a, b) => {
+      const pa = pinnedConvIds.has(a.conversation_id) ? 1 : 0;
+      const pb = pinnedConvIds.has(b.conversation_id) ? 1 : 0;
+      if (pa !== pb) return pb - pa;
+      return (Number(b.updated_ms) || 0) - (Number(a.updated_ms) || 0);
+    });
+
     if (!filtered.length) {
       listEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:24px;font-size:13px">暂无匹配的聊天记录</div>';
       return;
@@ -2945,7 +3518,8 @@
     listEl.innerHTML = '';
     let lastGroup = '';
     filtered.forEach((it) => {
-      const grp = dateBucketLabel(it.updated_ms);
+      const isPinned = pinnedConvIds.has(it.conversation_id);
+      const grp = isPinned ? '★ 已置顶' : dateBucketLabel(it.updated_ms);
       if (grp !== lastGroup) {
         lastGroup = grp;
         const gEl = document.createElement('div');
@@ -2954,27 +3528,45 @@
         listEl.appendChild(gEl);
       }
 
-      const btn = document.createElement('button');
+      const btn = document.createElement('div');
       btn.className = 'conv-item' + (it.conversation_id === activeConvId ? ' active' : '');
       let tagCls = 'conv-tag';
       let tagTxt = '远程';
       if (it.store === 'ide') { tagCls = 'conv-tag ide'; tagTxt = 'Antigravity'; }
       else if (it.store === 'codex') { tagCls = 'conv-tag codex'; tagTxt = 'Codex'; }
 
-      const runHtml = it.running ? '<span class="conv-tag run">运行中</span>' : '';
+      const slotCand = `${it.store}:${it.conversation_id}`;
+      const isUnread = slotsOverview.unread.some((u) => u.slot === slotCand || u.conversation_id === it.conversation_id);
+      const isRun = it.running || slotsOverview.running.some((r) => r.slot === slotCand || r.conversation_id === it.conversation_id);
+      const runHtml = isRun ? '<span class="conv-tag run">运行中</span>' : '';
+      const unreadHtml = isUnread ? '<span class="unread-dot" title="有新完成回复"></span>' : '';
       const wsShort = it.workspace ? (it.workspace.split(/[\\/]/).pop() || '') : '';
+
       btn.innerHTML = `
         <div class="conv-item-top">
-          <div class="conv-item-title">${escapeHtml(it.title || '未命名对话')}</div>
-          <div style="display:flex;gap:4px;flex-shrink:0">${runHtml}<span class="${tagCls}">${tagTxt}</span></div>
+          <div style="display:flex;align-items:center;gap:5px;min-width:0">
+            ${unreadHtml}
+            <div class="conv-item-title">${escapeHtml(it.title || '未命名对话')}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+            ${runHtml}
+            <span class="${tagCls}">${tagTxt}</span>
+            <button type="button" class="pin-star-btn${isPinned ? ' pinned' : ''}" title="${isPinned ? '取消置顶' : '置顶会话'}">${isPinned ? '★' : '☆'}</button>
+          </div>
         </div>
         <div class="conv-item-sub">
           <span style="overflow:hidden;text-overflow:ellipsis">${escapeHtml(wsShort || it.preview || '')}</span>
           <span style="flex-shrink:0">${escapeHtml(it.updated_human || '')}</span>
         </div>
       `;
+      const starBtn = btn.querySelector('.pin-star-btn');
+      starBtn.onclick = (ev) => {
+        ev.stopPropagation();
+        togglePinConv(it.conversation_id);
+      };
       btn.onclick = () => {
         if (!ws || ws.readyState !== 1) return;
+        saveCurrentSlotState();
         ws.send(JSON.stringify({
           type: 'select_conversation',
           conversation_id: it.conversation_id,
@@ -2999,10 +3591,19 @@
     };
   });
 
-  // ── Workspace & Git Diff Inspector ──
-  function openWsModal() {
+  // ── Workspace, Hunk Git Diff & PC System/Clipboard Center ──
+  function setWsTabActive(tabName) {
+    wsTab = tabName;
+    $('wsTabGit').style.cssText = tabName === 'git' ? 'background:#fff;color:#0d0d0d' : '';
+    $('wsTabFiles').style.cssText = tabName === 'files' ? 'background:#fff;color:#0d0d0d' : '';
+    $('wsTabSys').style.cssText = tabName === 'sys' ? 'background:#fff;color:#0d0d0d' : '';
+  }
+
+  function openWsModal(initialTab = null) {
+    if (initialTab) setWsTabActive(initialTab);
     $('wsModal').classList.add('show');
-    requestWsInspect(currentRelDir);
+    if (wsTab === 'sys') requestPcSysInspect();
+    else requestWsInspect(currentRelDir);
   }
   function requestWsInspect(relDir = '') {
     currentRelDir = relDir;
@@ -3010,24 +3611,101 @@
       ws.send(JSON.stringify({ type: 'workspace_inspect', rel_dir: relDir }));
     }
   }
+  function requestPcSysInspect() {
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: 'pc_system_inspect' }));
+    }
+  }
   $('closeWsBtn').onclick = () => $('wsModal').classList.remove('show');
-  $('refreshWsBtn').onclick = () => requestWsInspect(currentRelDir);
+  $('refreshWsBtn').onclick = () => {
+    if (wsTab === 'sys') requestPcSysInspect();
+    else requestWsInspect(currentRelDir);
+  };
 
-  $('wsTabGit').onclick = () => {
-    wsTab = 'git';
-    $('wsTabGit').style.cssText = 'background:#fff;color:#0d0d0d';
-    $('wsTabFiles').style.cssText = '';
-    renderWsInspector();
-  };
-  $('wsTabFiles').onclick = () => {
-    wsTab = 'files';
-    $('wsTabFiles').style.cssText = 'background:#fff;color:#0d0d0d';
-    $('wsTabGit').style.cssText = '';
-    renderWsInspector();
-  };
+  $('wsTabGit').onclick = () => { setWsTabActive('git'); renderWsInspector(); };
+  $('wsTabFiles').onclick = () => { setWsTabActive('files'); renderWsInspector(); };
+  $('wsTabSys').onclick = () => { setWsTabActive('sys'); requestPcSysInspect(); renderWsInspector(); };
 
   function renderWsInspector() {
     const body = $('wsBody');
+    if (wsTab === 'sys') {
+      body.innerHTML = '';
+      if (!latestPcSysData) {
+        body.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:24px;font-size:13px">正在读取电脑状态与剪贴板...</div>';
+        return;
+      }
+      const sys = latestPcSysData.system || {};
+      const clip = latestPcSysData.clipboard || {};
+      const grid = document.createElement('div');
+      grid.className = 'sys-grid';
+      const batTxt = sys.battery_pct !== null && sys.battery_pct !== undefined
+        ? `${sys.battery_pct}%${sys.charging ? ' ⚡' : ''}`
+        : `${sys.disk_free_gb || 0} GB`;
+      const batLbl = sys.battery_pct !== null && sys.battery_pct !== undefined ? '电脑电量' : '工作区可用磁盘';
+      grid.innerHTML = `
+        <div class="sys-card"><div class="sys-lbl">CPU 负载</div><div class="sys-val">${Number(sys.cpu_pct || 0)}%</div></div>
+        <div class="sys-card"><div class="sys-lbl">内存 (${sys.ram_used_gb || 0}/${sys.ram_total_gb || 0}G)</div><div class="sys-val">${Number(sys.ram_pct || 0)}%</div></div>
+        <div class="sys-card"><div class="sys-lbl">${escapeHtml(batLbl)}</div><div class="sys-val">${escapeHtml(batTxt)}</div></div>
+      `;
+      body.appendChild(grid);
+
+      // Bidirectional PC Clipboard Box
+      const clipBox = document.createElement('div');
+      clipBox.style.cssText = 'background:rgba(255,255,255,0.03);border:1px solid var(--border-subtle);border-radius:14px;padding:12px;margin-bottom:8px';
+      clipBox.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:13px;font-weight:600">📋 电脑 ↔ 手机剪贴板互通</span>
+          <div style="display:flex;gap:6px">
+            <button type="button" id="pullPcClipBtn" class="pill-btn">刷新读取</button>
+            <button type="button" id="copyPcClipToPhoneBtn" class="pill-btn">复制到手机</button>
+          </div>
+        </div>
+        <textarea id="pcClipArea" class="token-input" rows="3" style="font-family:Consolas,monospace;font-size:12.5px;resize:vertical;margin-bottom:8px" placeholder="此处显示电脑剪贴板文本，也可直接输入文字推送到电脑剪贴板..."></textarea>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button type="button" id="quoteClipToChatBtn" class="pill-btn">带入当前对话</button>
+          <button type="button" id="pushPcClipBtn" class="pill-btn" style="background:#fff;color:#0d0d0d;font-weight:600">写入电脑剪贴板</button>
+        </div>
+      `;
+      body.appendChild(clipBox);
+      const area = clipBox.querySelector('#pcClipArea');
+      area.value = clip.text || '';
+      clipBox.querySelector('#pullPcClipBtn').onclick = () => {
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'pc_clipboard_get' }));
+      };
+      clipBox.querySelector('#copyPcClipToPhoneBtn').onclick = (ev) => {
+        if (area.value) copyTextSafe(area.value, ev.currentTarget, '已复制');
+      };
+      clipBox.querySelector('#quoteClipToChatBtn').onclick = () => {
+        if (!area.value.trim()) return;
+        $('wsModal').classList.remove('show');
+        msgInput.value = (msgInput.value ? msgInput.value + '\n' : '') + area.value.trim();
+        msgInput.dispatchEvent(new Event('input'));
+        msgInput.focus();
+      };
+      clipBox.querySelector('#pushPcClipBtn').onclick = () => {
+        if (!area.value) return showToast('请先输入要发送到电脑的文本');
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'pc_clipboard_set', text: area.value }));
+      };
+
+      // Active Dev Ports Radar
+      const ports = Array.isArray(sys.ports) ? sys.ports : [];
+      const portTitle = document.createElement('div');
+      portTitle.style.cssText = 'font-size:12px;color:var(--text-muted);margin:4px 0 4px';
+      portTitle.textContent = `本机活跃监听端口 (${ports.length})`;
+      body.appendChild(portTitle);
+      ports.forEach((pt) => {
+        const pr = document.createElement('div');
+        pr.className = 'file-row';
+        pr.style.cursor = 'default';
+        pr.innerHTML = `
+          <span style="font-family:Consolas,monospace;font-weight:600;color:#93c5fd">:${Number(pt.port)} <span style="color:var(--text-sec);font-weight:400">· ${escapeHtml(pt.process || 'unknown')}</span></span>
+          <span style="font-size:11.5px;color:var(--text-muted)">PID ${Number(pt.pid)}</span>
+        `;
+        body.appendChild(pr);
+      });
+      return;
+    }
+
     if (!latestWsData) {
       body.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:24px;font-size:13px">正在读取工作区...</div>';
       return;
@@ -3108,13 +3786,61 @@
     body.innerHTML = '';
     const bar = document.createElement('div');
     bar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px';
-    bar.innerHTML = `<button id="backFromDiff" class="pill-btn">⬅ 返回</button><button id="askReviewBtn" class="pill-btn" style="background:#fff;color:#0d0d0d">让助手审阅此改动</button>`;
+    bar.innerHTML = `<button id="backFromDiff" class="pill-btn">⬅ 返回</button><button id="askReviewBtn" class="pill-btn" style="background:#fff;color:#0d0d0d">审阅整个文件改动</button>`;
     body.appendChild(bar);
 
-    const viewer = document.createElement('div');
-    viewer.className = 'diff-viewer';
-    viewer.innerHTML = formatDiffHtml(data.diff || '');
-    body.appendChild(viewer);
+    const raw = String(data.diff || '');
+    const lines = raw.split('\n');
+    const hunks = [];
+    let curHunk = null;
+    lines.forEach((ln) => {
+      if (ln.startsWith('@@')) {
+        if (curHunk) hunks.push(curHunk);
+        curHunk = { header: ln, body: [] };
+      } else if (curHunk) {
+        curHunk.body.push(ln);
+      }
+    });
+    if (curHunk) hunks.push(curHunk);
+
+    if (hunks.length > 0) {
+      hunks.forEach((hk) => {
+        const card = document.createElement('div');
+        card.className = 'diff-hunk-card';
+        const hbar = document.createElement('div');
+        hbar.className = 'diff-hunk-bar';
+        const hSpan = document.createElement('span');
+        hSpan.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+        hSpan.textContent = hk.header;
+        const qBtn = document.createElement('button');
+        qBtn.type = 'button';
+        qBtn.className = 'pill-btn';
+        qBtn.style.cssText = 'padding:3px 9px;font-size:11px;flex-shrink:0';
+        qBtn.textContent = '💬 引用此段';
+        qBtn.onclick = () => {
+          const snippet = [hk.header, ...hk.body].join('\n').slice(0, 1800);
+          $('wsModal').classList.remove('show');
+          msgInput.value = `请查看 \`${data.path}\` 的这段改动：\n\`\`\`diff\n${snippet}\n\`\`\`\n`;
+          msgInput.dispatchEvent(new Event('input'));
+          msgInput.focus();
+        };
+        hbar.appendChild(hSpan);
+        hbar.appendChild(qBtn);
+        const pre = document.createElement('div');
+        pre.className = 'diff-viewer';
+        pre.style.border = 'none';
+        pre.style.borderRadius = '0';
+        pre.innerHTML = formatDiffHtml(hk.body.join('\n'));
+        card.appendChild(hbar);
+        card.appendChild(pre);
+        body.appendChild(card);
+      });
+    } else {
+      const viewer = document.createElement('div');
+      viewer.className = 'diff-viewer';
+      viewer.innerHTML = formatDiffHtml(raw);
+      body.appendChild(viewer);
+    }
 
     $('backFromDiff').onclick = renderWsInspector;
     $('askReviewBtn').onclick = () => {
@@ -3160,11 +3886,14 @@
     };
   }
 
-  // ── Desktop Live Screen ──
+  // ── Interactive Touch Desktop & Live Screen ──
   function openDesktopModal() {
     $('deskModal').classList.add('show');
     $('deskTs').textContent = '正在抓取电脑画面...';
-    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'desktop_frame' }));
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: 'desktop_frame' }));
+      ws.send(JSON.stringify({ type: 'ide_actions_inspect', conversation_id: activeConvId || '' }));
+    }
   }
   function closeDesktopModal() {
     $('deskModal').classList.remove('show');
@@ -3178,12 +3907,70 @@
   $('refreshDeskBtn').onclick = () => {
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'desktop_frame' }));
   };
+  $('toggleTouchBtn').onclick = () => {
+    deskTouchMode = !deskTouchMode;
+    $('toggleTouchBtn').style.cssText = deskTouchMode ? 'background:#10b981;color:#04150e;font-weight:700;border-color:#10b981' : '';
+    $('toggleTouchBtn').textContent = deskTouchMode ? '👆 触控开启中' : '👆 触控点按';
+    $('screenWrap').classList.toggle('touch-active', deskTouchMode);
+    showToast(deskTouchMode ? '已开启远程触控：直接点按画面即可点击电脑屏幕' : '已切回全屏缩放查看模式');
+  };
   $('toggleLiveBtn').onclick = () => {
     liveScreenOn = !liveScreenOn;
     $('toggleLiveBtn').textContent = liveScreenOn ? '暂停跟随' : '实时跟随';
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'live_screen', enable: liveScreenOn, interval_ms: 1600 }));
   };
-  $('deskImg').onclick = () => openLightbox($('deskImg').src);
+  $('deskDetectBtn').onclick = () => {
+    if (ws && ws.readyState === 1) {
+      showToast('正在扫描电脑窗口待确认按钮...');
+      ws.send(JSON.stringify({ type: 'ide_actions_inspect', conversation_id: activeConvId || '' }));
+    }
+  };
+  document.querySelectorAll('.desk-kbtn').forEach((kb) => {
+    kb.onclick = () => {
+      if (!ws || ws.readyState !== 1) return;
+      ws.send(JSON.stringify({ type: 'desktop_input', action: 'key', key: kb.dataset.dkey }));
+    };
+  });
+  document.querySelectorAll('.desk-sbtn').forEach((sb) => {
+    sb.onclick = () => {
+      if (!ws || ws.readyState !== 1) return;
+      ws.send(JSON.stringify({ type: 'desktop_input', action: sb.dataset.dact, x_ratio: 0.5, y_ratio: 0.5 }));
+    };
+  });
+
+  $('deskImg').onclick = (ev) => {
+    const img = $('deskImg');
+    if (!deskTouchMode) {
+      openLightbox(img.src);
+      return;
+    }
+    if (!ws || ws.readyState !== 1 || !img.naturalWidth || !img.naturalHeight) return;
+    const rect = img.getBoundingClientRect();
+    const scale = Math.min(rect.width / img.naturalWidth, rect.height / img.naturalHeight);
+    const renderW = img.naturalWidth * scale;
+    const renderH = img.naturalHeight * scale;
+    const padX = (rect.width - renderW) / 2;
+    const padY = (rect.height - renderH) / 2;
+    const xRatio = (ev.clientX - rect.left - padX) / renderW;
+    const yRatio = (ev.clientY - rect.top - padY) / renderH;
+    if (xRatio < 0 || xRatio > 1 || yRatio < 0 || yRatio > 1) return;
+
+    const wrap = $('screenWrap');
+    const wrapRect = wrap.getBoundingClientRect();
+    const rip = document.createElement('span');
+    rip.className = 'tap-ripple';
+    rip.style.left = (ev.clientX - wrapRect.left) + 'px';
+    rip.style.top = (ev.clientY - wrapRect.top) + 'px';
+    wrap.appendChild(rip);
+    setTimeout(() => rip.remove(), 550);
+
+    ws.send(JSON.stringify({
+      type: 'desktop_input',
+      action: 'click',
+      x_ratio: Number(xRatio.toFixed(5)),
+      y_ratio: Number(yRatio.toFixed(5)),
+    }));
+  };
   $('lightbox').onclick = () => $('lightbox').classList.remove('show');
 
   ['deskModal', 'modelModal', 'wsModal', 'wsPickerModal'].forEach((mid) => {

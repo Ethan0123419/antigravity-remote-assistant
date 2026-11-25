@@ -64,15 +64,21 @@ from .desktop_tools import (
     capture_desktop_fast_jpeg_sync,
     create_and_send_antigravity_ide_new_chat,
     find_codex_cli_executable,
+    get_pc_clipboard_text,
     get_workspace_file_diff,
+    inspect_antigravity_ide_actions,
+    inspect_pc_system_and_ports,
     inspect_workspace_git,
+    invoke_antigravity_ide_action,
     is_safe_outbound_file,
     list_workspace_directory,
     open_new_antigravity_ide_chat_window,
+    perform_desktop_remote_input,
     prune_inbox,
     read_workspace_file_preview,
     sanitize_filename,
     send_prompt_to_antigravity_ide_window,
+    set_pc_clipboard_text,
 )
 from .maintenance import discover_default_cache_targets, run_safe_cache_cleanup
 
@@ -473,6 +479,12 @@ class WebPwaServer:
         pc_window_new_opener: Callable[[], tuple[bool, str]] | None = None,
         pc_window_new_sender: Callable[[str], tuple[bool, str, str]] | None = None,
         pc_window_canceller: Callable[[str], bool] | None = None,
+        ide_actions_inspector: Callable[[str], list[dict[str, Any]]] | None = None,
+        ide_action_invoker: Callable[[str], tuple[bool, str]] | None = None,
+        desktop_input_handler: Callable[[str, float, float, str], tuple[bool, str]] | None = None,
+        pc_clipboard_getter: Callable[[], dict[str, Any]] | None = None,
+        pc_clipboard_setter: Callable[[str], tuple[bool, str]] | None = None,
+        pc_system_inspector: Callable[[Path | None], dict[str, Any]] | None = None,
         codex_cli_path: Path | None = None,
     ) -> None:
         self.config = config
@@ -505,6 +517,34 @@ class WebPwaServer:
             if pc_window_canceller is not None
             else (cancel_antigravity_ide_window_turn if ide_store_dir is None else None)
         )
+        self._ide_actions_inspector: Callable[[str], list[dict[str, Any]]] = (
+            ide_actions_inspector
+            if ide_actions_inspector is not None
+            else (inspect_antigravity_ide_actions if ide_store_dir is None else (lambda _cid="": []))
+        )
+        self._ide_action_invoker: Callable[[str], tuple[bool, str]] = (
+            ide_action_invoker
+            if ide_action_invoker is not None
+            else (invoke_antigravity_ide_action if ide_store_dir is None else (lambda _tok: (False, "测试环境未启用桌面按钮点击")))
+        )
+        self._desktop_input_handler: Callable[[str, float, float, str], tuple[bool, str]] = (
+            desktop_input_handler
+            if desktop_input_handler is not None
+            else (
+                perform_desktop_remote_input
+                if ide_store_dir is None
+                else (lambda act, xr, yr, kn: (False, "测试环境未启用远程桌面输入"))
+            )
+        )
+        self._pc_clipboard_getter: Callable[[], dict[str, Any]] = (
+            pc_clipboard_getter if pc_clipboard_getter is not None else get_pc_clipboard_text
+        )
+        self._pc_clipboard_setter: Callable[[str], tuple[bool, str]] = (
+            pc_clipboard_setter if pc_clipboard_setter is not None else set_pc_clipboard_text
+        )
+        self._pc_system_inspector: Callable[[Path | None], dict[str, Any]] = (
+            pc_system_inspector if pc_system_inspector is not None else inspect_pc_system_and_ports
+        )
         self._codex_cli_override = codex_cli_path
         self._cont_map_path = continuation_map_path or (
             (cli_store_dir / "continuation_map.json") if cli_store_dir is not None else CONTINUATION_MAP_FILE
@@ -525,6 +565,8 @@ class WebPwaServer:
         self._slot_meta: dict[str, dict[str, Any]] = {
             DEFAULT_SLOT_KEY: {"conversation_id": "", "title": "", "store": ""}
         }
+        self._unread_slots: dict[str, dict[str, Any]] = {}
+        self._processed_client_ids: OrderedDict[str, float] = OrderedDict()
         self._cancelled_reply_ids: set[str] = set()
         self._ide_watch_sig: tuple[str, str, int, int] = ("", "", 0, 0)
         self.pc_ide_poll_interval: float = 0.55
@@ -588,6 +630,25 @@ class WebPwaServer:
             "text": str(inf.get("text") or ""),
             "status": str(inf.get("status") or ""),
         }
+
+    def _build_slots_overview(self) -> dict[str, Any]:
+        running_items: list[dict[str, Any]] = []
+        for s_key, inf in list(self._slot_inflight.items()):
+            meta = self._slot_meta.get(s_key, {})
+            running_items.append(
+                {
+                    "slot": s_key,
+                    "conversation_id": str(meta.get("conversation_id") or ""),
+                    "store": str(meta.get("store") or ""),
+                    "title": str(meta.get("title") or "会话执行中"),
+                    "status": str(inf.get("status") or "正在生成..."),
+                }
+            )
+        unread_items = list(self._unread_slots.values())[-15:]
+        return {"running": running_items, "unread": unread_items}
+
+    async def _broadcast_slots_overview(self) -> None:
+        await self._broadcast({"type": "slots_overview", **self._build_slots_overview()})
 
     def _client_ip(self, connection: ServerConnection, headers: Headers | None = None) -> str:
         peer_ip = "unknown"
@@ -905,6 +966,7 @@ class WebPwaServer:
                         "active_store": active_store,
                         "busy": pub_inflight is not None,
                         "inflight": pub_inflight,
+                        "slots_overview": self._build_slots_overview(),
                         "cooldowns": session.failover_pool.cooldown_summary(),
                         "history": self._slot_history.get(slot, []),
                     },
@@ -1119,6 +1181,78 @@ class WebPwaServer:
                 elif mtype == "workspace_file":
                     await self._handle_workspace_file(ws, str(msg.get("path") or ""))
 
+                elif mtype == "ide_actions_inspect":
+                    req_cid = str(msg.get("conversation_id") or "")
+                    actions = await asyncio.to_thread(self._ide_actions_inspector, req_cid)
+                    await ws.send(json.dumps({"type": "ide_actions", "actions": actions}, ensure_ascii=False))
+
+                elif mtype == "ide_action_invoke":
+                    act_tok = str(msg.get("action_token") or "")
+                    ok, note = await asyncio.to_thread(self._ide_action_invoker, act_tok)
+                    await ws.send(
+                        json.dumps({"type": "ide_action_result", "ok": ok, "note": note}, ensure_ascii=False)
+                    )
+                    actions_after = await asyncio.to_thread(
+                        self._ide_actions_inspector, str(msg.get("conversation_id") or "")
+                    )
+                    await ws.send(json.dumps({"type": "ide_actions", "actions": actions_after}, ensure_ascii=False))
+
+                elif mtype == "desktop_input":
+                    act_kind = str(msg.get("action") or "")
+                    kname = str(msg.get("key") or "")
+                    try:
+                        xr = 0.5 if act_kind == "key" else float(msg.get("x_ratio") if msg.get("x_ratio") is not None else 0.5)
+                        yr = 0.5 if act_kind == "key" else float(msg.get("y_ratio") if msg.get("y_ratio") is not None else 0.5)
+                    except (TypeError, ValueError):
+                        await ws.send(json.dumps({"type": "toast", "level": "err", "text": "触控坐标参数无效"}, ensure_ascii=False))
+                        continue
+                    ok, note = await asyncio.to_thread(self._desktop_input_handler, act_kind, xr, yr, kname)
+                    await ws.send(
+                        json.dumps(
+                            {"type": "toast", "level": "info" if ok else "err", "text": note},
+                            ensure_ascii=False,
+                        )
+                    )
+                    if ok:
+                        await asyncio.sleep(0.28)
+                        try:
+                            shot = await asyncio.to_thread(capture_desktop_fast_jpeg_sync, PROJECT_INBOX_DIR)
+                            mid = self.register_media(shot)
+                            await ws.send(
+                                json.dumps(
+                                    {"type": "desktop_frame", "media_id": mid, "ts": int(time.time() * 1000)},
+                                    ensure_ascii=False,
+                                )
+                            )
+                        except Exception:
+                            pass
+
+                elif mtype == "pc_system_inspect":
+                    session_cur = self._session_for_slot(self._active_slot)
+                    sys_info, clip_info = await asyncio.gather(
+                        asyncio.to_thread(self._pc_system_inspector, session_cur.workspace),
+                        asyncio.to_thread(self._pc_clipboard_getter),
+                    )
+                    await ws.send(
+                        json.dumps(
+                            {"type": "pc_system_state", "system": sys_info, "clipboard": clip_info},
+                            ensure_ascii=False,
+                        )
+                    )
+
+                elif mtype == "pc_clipboard_get":
+                    clip_info = await asyncio.to_thread(self._pc_clipboard_getter)
+                    await ws.send(json.dumps({"type": "pc_clipboard", **clip_info}, ensure_ascii=False))
+
+                elif mtype == "pc_clipboard_set":
+                    ok, note = await asyncio.to_thread(self._pc_clipboard_setter, str(msg.get("text") or ""))
+                    await ws.send(
+                        json.dumps(
+                            {"type": "toast", "level": "info" if ok else "err", "text": note},
+                            ensure_ascii=False,
+                        )
+                    )
+
                 elif mtype == "chat":
                     req_slot = str(msg.get("slot") or self._active_slot)
                     t = asyncio.create_task(self._handle_chat(ws, msg, req_slot))
@@ -1288,6 +1422,7 @@ class WebPwaServer:
 
         if not only_refresh:
             self._active_slot = slot_key
+            self._unread_slots.pop(slot_key, None)
             self._slot_meta[slot_key] = {
                 "conversation_id": detail.conversation_id,
                 "title": detail.title,
@@ -1379,6 +1514,7 @@ class WebPwaServer:
                 "silent": only_refresh,
                 "has_more": detail.has_more,
                 "total_messages": detail.total_messages,
+                "slots_overview": self._build_slots_overview(),
                 "history": loaded_history,
             }
         )
@@ -1899,9 +2035,36 @@ class WebPwaServer:
 
     async def _handle_chat(self, ws: ServerConnection, msg: dict[str, Any], chat_slot: str) -> None:
         raw_text = str(msg.get("text") or "").strip()
-        client_id = str(msg.get("client_id") or f"u-{uuid.uuid4().hex[:10]}")
+        explicit_client_id = str(msg.get("client_id") or "").strip()
+        client_id = explicit_client_id or f"u-{uuid.uuid4().hex[:10]}"
         attachments = msg.get("attachments") or []
         if not raw_text and not attachments:
+            return
+
+        now_mono = time.monotonic()
+        while self._processed_client_ids:
+            oldest_cid, oldest_ts = next(iter(self._processed_client_ids.items()))
+            if now_mono - oldest_ts > 900.0 or len(self._processed_client_ids) > 300:
+                self._processed_client_ids.pop(oldest_cid, None)
+            else:
+                break
+
+        if explicit_client_id and explicit_client_id in self._processed_client_ids:
+            try:
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "chat_ack",
+                            "client_id": client_id,
+                            "slot": chat_slot,
+                            "stage": "duplicate_ignored",
+                            "label": "✓ 已接收（防重去重）",
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+            except Exception:
+                pass
             return
 
         session = self._session_for_slot(chat_slot)
@@ -1927,6 +2090,9 @@ class WebPwaServer:
             except Exception:
                 pass
             return
+
+        if explicit_client_id:
+            self._processed_client_ids[explicit_client_id] = now_mono
 
         slot_meta = self._slot_meta.get(chat_slot, {})
         slot_store = str(slot_meta.get("store") or (session.linked_store if session.linked_ide_id else ""))
@@ -2030,6 +2196,15 @@ class WebPwaServer:
             await _on_status(hint)
 
         try:
+            await self._broadcast(
+                {
+                    "type": "chat_ack",
+                    "client_id": client_id,
+                    "slot": chat_slot,
+                    "stage": "gateway_accepted",
+                    "label": "✓ 网关已接收",
+                }
+            )
             if self._active_slot == chat_slot:
                 if not (raw_text.startswith("/") and not attachments):
                     await self._broadcast({"type": "user_msg", "slot": chat_slot, "item": user_entry})
@@ -2039,8 +2214,11 @@ class WebPwaServer:
                         "slot": chat_slot,
                         "msg_id": reply_id,
                         "model": initial_model_label,
+                        "slots_overview": self._build_slots_overview(),
                     }
                 )
+            else:
+                await self._broadcast_slots_overview()
 
             # 1. Existing PC Antigravity IDE conversation -> deliver into live PC IDE window
             if slot_store == "ide" and slot_cid:
@@ -2060,6 +2238,15 @@ class WebPwaServer:
                 if pc_ide_out is not None:
                     result, extra_pc_images = pc_ide_out
                     pc_direct_persisted = True
+                    await self._broadcast(
+                        {
+                            "type": "chat_ack",
+                            "client_id": client_id,
+                            "slot": chat_slot,
+                            "stage": "delivered_pc",
+                            "label": "✓ 已投递至电脑窗口",
+                        }
+                    )
 
             # 2. Brand-new PC Antigravity IDE conversation (tapped `+` or sent from default home screen)
             elif not slot_cid and slot_store in {"", "ide"} and self._pc_window_new_sender is not None:
@@ -2079,6 +2266,15 @@ class WebPwaServer:
                 if pc_new_out is not None:
                     result, extra_pc_images = pc_new_out
                     pc_direct_persisted = True
+                    await self._broadcast(
+                        {
+                            "type": "chat_ack",
+                            "client_id": client_id,
+                            "slot": chat_slot,
+                            "stage": "delivered_pc",
+                            "label": "✓ 已在电脑端新建并投递",
+                        }
+                    )
 
             # 3. Existing OR brand-new PC OpenAI Codex conversation (`slot_store == "codex"`)
             elif slot_store == "codex":
@@ -2095,6 +2291,15 @@ class WebPwaServer:
                 if cdx_out is not None:
                     result = cdx_out
                     pc_direct_persisted = True
+                    await self._broadcast(
+                        {
+                            "type": "chat_ack",
+                            "client_id": client_id,
+                            "slot": chat_slot,
+                            "stage": "delivered_pc",
+                            "label": "✓ 已交由电脑 Codex 执行",
+                        }
+                    )
                     if not slot_cid and cdx_out.conversation_id:
                         new_title = raw_text[:38] or "Codex 新对话"
                         meta_cur = self._slot_meta.setdefault(chat_slot, {})
@@ -2218,10 +2423,26 @@ class WebPwaServer:
         }
         self._append_slot_history(chat_slot, assistant_entry, persist_local=not pc_direct_persisted)
         if self._active_slot == chat_slot:
-            await self._broadcast({"type": "stream_end", "slot": chat_slot, "item": assistant_entry})
+            await self._broadcast(
+                {
+                    "type": "stream_end",
+                    "slot": chat_slot,
+                    "item": assistant_entry,
+                    "slots_overview": self._build_slots_overview(),
+                }
+            )
         else:
             meta_done = self._slot_meta.get(chat_slot, {})
             done_title = meta_done.get("title") or "后台会话"
+            self._unread_slots[chat_slot] = {
+                "slot": chat_slot,
+                "conversation_id": str(meta_done.get("conversation_id") or result.conversation_id or ""),
+                "store": str(meta_done.get("store") or "cli"),
+                "title": done_title,
+                "preview": clean_text[:60],
+                "ts": int(time.time() * 1000),
+            }
+            await self._broadcast_slots_overview()
             await self._broadcast(
                 {
                     "type": "toast",
