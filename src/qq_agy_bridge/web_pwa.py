@@ -594,7 +594,9 @@ class WebPwaServer:
 
     def _session_for_slot(self, slot_key: str) -> AgySession:
         s = self.sessions.get(f"pwa:{slot_key}")
-        s._ide_continuation_map = self._continuation_map
+        s._ide_continuation_map = (
+            {} if (self._pc_window_sender is not None and slot_key.startswith("ide:")) else self._continuation_map
+        )
         return s
 
     @property
@@ -956,12 +958,17 @@ class WebPwaServer:
                 session.linked_store if session.linked_ide_id else ("cli" if session.conversation_id else "")
             )
             pub_inflight = self._public_inflight(slot)
+            hello_model = (
+                "Antigravity 电脑端"
+                if active_store == "ide"
+                else ("Codex 电脑端" if active_store == "codex" else (session.model or "default"))
+            )
             await ws.send(
                 json.dumps(
                     {
                         "type": "hello",
                         "slot": slot,
-                        "model": session.model or "default",
+                        "model": hello_model,
                         "workspace": str(session.workspace),
                         "active_conversation_id": active_cid,
                         "active_title": meta.get("title") or session.active_title or "",
@@ -1467,8 +1474,10 @@ class WebPwaServer:
             loaded_history = self._slot_history[slot_key]
         else:
             loaded_history = self._convert_detail_to_pwa_history(detail, session.model or "default")
-            # Merge any linked mobile continuation turns on top of the PC conversation!
-            if detail.store in {"ide", "codex"}:
+            # Only merge standalone CLI continuation turns when running without a live PC window sender
+            # (never append forked headless CLI turns on top of live PC IDE chats!)
+            allow_cont_merge = (detail.store == "codex") or (detail.store == "ide" and self._pc_window_sender is None)
+            if allow_cont_merge:
                 cont_cid = (
                     self._continuation_map.get(f"{detail.store}:{detail.conversation_id}")
                     or self._continuation_map.get(detail.conversation_id)
@@ -1487,20 +1496,21 @@ class WebPwaServer:
                     if cont_detail and cont_detail.messages:
                         cont_hist = self._convert_detail_to_pwa_history(cont_detail, session.model or "default")
                         _extend_deduplicated_turns(loaded_history, cont_hist)
-                        # Keep chronological order when newer PC turns occurred after an earlier fallback CLI turn
-                        if all(int(x.get("ts") or 0) > 0 for x in loaded_history) and len(loaded_history) > 1:
-                            loaded_history = [
-                                item
-                                for _, item in sorted(
-                                    enumerate(loaded_history),
-                                    key=lambda pair: (int(pair[1].get("ts") or 0), pair[0]),
-                                )
-                            ]
+                        if any(int(x.get("ts") or 0) > 0 for x in loaded_history) and len(loaded_history) > 1:
+                            # Preserve monotone order even if individual items lack `ts` by carrying forward previous timestamp
+                            running_ts = 0
+                            keyed: list[tuple[int, int, dict[str, Any]]] = []
+                            for idx_item, item in enumerate(loaded_history):
+                                raw_ts = int(item.get("ts") or 0)
+                                if raw_ts > 0:
+                                    running_ts = raw_ts
+                                keyed.append((running_ts, idx_item, item))
+                            loaded_history = [it for _, _, it in sorted(keyed, key=lambda t: (t[0], t[1]))]
                     if self._slot_local_turns.get(slot_key):
                         _extend_deduplicated_turns(loaded_history, self._slot_local_turns[slot_key])
                 elif self._slot_local_turns.get(slot_key):
                     _extend_deduplicated_turns(loaded_history, self._slot_local_turns[slot_key])
-            elif self._slot_local_turns.get(slot_key) and not loaded_history:
+            elif self._slot_local_turns.get(slot_key) and detail.store != "ide":
                 _extend_deduplicated_turns(loaded_history, self._slot_local_turns[slot_key])
             self._slot_history[slot_key] = loaded_history
 
@@ -1645,8 +1655,17 @@ class WebPwaServer:
             db_run = bool(snap.get("db_running"))
 
             if not saw_u and not db_run and time.monotonic() >= accept_deadline:
-                logger.warning("PC IDE window did not record USER_INPUT within %.1fs, falling back to CLI", self.pc_ide_accept_timeout)
-                return None
+                logger.warning("PC IDE window did not record USER_INPUT within %.1fs after Enter", self.pc_ide_accept_timeout)
+                return (
+                    TurnResult(
+                        status="TIMEOUT",
+                        response="",
+                        conversation_id=ide_cid,
+                        active_model="Antigravity 电脑端",
+                        error="已向电脑端 Antigravity 窗口送出按键，但暂未检测到会话记录新增（为避免重复提交与模型分叉，未启动后台重跑，请点右上角同步或查看电脑画面确认）。",
+                    ),
+                    [],
+                )
 
             if saw_u:
                 raw_txt = str(snap.get("text") or "")
@@ -1731,13 +1750,39 @@ class WebPwaServer:
 
         ide_root = self.ide_store_dir if self.ide_store_dir is not None else _default_ide_dir()
         base_snap = await asyncio.to_thread(read_ide_live_turn_snapshot, ide_root, ide_cid, 10**9)
+        if bool(base_snap.get("db_running")):
+            for _ in range(5):
+                await asyncio.sleep(0.45)
+                base_snap = await asyncio.to_thread(read_ide_live_turn_snapshot, ide_root, ide_cid, 10**9)
+                if not bool(base_snap.get("db_running")):
+                    break
+        if bool(base_snap.get("db_running")):
+            return (
+                TurnResult(
+                    status="ERROR",
+                    response="",
+                    conversation_id=ide_cid,
+                    active_model="Antigravity 电脑端",
+                    error="电脑端该 Antigravity 对话正在运行上一条任务，请等待其执行完毕（或点击停止）后再点击消息下方「重填」发送。",
+                ),
+                [],
+            )
         baseline_lines = int(base_snap.get("total_lines") or 0)
 
         await on_status("正在向电脑端窗口发送指令...")
         delivered, note = await asyncio.to_thread(self._pc_window_sender, ide_cid, title, prompt_text)
         if not delivered:
-            logger.info("PC IDE window delivery unavailable (%s), falling back to CLI: %s", ide_cid[:8], note)
-            return None
+            logger.warning("PC IDE window delivery rejected (%s): %s", ide_cid[:8], note)
+            return (
+                TurnResult(
+                    status="ERROR",
+                    response="",
+                    conversation_id=ide_cid,
+                    active_model="Antigravity 电脑端",
+                    error=f"未能投递到电脑端 Antigravity 聊天窗口：{note}\n（已阻止切换后台独立模型分叉双写，请确认电脑屏幕未锁屏且 Antigravity 窗口已打开后，点气泡下方「重填」重试。）",
+                ),
+                [],
+            )
 
         await on_status("电脑端窗口已接收，正在执行...")
         return await self._stream_pc_ide_transcript_until_idle(
@@ -1775,7 +1820,19 @@ class WebPwaServer:
         await on_status("正在电脑端新建 Antigravity 对话并发送...")
         ok, new_cid, note = await asyncio.to_thread(self._pc_window_new_sender, prompt_text)
         if not ok or not new_cid:
-            logger.info("PC IDE new-chat creation unavailable, falling back to CLI: %s", note)
+            logger.warning("PC IDE new-chat creation failed: %s", note)
+            if slot_store_req := (self._slot_meta.get(chat_slot, {}).get("store") or ""):
+                if slot_store_req == "ide":
+                    return (
+                        TurnResult(
+                            status="ERROR",
+                            response="",
+                            conversation_id="",
+                            active_model="Antigravity 电脑端",
+                            error=f"未能在电脑端 Antigravity 窗口新建会话：{note}\n（若希望使用纯远程后台会话，可在新建面板切换为「远程后台」。）",
+                        ),
+                        [],
+                    )
             return None
 
         new_title = (raw_title_seed or "").strip()[:38] or "电脑端新对话"
@@ -2103,6 +2160,15 @@ class WebPwaServer:
         slot_meta = self._slot_meta.get(chat_slot, {})
         slot_store = str(slot_meta.get("store") or (session.linked_store if session.linked_ide_id else ""))
         slot_cid = str(slot_meta.get("conversation_id") or session.linked_ide_id or "")
+        if (not slot_store or not slot_cid) and ":" in chat_slot:
+            pfx, rest_cid = chat_slot.split(":", 1)
+            if pfx in {"ide", "codex", "cli"} and rest_cid:
+                slot_store = slot_store or pfx
+                slot_cid = slot_cid or rest_cid
+                self._slot_meta.setdefault(
+                    chat_slot,
+                    {"conversation_id": slot_cid, "title": session.active_title or "", "store": slot_store},
+                )
         slot_title = str(slot_meta.get("title") or session.active_title or "")
 
         user_entry = {
@@ -2373,7 +2439,12 @@ class WebPwaServer:
             partial_before_finish = str(inflight_state.get("text") or "")
             if self._slot_inflight.get(chat_slot) is inflight_state:
                 self._slot_inflight.pop(chat_slot, None)
-            if not pc_direct_persisted and session.linked_ide_id and session.conversation_id:
+            if (
+                not pc_direct_persisted
+                and self._pc_window_sender is None
+                and session.linked_ide_id
+                and session.conversation_id
+            ):
                 map_key = f"{session.linked_store}:{session.linked_ide_id}" if session.linked_store else session.linked_ide_id
                 self._continuation_map[map_key] = session.conversation_id
                 self._continuation_map[session.linked_ide_id] = session.conversation_id
@@ -2597,7 +2668,7 @@ class WebPwaServer:
     async def _ide_watch_loop(self) -> None:
         """Auto-push live PC Antigravity / Codex transcript updates when viewing a PC chat."""
         while True:
-            interval = getattr(self, "ide_watch_interval", 2.5)
+            interval = getattr(self, "ide_watch_interval", 1.4)
             await asyncio.sleep(interval)
             try:
                 if not self._clients:
@@ -2606,9 +2677,10 @@ class WebPwaServer:
                 if cur_slot in self._slot_inflight:
                     continue
                 session = self._session_for_slot(cur_slot)
-                ide_cid = session.linked_ide_id
-                watch_store = session.linked_store or "ide"
-                if not ide_cid or session.is_busy:
+                meta_cur = self._slot_meta.get(cur_slot, {})
+                ide_cid = str(meta_cur.get("conversation_id") or session.linked_ide_id or "")
+                watch_store = str(meta_cur.get("store") or session.linked_store or "ide")
+                if not ide_cid or watch_store not in {"ide", "codex"}:
                     continue
 
                 sig = await asyncio.to_thread(
@@ -2639,33 +2711,36 @@ class WebPwaServer:
                     session._pending_handoff_context = build_ide_handoff_context(detail)
 
                 loaded_history = self._convert_detail_to_pwa_history(detail, session.model or "default")
-                cont_cid = (
-                    self._continuation_map.get(f"{detail.store}:{detail.conversation_id}")
-                    or self._continuation_map.get(detail.conversation_id)
-                    or session.conversation_id
-                )
-                if cont_cid:
-                    cont_detail = await asyncio.to_thread(
-                        load_conversation_detail,
-                        cont_cid,
-                        "cli",
-                        100,
-                        self.ide_store_dir,
-                        self.cli_store_dir,
-                        self.codex_store_dir,
+                allow_cont_merge = (detail.store == "codex") or (detail.store == "ide" and self._pc_window_sender is None)
+                if allow_cont_merge:
+                    cont_cid = (
+                        self._continuation_map.get(f"{detail.store}:{detail.conversation_id}")
+                        or self._continuation_map.get(detail.conversation_id)
+                        or session.conversation_id
                     )
-                    if cont_detail and cont_detail.messages:
-                        cont_hist = self._convert_detail_to_pwa_history(cont_detail, session.model or "default")
-                        _extend_deduplicated_turns(loaded_history, cont_hist)
-                        if all(int(x.get("ts") or 0) > 0 for x in loaded_history) and len(loaded_history) > 1:
-                            loaded_history = [
-                                item
-                                for _, item in sorted(
-                                    enumerate(loaded_history),
-                                    key=lambda pair: (int(pair[1].get("ts") or 0), pair[0]),
-                                )
-                            ]
-                if self._slot_local_turns.get(cur_slot):
+                    if cont_cid:
+                        cont_detail = await asyncio.to_thread(
+                            load_conversation_detail,
+                            cont_cid,
+                            "cli",
+                            100,
+                            self.ide_store_dir,
+                            self.cli_store_dir,
+                            self.codex_store_dir,
+                        )
+                        if cont_detail and cont_detail.messages:
+                            cont_hist = self._convert_detail_to_pwa_history(cont_detail, session.model or "default")
+                            _extend_deduplicated_turns(loaded_history, cont_hist)
+                            if any(int(x.get("ts") or 0) > 0 for x in loaded_history) and len(loaded_history) > 1:
+                                running_ts = 0
+                                keyed: list[tuple[int, int, dict[str, Any]]] = []
+                                for idx_item, item in enumerate(loaded_history):
+                                    raw_ts = int(item.get("ts") or 0)
+                                    if raw_ts > 0:
+                                        running_ts = raw_ts
+                                    keyed.append((running_ts, idx_item, item))
+                                loaded_history = [it for _, _, it in sorted(keyed, key=lambda t: (t[0], t[1]))]
+                if self._slot_local_turns.get(cur_slot) and detail.store != "ide":
                     _extend_deduplicated_turns(loaded_history, self._slot_local_turns[cur_slot])
 
                 self._slot_history[cur_slot] = loaded_history

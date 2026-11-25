@@ -420,6 +420,36 @@ def find_codex_cli_executable() -> Path | None:
     return None
 
 
+def _run_powershell_script(
+    ps_script: str,
+    *,
+    env: dict[str, str] | None = None,
+    timeout: float = 16.0,
+    sta: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    """Execute a PowerShell script via UTF-8 Base64 stdin pipe (immune to Win32 32,767-char WinError 206 & GBK encoding)."""
+    b64_payload = base64.b64encode(ps_script.encode("utf-8")).decode("ascii")
+    bootstrap = (
+        "$raw = [Console]::In.ReadToEnd().Trim(); "
+        "if ($raw) { Invoke-Expression ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($raw))) }"
+    )
+    cmd = ["powershell.exe"]
+    if sta:
+        cmd.append("-Sta")
+    cmd.extend(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", bootstrap])
+    return subprocess.run(
+        cmd,
+        input=b64_payload,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=timeout,
+        creationflags=CREATE_NO_WINDOW,
+    )
+
+
 def send_prompt_to_antigravity_ide_window(
     conversation_id: str,
     title: str,
@@ -495,6 +525,72 @@ $promptBytes = [Convert]::FromBase64String($env:AGY_PROMPT_B64)
 $promptText = [System.Text.Encoding]::UTF8.GetString($promptBytes)
 $ideBrainDir = $env:AGY_IDE_BRAIN_DIR
 
+function Get-ActiveCid($winEl) {
+    $docCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Document
+    )
+    $docs = $winEl.FindAll([System.Windows.Automation.TreeScope]::Descendants, $docCond)
+    foreach ($d in $docs) {
+        try {
+            $vp = $null
+            if ($d.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$vp)) {
+                $u = [string]$vp.Current.Value
+                if ($u -match '/c/([A-Za-z0-9_-]{6,80})') {
+                    return $Matches[1]
+                }
+            }
+        } catch {}
+    }
+    return ""
+}
+
+function Find-ChatInputBox($winEl) {
+    $wRect = $winEl.Current.BoundingRectangle
+    $minTop = if (-not $wRect.IsEmpty) { $wRect.Top + 88 } else { 80 }
+    $inputNameRe = 'Message input|Ask anything|输入任何问题|询问任何问题|有问题|发送消息|输入消息|向.*提问|Prompt|Chat input|继续对话'
+    $excludeRe = 'Editor content|Monaco|编辑器|Search|搜索|查找|Filter|筛选|Command|命令面板|Terminal|终端|xterm'
+    $composerBtnRe = '^(Send|发送|提交|Stop|停止|Attach|添加|上传|切换模型|Select model)\b|发送消息|Send message'
+
+    $orTypes = New-Object System.Windows.Automation.OrCondition(
+        (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ComboBox)),
+        (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit))
+    )
+    $allBoxes = $winEl.FindAll([System.Windows.Automation.TreeScope]::Descendants, $orTypes)
+    $composerCandidates = @()
+    $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+
+    foreach ($bx in $allBoxes) {
+        try {
+            $r = $bx.Current.BoundingRectangle
+            if ($r.IsEmpty -or $r.Width -lt 130 -or $r.Height -lt 16 -or $r.Top -lt $minTop) { continue }
+            $nm = [string]$bx.Current.Name
+            $cls = [string]$bx.Current.ClassName
+            $aid = [string]$bx.Current.AutomationId
+            if ("$nm $cls $aid" -match $excludeRe) { continue }
+            if ($nm -match $inputNameRe) {
+                return $bx
+            }
+            # Secondary positive check (never blind fallback!): compact height <= 220px AND parent container holds a chat composer button
+            if ($bx.Current.IsKeyboardFocusable -and $r.Height -le 220 -and $r.Width -ge 175) {
+                $parent = $walker.GetParent($bx)
+                if ($null -ne $parent) {
+                    $btnCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+                    $sibBtns = $parent.FindAll([System.Windows.Automation.TreeScope]::Descendants, $btnCond)
+                    foreach ($sb in $sibBtns) {
+                        if ([string]$sb.Current.Name -match $composerBtnRe) {
+                            $composerCandidates += $bx
+                            break
+                        }
+                    }
+                }
+            }
+        } catch {}
+    }
+    if ($composerCandidates.Count -eq 1) { return $composerCandidates[0] }
+    return $null
+}
+
 $root = [System.Windows.Automation.AutomationElement]::RootElement
 $topChildren = $root.FindAll(
     [System.Windows.Automation.TreeScope]::Children,
@@ -502,14 +598,28 @@ $topChildren = $root.FindAll(
 )
 
 $agyWin = $null
+$bestScore = -1
 foreach ($el in $topChildren) {
     try {
         $hwndVal = $el.Current.NativeWindowHandle
         if ($hwndVal -eq 0) { continue }
         $proc = Get-Process -Id $el.Current.ProcessId -ErrorAction SilentlyContinue
         if ($null -eq $proc -or $proc.ProcessName -ne 'Antigravity') { continue }
-        $agyWin = $el
-        if ($el.Current.Name -match 'Antigravity') { break }
+        $score = 10
+        $wName = [string]$el.Current.Name
+        if ($wName -match 'Antigravity') { $score += 20 }
+        if ($targetTitle.Length -ge 3 -and $wName.IndexOf($targetTitle.Substring(0, [Math]::Min(10, $targetTitle.Length)), [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            $score += 60
+        }
+        $curDocCid = Get-ActiveCid $el
+        if ($curDocCid -eq $targetCid) {
+            $agyWin = $el
+            break
+        }
+        if ($score -gt $bestScore) {
+            $bestScore = $score
+            $agyWin = $el
+        }
     } catch {}
 }
 
@@ -528,29 +638,12 @@ try {
     $wshell = New-Object -ComObject WScript.Shell
     $wshell.AppActivate($winPid) | Out-Null
 } catch {}
+# Nudge Alt key state legally so Windows ForegroundLock permits bringing user's own IDE window to front
+[AgyWin32]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)
+[AgyWin32]::keybd_event(0x12, 0, 0x0002, [UIntPtr]::Zero)
 [AgyWin32]::BringWindowToTop($hwnd) | Out-Null
 [AgyWin32]::SetForegroundWindow($hwnd) | Out-Null
-Start-Sleep -Milliseconds 140
-
-function Get-ActiveCid($winEl) {
-    $docCond = New-Object System.Windows.Automation.PropertyCondition(
-        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-        [System.Windows.Automation.ControlType]::Document
-    )
-    $docs = $winEl.FindAll([System.Windows.Automation.TreeScope]::Descendants, $docCond)
-    foreach ($d in $docs) {
-        try {
-            $vp = $d.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
-            if ($null -ne $vp) {
-                $u = [string]$vp.Current.Value
-                if ($u -match '/c/([A-Za-z0-9_-]{6,80})') {
-                    return $Matches[1]
-                }
-            }
-        } catch {}
-    }
-    return ""
-}
+Start-Sleep -Milliseconds 150
 
 function Find-ConversationLink($scopeEl, $cidStr, $titleStr) {
     $linkCond = New-Object System.Windows.Automation.PropertyCondition(
@@ -661,8 +754,9 @@ if ($activeCid -ne $targetCid) {
         }
     }
 
+    $clickedLink = $false
     if ($null -ne $targetLink) {
-        Activate-Element $targetLink | Out-Null
+        $clickedLink = Activate-Element $targetLink
         for ($w = 0; $w -lt 14; $w++) {
             Start-Sleep -Milliseconds 180
             $activeCid = Get-ActiveCid $agyWin
@@ -671,40 +765,17 @@ if ($activeCid -ne $targetCid) {
     }
 
     $activeCid = Get-ActiveCid $agyWin
-    if ($activeCid -ne $targetCid) {
+    $winTitleNow = [string]$agyWin.Current.Name
+    $titleAligned = ($targetTitle.Length -ge 3 -and $winTitleNow.IndexOf($targetTitle.Substring(0, [Math]::Min(8, $targetTitle.Length)), [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
+    if ($activeCid -ne $targetCid -and -not ($activeCid -eq "" -and ($clickedLink -or $titleAligned))) {
         Write-Output "ERR:桌面端当前未能确认切换到该会话窗口"
         exit 0
     }
 }
 
-$comboCond = New-Object System.Windows.Automation.PropertyCondition(
-    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-    [System.Windows.Automation.ControlType]::ComboBox
-)
-$msgBox = $null
-$combos = $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, $comboCond)
-foreach ($cb in $combos) {
-    if ($cb.Current.Name -match 'Message input|输入任何问题') {
-        $msgBox = $cb
-        break
-    }
-}
+$msgBox = Find-ChatInputBox $agyWin
 if ($null -eq $msgBox) {
-    $editCond = New-Object System.Windows.Automation.PropertyCondition(
-        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-        [System.Windows.Automation.ControlType]::Edit
-    )
-    $edits = $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, $editCond)
-    foreach ($ed in $edits) {
-        if ($ed.Current.Name -match 'Message input|输入任何问题') {
-            $msgBox = $ed
-            break
-        }
-    }
-}
-
-if ($null -eq $msgBox) {
-    Write-Output "ERR:未找到桌面端对话输入框 (Message input)"
+    Write-Output "ERR:未找到桌面端对话输入框"
     exit 0
 }
 
@@ -734,7 +805,7 @@ try {
 [AgyWin32]::SetForegroundWindow($hwnd) | Out-Null
 Start-Sleep -Milliseconds 40
 if ([AgyWin32]::GetForegroundWindow() -ne $hwnd) {
-    Write-Output "ERR:桌面窗口未处于前台焦点，已安全中止投递"
+    Write-Output "ERR:桌面窗口未处于前台焦点（可能电脑已锁屏），已安全中止投递"
     exit 0
 }
 
@@ -749,7 +820,7 @@ Start-Sleep -Milliseconds 50
 
 try {
     $recheckCid = Get-ActiveCid $agyWin
-    if ([AgyWin32]::GetForegroundWindow() -ne $hwnd -or $recheckCid -ne $targetCid) {
+    if ([AgyWin32]::GetForegroundWindow() -ne $hwnd -or ($recheckCid -ne "" -and $recheckCid -ne $targetCid)) {
         Write-Output "ERR:桌面窗口焦点或目标会话发生变化，已安全中止投递"
         exit 0
     }
@@ -775,7 +846,6 @@ try {
 Write-Output "OK:已投递至电脑端 Antigravity 窗口"
 """
 
-    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
     env = os.environ.copy()
     env["AGY_TARGET_CID"] = cid
     env["AGY_TARGET_TITLE"] = (title or "").strip()
@@ -783,25 +853,7 @@ Write-Output "OK:已投递至电脑端 Antigravity 窗口"
 
     with _DESKTOP_UIA_LOCK:
         try:
-            res = subprocess.run(
-                [
-                    "powershell.exe",
-                    "-Sta",
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-WindowStyle",
-                    "Hidden",
-                    "-EncodedCommand",
-                    encoded,
-                ],
-                env=env,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=16,
-                creationflags=CREATE_NO_WINDOW,
-            )
+            res = _run_powershell_script(ps_script, env=env, timeout=16, sta=True)
             lines = [ln.strip() for ln in (res.stdout or "").splitlines() if ln.strip()]
             for ln in reversed(lines):
                 if ln.startswith("OK:"):
@@ -1193,15 +1245,23 @@ if ($prevHasHistory) {
 }
 
 $msgBox = $null
-$comboCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ComboBox)
-foreach ($cb in $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, $comboCond)) {
-    if ($cb.Current.Name -match 'Message input|输入任何问题') { $msgBox = $cb; break }
-}
-if ($null -eq $msgBox) {
-    $editCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
-    foreach ($ed in $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, $editCond)) {
-        if ($ed.Current.Name -match 'Message input|输入任何问题') { $msgBox = $ed; break }
-    }
+$wRect2 = $agyWin.Current.BoundingRectangle
+$minTop2 = if (-not $wRect2.IsEmpty) { $wRect2.Top + 88 } else { 80 }
+$inRe2 = 'Message input|Ask anything|输入任何问题|询问任何问题|有问题|发送消息|输入消息|向.*提问|Prompt|Chat input|继续对话'
+$exRe2 = 'Editor content|Monaco|编辑器|Search|搜索|查找|Filter|筛选|Command|命令面板|Terminal|终端|xterm'
+$orCondBox = New-Object System.Windows.Automation.OrCondition(
+    (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ComboBox)),
+    (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit))
+)
+foreach ($bx2 in $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, $orCondBox)) {
+    try {
+        $r2 = $bx2.Current.BoundingRectangle
+        if ($r2.IsEmpty -or $r2.Width -lt 130 -or $r2.Height -lt 16 -or $r2.Top -lt $minTop2) { continue }
+        $nm2 = [string]$bx2.Current.Name
+        $cls2 = [string]$bx2.Current.ClassName
+        if ("$nm2 $cls2" -match $exRe2) { continue }
+        if ($nm2 -match $inRe2) { $msgBox = $bx2; break }
+    } catch {}
 }
 if ($null -eq $msgBox) {
     Write-Output "ERR:未找到新建会话输入框"
@@ -1279,23 +1339,13 @@ try {
 
 Write-Output "OK:$newCid"
 """
-    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
     env = os.environ.copy()
     env["AGY_PROMPT_B64"] = base64.b64encode((prompt or "").encode("utf-8")).decode("ascii")
     env["AGY_IDE_BRAIN_DIR"] = str(brain_dir)
 
     with _DESKTOP_UIA_LOCK:
         try:
-            res = subprocess.run(
-                ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
-                env=env,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=18,
-                creationflags=CREATE_NO_WINDOW,
-            )
+            res = _run_powershell_script(ps_script, env=env, timeout=18, sta=True)
             ok_matched = False
             new_cid = ""
             for ln in reversed([x.strip() for x in (res.stdout or "").splitlines() if x.strip()]):
@@ -1397,21 +1447,11 @@ foreach ($el in $root.FindAll([System.Windows.Automation.TreeScope]::Children, [
 }
 ConvertTo-Json -InputObject @($found) -Compress
 """
-    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
     env = os.environ.copy()
     env["AGY_REQ_CID"] = (conversation_id or "").strip()
 
     try:
-        res = subprocess.run(
-            ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
-            env=env,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=6,
-            creationflags=CREATE_NO_WINDOW,
-        )
+        res = _run_powershell_script(ps_script, env=env, timeout=6, sta=True)
         raw = (res.stdout or "").strip()
         if not raw or raw == "null":
             return []
@@ -1553,7 +1593,6 @@ if ($matchedBtn.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::
 }
 Write-Output "ERR:该按钮不支持安全无焦点调用，请切到远程桌面手动查看"
 """
-    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
     env = os.environ.copy()
     env["AGY_ACT_HWND"] = str(spec["hwnd"])
     env["AGY_ACT_CID"] = str(spec["cid"])
@@ -1562,16 +1601,7 @@ Write-Output "ERR:该按钮不支持安全无焦点调用，请切到远程桌�
 
     with _DESKTOP_UIA_LOCK:
         try:
-            res = subprocess.run(
-                ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
-                env=env,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=8,
-                creationflags=CREATE_NO_WINDOW,
-            )
+            res = _run_powershell_script(ps_script, env=env, timeout=8, sta=True)
             for ln in reversed([x.strip() for x in (res.stdout or "").splitlines() if x.strip()]):
                 if ln.startswith("OK:"):
                     return (True, ln.removeprefix("OK:").strip())

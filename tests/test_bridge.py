@@ -1483,10 +1483,18 @@ async def test_chatgpt_ios_ui_steps_timeline_and_canvas_sandbox(tmp_path: Path):
     from qq_agy_bridge.conversations import _humanize_tool_step, load_conversation_detail
     from qq_agy_bridge.web_pwa import STATIC_DIR
 
-    assert "antigravity-ios-shell-v10" in STATIC_PWA_SW_JS
+    assert "antigravity-ios-shell-v11" in STATIC_PWA_SW_JS
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     assert 'content="#000000"' in html
     assert 'id="composerCard"' in html
+    assert "compact-pill" in html
+    assert 'id="centerPlaceholder"' in html
+    assert 'id="tabbar"' in html
+    assert 'id="tabPinned"' in html
+    assert 'id="morePage"' in html
+    assert "BENTO_MODULES" in html
+    assert "cont-deck" in html
+    assert 'id="drawerNewChatBtn"' in html
     assert 'id="composerTargetBtn"' in html
     assert "thought-accordion" in html
     assert 'id="inChatSearchBar"' in html
@@ -1572,6 +1580,117 @@ async def test_chatgpt_ios_ui_steps_timeline_and_canvas_sandbox(tmp_path: Path):
                     clear_ev = ev
                     break
             assert clear_ev is not None and clear_ev.get("req_id") == "br-test-99"
+    finally:
+        stop_event.set()
+        await asyncio.wait_for(pwa_task, timeout=5.0)
+        await sessions.shutdown_all()
+
+
+@pytest.mark.asyncio
+async def test_ide_window_delivery_failure_never_forks_cli_and_watch_syncs(tmp_path: Path) -> None:
+    """Verify:
+    1. When `slot_store == 'ide'` and `pc_window_sender` fails (e.g. PC locked or input box missing),
+       `WebPwaServer` NEVER silently spawns a forked `agy` CLI session or pollutes `.continuation_map.json`,
+       and reports `Antigravity 电脑端` rather than a mismatched CLI model.
+    2. Subsequent turns typed on the PC IDE window are still live-pushed to mobile via `_ide_watch_loop`
+       at the very bottom of the conversation, even if legacy `.continuation_map.json` had a stale entry.
+    """
+    if sys.platform == "win32":
+        from qq_agy_bridge.desktop_tools import _run_powershell_script
+        # Ensure scripts >32KB never trigger WinError 206 (`CreateProcess` command-line length limit)!
+        huge_comment = "# " + ("超长脚本长度免疫验证_" * 2200) + "\n"
+        ps_res = _run_powershell_script(huge_comment + '[Console]::OutputEncoding=[Text.Encoding]::UTF8; Write-Output "OK:UTF8中文正常"', timeout=10)
+        assert ps_res.returncode == 0 and "OK:UTF8中文正常" in ps_res.stdout
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    ide_dir = tmp_path / "ide_nofork"
+    cli_dir = tmp_path / "cli_nofork"
+    cid = "c63c3f37-e9d8-4ea1-a261-cbf3867a7336"
+    tf = ide_dir / "brain" / cid / ".system_generated" / "logs" / "transcript.jsonl"
+    tf.parent.mkdir(parents=True, exist_ok=True)
+    tf.write_text(
+        json.dumps({"step_index": 0, "type": "USER_INPUT", "created_at": "2026-11-25T15:00:00Z", "content": "电脑端已有第一句"}, ensure_ascii=False)
+        + "\n"
+        + json.dumps({"step_index": 1, "type": "PLANNER_RESPONSE", "created_at": "2026-11-25T15:00:05Z", "content": "电脑端已有第一轮回复"}, ensure_ascii=False)
+        + "\n",
+        encoding="utf-8",
+    )
+
+    # Pre-seed a stale polluted continuation_map entry pointing to an old CLI fork
+    stale_fork_cid = "413d5d3f-532f-44f4-83d1-ed616fa1f5c2"
+    stale_tf = cli_dir / "brain" / stale_fork_cid / ".system_generated" / "logs" / "transcript.jsonl"
+    stale_tf.parent.mkdir(parents=True, exist_ok=True)
+    stale_tf.write_text(
+        json.dumps({"step_index": 0, "type": "PLANNER_RESPONSE", "created_at": "2026-11-25T15:55:00Z", "content": "旧分叉错误回复"}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    cont_map_file = tmp_path / "cont_map.json"
+    cont_map_file.write_text(json.dumps({f"ide:{cid}": stale_fork_cid, cid: stale_fork_cid}), encoding="utf-8")
+
+    tok = "no-silent-fork-token-2026"
+    cfg = _make_config(tmp_path, web_pwa_port=port, web_access_token=tok)
+    # Any attempt to spawn fallback `agy` CLI will crash with exit=99!
+    sessions = SessionManager(cfg, command_override=[sys.executable, "-c", "import sys; sys.exit(99)"])
+    pwa = WebPwaServer(
+        cfg,
+        session_manager=sessions,
+        access_token=tok,
+        ide_store_dir=ide_dir,
+        cli_store_dir=cli_dir,
+        codex_store_dir=tmp_path / "cdx_nofork",
+        continuation_map_path=cont_map_file,
+        pc_window_sender=lambda _cid, _t, _p: (False, "桌面窗口未处于前台焦点"),
+    )
+    pwa.ide_watch_interval = 0.15  # type: ignore[attr-defined]
+    stop_event = asyncio.Event()
+    pwa_task = asyncio.create_task(pwa.run(stop_event=stop_event))
+    try:
+        await asyncio.sleep(0.2)
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws?token={tok}") as ws:
+            await asyncio.wait_for(ws.recv(), timeout=4.0)  # hello
+
+            await ws.send(json.dumps({"type": "select_conversation", "conversation_id": cid, "store": "ide"}))
+            loaded = json.loads(await asyncio.wait_for(ws.recv(), timeout=4.0))
+            assert loaded["type"] == "conversation_loaded"
+            # Stale forked CLI turn MUST NOT be appended to live PC IDE conversation!
+            assert all("旧分叉错误回复" not in m["text"] for m in loaded["history"])
+            assert len(loaded["history"]) == 2
+
+            # Attempt to send while PC window rejects delivery -> must return clean IDE error, ZERO CLI spawn!
+            await ws.send(json.dumps({"type": "chat", "text": "测试防分叉保护"}))
+            end_ev = None
+            for _ in range(15):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=4.0))
+                if ev["type"] == "stream_end":
+                    end_ev = ev["item"]
+                    break
+            assert end_ev is not None
+            assert end_ev["model"] == "Antigravity 电脑端"
+            assert "未能投递到电脑端 Antigravity 聊天窗口" in end_ev["text"]
+            assert pwa._session_for_slot(f"ide:{cid}").num_turns == 0
+
+            # Now user types a new turn directly on the PC IDE window -> mobile must live-receive it at the bottom!
+            await asyncio.sleep(0.05)
+            with tf.open("a", encoding="utf-8") as fh:
+                fh.write(
+                    json.dumps({"step_index": 2, "type": "USER_INPUT", "created_at": "2026-11-25T16:10:00Z", "content": "电脑端新发送的命令"}, ensure_ascii=False)
+                    + "\n"
+                    + json.dumps({"step_index": 3, "type": "PLANNER_RESPONSE", "created_at": "2026-11-25T16:10:05Z", "content": "电脑端最新真实回复"}, ensure_ascii=False)
+                    + "\n"
+                )
+
+            pushed = None
+            for _ in range(15):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=4.0))
+                if ev["type"] == "conversation_loaded" and ev.get("silent") is True:
+                    pushed = ev
+                    break
+            assert pushed is not None
+            assert pushed["history"][-2]["text"] == "电脑端新发送的命令"
+            assert pushed["history"][-1]["text"] == "电脑端最新真实回复"
     finally:
         stop_event.set()
         await asyncio.wait_for(pwa_task, timeout=5.0)

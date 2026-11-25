@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
@@ -81,27 +81,47 @@
 
     button { font-family: inherit; }
 
-    /* ── Authentic ChatGPT iOS Minimalist Top Bar (Seamless Pure Black, Zero Blur) ── */
+    /* ── Floating Circular Liquid-Glass Top Controls (Screenshot 1 & 2 Exact Style) ── */
     .topbar {
-      height: calc(var(--top-safe) + 50px);
-      padding: var(--top-safe) 10px 0;
-      background: #000000;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      height: calc(var(--top-safe) + 54px);
+      padding: var(--top-safe) 16px 0;
+      background: linear-gradient(180deg, #000000 68%, rgba(0, 0, 0, 0.88) 88%, rgba(0, 0, 0, 0));
+      border-bottom: none;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 6px;
-      z-index: 20;
+      gap: 8px;
+      z-index: 22;
       flex-shrink: 0;
       transform: translateZ(0);
     }
 
+    .nav-circle-btn {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: #1c1c1e;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 4px 14px rgba(0, 0, 0, 0.55);
+      color: #f5f5f7;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      position: relative;
+      transition: background 0.16s, transform 0.12s, border-color 0.16s;
+    }
+    .nav-circle-btn:hover { background: #262629; }
+    .nav-circle-btn:active { background: #2f2f33; transform: scale(0.92); }
+
     .nav-icon-btn {
       width: 38px;
       height: 38px;
-      border-radius: 11px;
-      border: none;
-      background: transparent;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      background: #1c1c1e;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.13);
       color: var(--text-pri);
       display: inline-flex;
       align-items: center;
@@ -111,22 +131,22 @@
       position: relative;
       transition: background 0.16s, transform 0.12s;
     }
-    .nav-icon-btn:hover { background: rgba(255, 255, 255, 0.06); }
-    .nav-icon-btn:active { background: rgba(255, 255, 255, 0.11); transform: scale(0.93); }
+    .nav-icon-btn:hover { background: #262629; }
+    .nav-icon-btn:active { background: #303034; transform: scale(0.93); }
 
     .conn-dot {
       position: absolute;
-      top: 8px;
+      top: 7px;
       right: 7px;
       width: 6px;
       height: 6px;
       border-radius: 50%;
       background: #f59e0b;
-      box-shadow: 0 0 0 2px #0d0d0f;
+      box-shadow: 0 0 0 2px #1c1c1e;
     }
     .conn-dot.online {
       background: var(--accent-green);
-      box-shadow: 0 0 0 2px #0d0d0f, 0 0 8px rgba(16, 185, 129, 0.55);
+      box-shadow: 0 0 0 2px #1c1c1e, 0 0 8px rgba(16, 185, 129, 0.55);
     }
     .conn-dot.offline { background: var(--danger); }
 
@@ -134,16 +154,19 @@
       border: none;
       background: transparent;
       color: var(--text-pri);
-      padding: 5px 14px;
-      border-radius: 12px;
+      padding: 4px 12px;
+      border-radius: 999px;
       cursor: pointer;
       display: flex;
       flex-direction: column;
       align-items: center;
       min-width: 0;
-      max-width: 68vw;
-      transition: background 0.16s, transform 0.12s;
+      max-width: 58vw;
+      transition: opacity 0.18s, background 0.16s, transform 0.12s;
     }
+    body.view-more .center-model-btn { opacity: 0; pointer-events: none; }
+    body.is-home-empty.conn-ready .center-model-btn .header-title-row { display: none; }
+    body.is-home-empty.conn-ready .center-model-btn .header-sub { opacity: 0; }
     .center-model-btn:hover { background: rgba(255, 255, 255, 0.05); }
     .center-model-btn:active { background: rgba(255, 255, 255, 0.09); transform: scale(0.98); }
 
@@ -154,7 +177,7 @@
       max-width: 100%;
     }
     .header-title {
-      font-size: 15.5px;
+      font-size: 15px;
       font-weight: 600;
       letter-spacing: -0.2px;
       white-space: nowrap;
@@ -179,15 +202,15 @@
       margin-top: 1px;
     }
 
-    .right-nav-group { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+    .right-nav-group { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
 
-    /* ── Slide-Over Frosted Obsidian Drawer Sidebar ── */
+    /* ── Pure-Black Minimalist Sidebar Drawer with Floating Bottom Pills (Screenshot 3) ── */
     .drawer-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.64);
-      backdrop-filter: blur(4px);
-      -webkit-backdrop-filter: blur(4px);
+      background: rgba(0, 0, 0, 0.72);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
       z-index: 45;
       opacity: 0;
       pointer-events: none;
@@ -200,99 +223,94 @@
       top: 0;
       left: 0;
       bottom: 0;
-      width: min(84vw, 322px);
-      background: var(--bg-sidebar);
-      backdrop-filter: blur(32px) saturate(160%);
-      -webkit-backdrop-filter: blur(32px) saturate(160%);
+      width: min(84vw, 326px);
+      background: linear-gradient(90deg, #000000 88%, rgba(8, 8, 10, 0.98) 100%);
       z-index: 46;
       transform: translateX(-103%);
       transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-      display: flex;
-      flex-direction: column;
-      padding: calc(var(--top-safe) + 12px) 12px calc(var(--safe-bot) + 12px);
-      border-right: 1px solid var(--border-subtle);
-      box-shadow: 18px 0 48px rgba(0, 0, 0, 0.65);
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      padding: calc(var(--top-safe) + 14px) 16px 0;
+      border-right: 1px solid rgba(255, 255, 255, 0.045);
+      box-shadow: 24px 0 60px rgba(0, 0, 0, 0.85);
     }
     .sidebar-drawer.show { transform: translateX(0); }
+
+    .drawer-primary-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 14px;
+    }
+    .drawer-nav-row {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: #f5f5f7;
+      padding: 10px 8px;
+      border-radius: 13px;
+      font-size: 17px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.14s, transform 0.1s;
+    }
+    .drawer-nav-row:hover, .drawer-nav-row:active { background: #18181b; }
+    .drawer-nav-row.active { background: #1c1c1f; font-weight: 600; }
+    .drawer-nav-ico {
+      width: 24px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #f5f5f7;
+      flex-shrink: 0;
+    }
+
+    .drawer-filter-collapse {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 10px;
+      animation: msgFadeIn 0.15s ease-out;
+    }
+    .drawer-filter-collapse.show { display: flex; }
 
     .drawer-search-row {
       position: relative;
       display: flex;
       align-items: center;
-      margin-bottom: 10px;
     }
     .drawer-search-ico {
       position: absolute;
-      left: 11px;
+      left: 12px;
       color: var(--text-muted);
       pointer-events: none;
       display: flex;
     }
     .drawer-search {
       width: 100%;
-      background: rgba(255, 255, 255, 0.055);
-      border: 1px solid var(--border-hairline);
-      box-shadow: var(--specular-top);
-      border-radius: 12px;
-      padding: 8.5px 12px 8.5px 34px;
+      background: #18181b;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      padding: 9px 14px 9px 36px;
       color: var(--text-pri);
-      font-size: 14px;
+      font-size: 15px;
       outline: none;
-      transition: border-color 0.16s, background 0.16s;
     }
-    .drawer-search::placeholder { color: var(--text-muted); }
-    .drawer-search:focus {
-      background: rgba(255, 255, 255, 0.08);
-      border-color: rgba(255, 255, 255, 0.2);
-    }
+    .drawer-search::placeholder { color: #8e8e93; }
+    .drawer-search:focus { border-color: rgba(255, 255, 255, 0.22); background: #202024; }
 
-    .drawer-menu-list {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid var(--border-hairline);
-      margin-bottom: 10px;
-    }
-    .drawer-menu-item {
-      width: 100%;
-      border: none;
-      background: transparent;
-      color: var(--text-pri);
-      padding: 9px 10px;
-      border-radius: 11px;
-      font-size: 14px;
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      gap: 11px;
-      cursor: pointer;
-      text-align: left;
-      transition: background 0.14s;
-    }
-    .drawer-menu-item:hover, .drawer-menu-item:active { background: rgba(255, 255, 255, 0.07); }
-    .drawer-menu-icon {
-      width: 28px;
-      height: 28px;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.055);
-      border: 1px solid var(--border-hairline);
-      color: var(--text-pri);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-
-    /* Segmented Track Filter Tabs */
     .drawer-tabs {
       display: flex;
-      gap: 3px;
+      gap: 4px;
       padding: 3px;
-      margin-bottom: 8px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid var(--border-hairline);
-      border-radius: 11px;
+      background: #141417;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
       overflow-x: auto;
       scrollbar-width: none;
       flex-shrink: 0;
@@ -302,9 +320,9 @@
       flex: 1;
       border: none;
       background: transparent;
-      color: var(--text-muted);
+      color: #8e8e93;
       padding: 5.5px 8px;
-      border-radius: 8px;
+      border-radius: 9px;
       font-size: 11.5px;
       font-weight: 600;
       cursor: pointer;
@@ -312,89 +330,155 @@
       transition: background 0.15s, color 0.15s;
     }
     .drawer-tab.active {
-      background: var(--bg-surface-2);
-      color: var(--text-pri);
-      box-shadow: var(--specular-top), 0 2px 6px rgba(0, 0, 0, 0.35);
+      background: #28282c;
+      color: #ffffff;
     }
 
+    .drawer-scroll-zone {
+      position: relative;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
     .drawer-conv-list {
       flex: 1;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 1px;
+      padding-bottom: calc(var(--safe-bot) + 84px);
       -webkit-overflow-scrolling: touch;
     }
-    .drawer-conv-list::-webkit-scrollbar { width: 4px; }
-    .drawer-conv-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 999px; }
+    .drawer-conv-list::-webkit-scrollbar { width: 3px; }
+    .drawer-conv-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 999px; }
+
+    .drawer-bottom-fade {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: calc(var(--safe-bot) + 86px);
+      background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.86) 52%, #000000 100%);
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .drawer-bottom-fade.at-end { opacity: 0.28; }
+
+    .drawer-float-bar {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: calc(var(--safe-bot) + 14px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 4;
+    }
+    .drawer-new-pill {
+      pointer-events: auto;
+      height: 46px;
+      padding: 0 20px;
+      border-radius: 999px;
+      border: none;
+      background: #24a1ff;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 8px 24px rgba(36, 161, 255, 0.32);
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: transform 0.12s, filter 0.15s;
+    }
+    .drawer-new-pill:active { transform: scale(0.94); filter: brightness(0.92); }
+
+    .drawer-right-pill {
+      pointer-events: auto;
+      height: 46px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: rgba(30, 30, 34, 0.92);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 8px 24px rgba(0, 0, 0, 0.65);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .drawer-pill-ico {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      border: none;
+      background: transparent;
+      color: #f5f5f7;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.14s, transform 0.1s;
+    }
+    .drawer-pill-ico:active, .drawer-pill-ico.active { background: rgba(255, 255, 255, 0.12); transform: scale(0.92); }
 
     .conv-group-label {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.4px;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      padding: 12px 10px 4px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #8e8e93;
+      padding: 10px 8px 6px;
     }
 
     .conv-item {
       width: 100%;
-      border: 1px solid transparent;
+      border: none;
       background: transparent;
-      color: var(--text-pri);
-      padding: 9.5px 11px;
+      color: #f2f2f7;
+      padding: 11px 8px;
       border-radius: 12px;
       text-align: left;
       cursor: pointer;
       display: flex;
-      flex-direction: column;
-      gap: 4px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
       position: relative;
-      transition: background 0.14s, border-color 0.14s;
+      transition: background 0.13s;
     }
-    .conv-item:hover { background: rgba(255, 255, 255, 0.045); }
-    .conv-item.active {
-      background: rgba(255, 255, 255, 0.075);
-      border-color: var(--border-subtle);
-      box-shadow: var(--specular-top);
-    }
+    .conv-item:hover { background: #141417; }
+    .conv-item.active { background: #1c1c1f; }
 
     .conv-item-top {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 6px;
+      gap: 8px;
+      width: 100%;
+      min-width: 0;
     }
     .conv-item-title {
-      font-size: 13.8px;
-      font-weight: 500;
+      font-size: 15.5px;
+      font-weight: 400;
       letter-spacing: -0.1px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      color: #f2f2f7;
     }
+    .conv-item.active .conv-item-title { font-weight: 500; color: #ffffff; }
     .conv-tag {
       font-size: 10px;
       font-weight: 500;
       padding: 1.5px 6px;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.065);
-      border: 1px solid rgba(255, 255, 255, 0.07);
-      color: var(--text-sec);
+      background: rgba(255, 255, 255, 0.06);
+      color: #98989f;
       flex-shrink: 0;
     }
-    .conv-tag.codex { color: #a7f3d0; background: rgba(16, 185, 129, 0.12); border-color: rgba(16, 185, 129, 0.22); }
-    .conv-tag.ide { color: #dbeafe; background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.13); }
-    .conv-tag.run { color: #6ee7b7; background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.35); }
-    .conv-item-sub {
-      font-size: 11.5px;
-      color: var(--text-muted);
-      display: flex;
-      justify-content: space-between;
-      gap: 8px;
-      white-space: nowrap;
-      overflow: hidden;
-    }
+    .conv-tag.codex { color: #a5b4fc; background: rgba(99, 102, 241, 0.14); }
+    .conv-tag.ide { color: #93c5fd; background: rgba(59, 130, 246, 0.12); }
+    .conv-tag.run { color: #6ee7b7; background: rgba(16, 185, 129, 0.2); }
 
     /* ── Main Chat Stream (Editorial Luxury Flow) ── */
     .chat-wrap {
@@ -447,7 +531,7 @@
       cursor: pointer;
     }
 
-    /* ── Calm ChatGPT iOS Empty Home Greeting + Starter Pills ── */
+    /* ── Two-Line Greeting + Stacked Continuation Deck (Screenshot 2 Exact Style) ── */
     .empty-hero {
       margin-top: auto;
       margin-bottom: auto;
@@ -456,51 +540,107 @@
       align-items: center;
       justify-content: center;
       text-align: center;
-      padding: 24px 10px;
+      padding: 20px 6px 28px;
     }
-    .empty-hero h2 {
-      font-size: 25px;
+    .hero-greet-1 {
+      font-size: 21px;
       font-weight: 600;
       color: #ffffff;
-      margin: 0 0 22px;
-      letter-spacing: -0.45px;
+      margin: 0;
+      letter-spacing: -0.3px;
+      line-height: 1.35;
     }
-    .suggestion-pills {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 9px;
+    .hero-greet-2 {
+      font-size: 19px;
+      font-weight: 400;
+      color: #a1a1a6;
+      margin: 4px 0 24px;
+      letter-spacing: -0.2px;
+      line-height: 1.35;
+    }
+    .cont-deck {
+      position: relative;
       width: 100%;
-      max-width: 460px;
+      max-width: 390px;
+      z-index: 1;
     }
-    .suggest-pill {
-      border: 1px solid rgba(255, 255, 255, 0.09);
-      background: #171717;
-      color: var(--text-pri);
-      padding: 9.5px 15px;
-      border-radius: 999px;
-      cursor: pointer;
-      display: inline-flex;
-      flex-direction: row;
+    .cont-deck.has-stack::after {
+      content: "";
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: -8px;
+      height: 26px;
+      border-radius: 0 0 20px 20px;
+      background: #131316;
+      border: 1px solid rgba(255, 255, 255, 0.055);
+      z-index: -1;
+      pointer-events: none;
+    }
+    .cont-card {
+      width: 100%;
+      background: #1c1c1e;
+      border: 1px solid rgba(255, 255, 255, 0.085);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 12px 32px rgba(0, 0, 0, 0.6);
+      border-radius: 22px;
+      padding: 14px 16px;
+      display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: 13.5px;
-      font-weight: 500;
-      transition: transform 0.12s ease, background 0.15s;
+      gap: 13px;
+      text-align: left;
+      color: #ffffff;
+      cursor: pointer;
+      transition: transform 0.14s ease, background 0.15s;
     }
-    .suggest-pill:hover { background: #212121; }
-    .suggest-pill:active { transform: scale(0.96); background: #2a2a2a; }
-    .sug-ico {
+    .cont-card:hover { background: #232326; }
+    .cont-card:active { transform: scale(0.975); background: #28282c; }
+    .cont-ico-box {
+      width: 44px;
+      height: 44px;
+      border-radius: 13px;
+      background: #28282c;
+      border: 1px solid rgba(255, 255, 255, 0.07);
       display: inline-flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
     }
-    .sug-title {
-      font-size: 13.5px;
-      font-weight: 500;
-      color: #ececec;
+    .cont-body {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      mask-image: linear-gradient(90deg, #000000 86%, transparent 100%);
+      -webkit-mask-image: linear-gradient(90deg, #000000 86%, transparent 100%);
     }
+    .cont-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #f5f5f7;
+      white-space: nowrap;
+      margin-bottom: 3px;
+    }
+    .cont-sub {
+      font-size: 13.5px;
+      color: #98989f;
+      white-space: nowrap;
+    }
+    .cont-dots {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 16px;
+    }
+    .cont-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      border: none;
+      padding: 0;
+      background: rgba(255, 255, 255, 0.2);
+      cursor: pointer;
+      transition: width 0.18s, background 0.18s;
+    }
+    .cont-dot.active { width: 16px; background: rgba(255, 255, 255, 0.72); }
 
     /* ── User Message: Authentic ChatGPT iOS #2F2F2F Pill ── */
     .msg-row {
@@ -788,39 +928,278 @@
       background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 0;
     }
 
-    /* ── Latest ChatGPT iOS Unified Two-Row Rounded Composer (#212121, 26px) ── */
-    .composer-outer {
-      padding: 6px 12px calc((1 - var(--kb-open, 0)) * var(--safe-bot) + 8px);
+    /* ── Three-State Adaptive Pill Composer + Bottom Tab Bar + Bento More Page (Screenshots 1 & 2) ── */
+    .tabbar {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 38px;
       background: #000000;
       flex-shrink: 0;
       position: relative;
-      z-index: 10;
+      z-index: 14;
+      padding: 2px 16px calc(var(--safe-bot) + 4px);
+      max-height: calc((1 - var(--kb-open, 0)) * 66px);
+      overflow: hidden;
+      transition: max-height 0.16s ease, opacity 0.16s ease;
+    }
+    body.in-conversation:not(.view-more) .tabbar {
+      max-height: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+    body.in-conversation:not(.view-more) .composer-outer {
+      padding-bottom: calc((1 - var(--kb-open, 0)) * var(--safe-bot) + 8px);
+    }
+    .tab-item {
+      width: 62px;
+      height: 38px;
+      border: none;
+      background: transparent;
+      color: #8e8e93;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.16s, color 0.16s, transform 0.1s;
+    }
+    .tab-item.active {
+      background: #242426;
+      color: #ffffff;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+    .tab-item:active { transform: scale(0.92); }
+
+    /* Bento 2x4 More Space Page */
+    .more-page {
+      flex: 1;
+      min-height: 0;
+      background: #000000;
+      overflow-y: auto;
+      padding: 8px 16px 24px;
+      display: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    body.view-more .more-page { display: block; }
+    body.view-more .chat-wrap { display: none; }
+
+    .more-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+    .more-card {
+      position: relative;
+      background: #18181a;
+      border: 1px solid rgba(255, 255, 255, 0.055);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.075);
+      color: #f5f5f7;
+      border-radius: 22px;
+      height: 110px;
+      padding: 16px 17px 15px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: flex-start;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: pan-y;
+      transition: transform 0.13s ease, background 0.15s, border-color 0.15s;
+    }
+    .more-card:hover { background: #1f1f22; }
+    .more-card:active { transform: scale(0.965); background: #252529; }
+    .more-card.pinned-tab { border-color: rgba(36, 161, 255, 0.42); }
+    .more-card-top {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .more-pin-tag {
+      font-size: 11px;
+      color: #60a5fa;
+      background: rgba(36, 161, 255, 0.14);
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+    .more-count-tag {
+      font-size: 11px;
+      color: #98989f;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 2px 7px;
+      border-radius: 999px;
+    }
+    .mc-ico {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .more-hint {
+      text-align: center;
+      color: #6e6e73;
+      font-size: 13px;
+      margin: 22px 0 8px;
+      letter-spacing: 0.1px;
+    }
+    .more-search-results {
+      max-width: 520px;
+      margin: 14px auto 0;
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .more-search-results.show { display: flex; }
+
+    /* More-Page Bottom Search Pill */
+    .more-search-pill {
+      max-width: 520px;
+      margin: 0 auto;
+      height: 48px;
+      border-radius: 999px;
+      background: #1c1c1e;
+      border: 1px solid rgba(255, 255, 255, 0.075);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+      display: none;
+      grid-template-columns: 44px minmax(0, 1fr) 44px;
+      align-items: center;
+      padding: 0 4px;
+      position: relative;
+    }
+    body.view-more .more-search-pill { display: grid; }
+    body.view-more #composerCard { display: none; }
+    .more-search-input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #ffffff;
+      font-size: 16px;
+      text-align: center;
+    }
+    .more-search-input:focus { text-align: left; }
+    .more-search-input::placeholder { color: #8e8e93; }
+
+    /* Adaptive Composer Outer & Card */
+    .composer-outer {
+      padding: 6px 14px 8px;
+      background: #000000;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 15;
     }
     .composer-card {
       max-width: 768px;
       margin: 0 auto;
-      background: #212121;
-      border: 1px solid rgba(255, 255, 255, 0.075);
+      background: #1c1c1e;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
       border-radius: 26px;
       padding: 10px 10px 9px 14px;
       display: flex;
       flex-direction: column;
       gap: 6px;
-      transition: border-color 0.16s, background 0.16s;
+      transition: border-color 0.16s, background 0.16s, border-radius 0.16s;
     }
     .composer-card:focus-within {
-      border-color: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.18);
+      background: #212124;
+    }
+
+    /* Compact Single-Row Pill State (Exact Screenshot 2 Idle Home Look!) */
+    .composer-card.compact-pill {
+      border-radius: 999px;
+      padding: 5px 6px;
+      min-height: 48px;
+      display: grid;
+      grid-template-columns: 38px minmax(0, 1fr) 38px;
+      align-items: center;
+      gap: 4px;
+    }
+    .composer-card.compact-pill #ideApproveInline,
+    .composer-card.compact-pill #attStrip,
+    .composer-card.compact-pill .composer-extra-chip {
+      display: none !important;
+    }
+    .composer-card.compact-pill .composer-toolbar {
+      display: contents;
+    }
+    .composer-card.compact-pill .composer-tools-left {
+      grid-column: 1;
+      grid-row: 1;
+      overflow: visible;
+    }
+    .composer-card.compact-pill .input-slot {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .composer-card.compact-pill .composer-tools-right {
+      grid-column: 3;
+      grid-row: 1;
+      justify-content: flex-end;
+    }
+    .composer-card.compact-pill .plus-btn {
+      background: transparent;
+      border-color: transparent;
+      width: 36px;
+      height: 36px;
+    }
+    .composer-card.compact-pill .send-btn.empty:not(.stop) {
+      display: none;
+    }
+    .composer-card.compact-pill .mic-btn {
+      display: inline-flex !important;
+    }
+
+    .input-slot {
+      position: relative;
+      width: 100%;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+    }
+    .center-ph {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      color: #8e8e93;
+      font-size: 16px;
+      pointer-events: none;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .composer-card.compact-pill .center-ph {
+      display: flex;
+    }
+    .composer-card.compact-pill .input-box::placeholder {
+      color: transparent;
     }
 
     .input-box {
       width: 100%;
       background: transparent;
       border: none;
-      padding: 2px 4px 2px 0;
+      padding: 4px 4px 4px 0;
       color: var(--text-pri);
       font-size: 16px; /* Prevents iOS auto-zoom */
       line-height: 1.45;
-      max-height: 140px;
+      max-height: 144px;
       resize: none;
       outline: none;
       font-family: inherit;
@@ -854,7 +1233,7 @@
       height: 34px;
       border-radius: 50%;
       border: 1px solid rgba(255, 255, 255, 0.1);
-      background: #2f2f2f;
+      background: #2c2c30;
       color: var(--text-pri);
       display: inline-flex;
       align-items: center;
@@ -864,7 +1243,7 @@
       transition: background 0.15s, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
     }
     .plus-btn.open {
-      background: #3a3a3a;
+      background: #3a3a3f;
       transform: rotate(45deg);
     }
     .plus-btn:active { transform: scale(0.92); }
@@ -1532,21 +1911,21 @@
     }
   </style>
 </head>
-<body>
+<body class="is-home-empty">
   <div class="ios-status-shield" aria-hidden="true"></div>
 
-  <!-- Authentic ChatGPT Mobile Top Bar -->
+  <!-- Floating Circular Liquid-Glass Top Controls (Screenshots 1 & 2) -->
   <header class="topbar">
-    <button id="menuBtn" class="nav-icon-btn" title="打开会话侧边栏">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-        <line x1="3" y1="8" x2="21" y2="8"></line>
-        <line x1="3" y1="16" x2="15" y2="16"></line>
+    <button id="menuBtn" class="nav-circle-btn" title="打开侧边导航">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+        <line x1="5" y1="9.5" x2="19" y2="9.5"></line>
+        <line x1="5" y1="14.5" x2="13.5" y2="14.5"></line>
       </svg>
       <span id="connDot" class="conn-dot"></span>
       <span id="activityBadge" class="activity-badge"></span>
     </button>
 
-    <button id="modelBtn" class="center-model-btn" title="切换模型">
+    <button id="modelBtn" class="center-model-btn" title="切换模型与查看连接">
       <div class="header-title-row">
         <span id="headerTitle" class="header-title">反重力助手</span>
         <span class="header-chevron">▾</span>
@@ -1555,20 +1934,37 @@
     </button>
 
     <div class="right-nav-group">
-      <button id="chatSearchToggleBtn" class="nav-icon-btn" title="在本会话中查找">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.2" y2="16.2"></line></svg>
+      <!-- Shown inside active multi-turn conversations -->
+      <button id="chatSearchToggleBtn" class="nav-icon-btn" style="display:none" title="在本会话中查找">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.2" y2="16.2"></line></svg>
       </button>
       <button id="syncPcBtn" class="nav-icon-btn" style="display:none" title="同步电脑端最新消息">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="23 4 23 10 17 10"></polyline>
           <polyline points="1 20 1 14 7 14"></polyline>
           <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
         </svg>
       </button>
-      <button id="newChatTopBtn" class="nav-icon-btn" title="发起新对话">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <button id="newChatTopBtn" class="nav-icon-btn" style="display:none" title="发起新对话">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+      </button>
+      <!-- Shown on Empty Home (Screenshot 2 Waveform / Live Control Orb) -->
+      <button id="topWaveBtn" type="button" class="nav-circle-btn" title="电脑实时触控桌面与快捷中枢">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <line x1="5" y1="10" x2="5" y2="14"></line>
+          <line x1="9.5" y1="6" x2="9.5" y2="18"></line>
+          <line x1="14" y1="8.5" x2="14" y2="15.5"></line>
+          <line x1="18.5" y1="10.5" x2="18.5" y2="13.5"></line>
+        </svg>
+      </button>
+      <!-- Shown on More Page (Screenshot 1 Gear Button) -->
+      <button id="topSettingsBtn" type="button" class="nav-circle-btn" style="display:none" title="连接与偏好设置">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
         </svg>
       </button>
     </div>
@@ -1589,88 +1985,92 @@
 
   <div id="toast" class="toast"></div>
 
-  <!-- Slide-Over Left Sidebar Drawer -->
+  <!-- Slide-Over Pure Black Sidebar Drawer with Floating Bottom Pills (Screenshot 3) -->
   <div id="drawerBackdrop" class="drawer-backdrop"></div>
   <aside id="sidebarDrawer" class="sidebar-drawer">
-    <div class="drawer-search-row">
-      <span class="drawer-search-ico">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.2" y2="16.2"></line></svg>
-      </span>
-      <input id="convSearchInput" class="drawer-search" type="search" placeholder="搜索全部电脑与手机会话..." />
-    </div>
-
-    <div class="drawer-menu-list">
-      <button id="drawerNewChatBtn" class="drawer-menu-item">
-        <span class="drawer-menu-icon">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+    <div class="drawer-primary-nav">
+      <button id="drawerNavHome" type="button" class="drawer-nav-row active">
+        <span class="drawer-nav-ico">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5.5v-6h-5v6H4a1 1 0 0 1-1-1z"/></svg>
         </span>
-        <span>新建电脑端对话</span>
+        <span>首页</span>
       </button>
-      <button id="drawerWsPickerBtn" class="drawer-menu-item">
-        <span class="drawer-menu-icon">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-        </span>
-        <span>按目录 / 引擎新建会话</span>
+      <button id="drawerNavPinned" type="button" class="drawer-nav-row">
+        <span id="drawerNavPinnedIco" class="drawer-nav-ico"></span>
+        <span id="drawerNavPinnedLbl">Codex</span>
       </button>
-      <button id="drawerDeskBtn" class="drawer-menu-item">
-        <span class="drawer-menu-icon">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2.5"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+      <button id="drawerNavMore" type="button" class="drawer-nav-row">
+        <span class="drawer-nav-ico">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="3"/><circle cx="17" cy="7" r="3"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/></svg>
         </span>
-        <span>电脑实时桌面画面</span>
-      </button>
-      <button id="drawerGitBtn" class="drawer-menu-item">
-        <span class="drawer-menu-icon">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7"></path><line x1="6" y1="9" x2="6" y2="21"></line></svg>
-        </span>
-        <span>工作区文件与 Git Diff</span>
+        <span>更多</span>
       </button>
     </div>
 
-    <div id="drawerProjectsBox" class="drawer-projects"></div>
-
-    <div class="drawer-tabs">
-      <button class="drawer-tab active" data-f="all">全部 <span id="cntAll"></span></button>
-      <button class="drawer-tab" data-f="active">⚡待看 <span id="cntActive"></span></button>
-      <button class="drawer-tab" data-f="ide">Antigravity <span id="cntIde"></span></button>
-      <button id="fltCodexBtn" class="drawer-tab" data-f="codex">Codex <span id="cntCodex"></span></button>
-      <button class="drawer-tab" data-f="cli">远程 <span id="cntCli"></span></button>
+    <div id="drawerFilterBox" class="drawer-filter-collapse">
+      <div class="drawer-search-row">
+        <span class="drawer-search-ico">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.2" y2="16.2"></line></svg>
+        </span>
+        <input id="convSearchInput" class="drawer-search" type="search" placeholder="搜索全部电脑与手机会话..." />
+      </div>
+      <div id="drawerProjectsBox" class="drawer-projects"></div>
+      <div class="drawer-tabs">
+        <button class="drawer-tab active" data-f="all">全部 <span id="cntAll"></span></button>
+        <button class="drawer-tab" data-f="active">⚡待看 <span id="cntActive"></span></button>
+        <button class="drawer-tab" data-f="ide">Antigravity <span id="cntIde"></span></button>
+        <button id="fltCodexBtn" class="drawer-tab" data-f="codex">Codex <span id="cntCodex"></span></button>
+        <button class="drawer-tab" data-f="cli">远程 <span id="cntCli"></span></button>
+      </div>
     </div>
 
-    <div id="convList" class="drawer-conv-list">
-      <div style="text-align:center;color:var(--text-muted);padding:24px;font-size:13px">正在加载会话...</div>
+    <div class="drawer-scroll-zone">
+      <div id="convList" class="drawer-conv-list">
+        <div style="text-align:center;color:var(--text-muted);padding:24px;font-size:13px">正在加载会话...</div>
+      </div>
+      <div id="drawerBottomFade" class="drawer-bottom-fade" aria-hidden="true"></div>
+
+      <div class="drawer-float-bar">
+        <button id="drawerNewChatBtn" type="button" class="drawer-new-pill">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+          <span>新建</span>
+        </button>
+
+        <div class="drawer-right-pill">
+          <button id="drawerSearchToggleBtn" type="button" class="drawer-pill-ico" title="搜索与筛选聊天">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.2" y2="16.2"></line></svg>
+          </button>
+          <button id="drawerSettingsBtn" type="button" class="drawer-pill-ico" title="设置与工作台">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
     </div>
   </aside>
 
   <!-- Main Chat Stream -->
   <div class="chat-wrap">
     <main id="chatScroll" class="chat-scroll">
-      <div id="emptyHero" class="empty-hero">
-        <h2>有什么可以帮你的？</h2>
-        <div class="suggestion-pills">
-          <button class="suggest-pill" data-act="chats">
-            <span class="sug-ico" style="color:#60a5fa"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
-            <span class="sug-title">接力电脑会话</span>
-          </button>
-          <button class="suggest-pill" data-act="files">
-            <span class="sug-ico" style="color:#34d399"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg></span>
-            <span class="sug-title">审阅代码改动</span>
-          </button>
-          <button class="suggest-pill" data-act="desktop">
-            <span class="sug-ico" style="color:#a78bfa"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2.5"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></span>
-            <span class="sug-title">触控远程桌面</span>
-          </button>
-          <button class="suggest-pill" data-cmd="运行全量测试，如果发现报错请直接修复">
-            <span class="sug-ico" style="color:#fbbf24"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></span>
-            <span class="sug-title">跑测试修错</span>
-          </button>
-        </div>
-      </div>
+      <div id="emptyHero" class="empty-hero"></div>
     </main>
     <button id="jumpBottomBtn" type="button" class="jump-bottom-btn" title="回到底部">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
       <span id="jumpBtnTxt" style="display:none">有新内容</span>
     </button>
   </div>
+
+  <!-- 2x4 Bento Space Grid ("More" View — Screenshot 1) -->
+  <section id="morePage" class="more-page" aria-label="更多功能空间">
+    <div id="moreGrid" class="more-grid"></div>
+    <div id="moreSearchResults" class="more-search-results"></div>
+    <p class="more-hint">长按某个项目即可将其置顶到标签栏</p>
+  </section>
 
   <!-- Plus Action Popover -->
   <div id="plusPopover" class="plus-popover">
@@ -1703,7 +2103,7 @@
     <button type="button" class="pop-item" data-qprompt="请仔细自查刚才的改动是否存在边界 Bug 或遗漏，发现直接优化"><span class="pop-ico">🔍</span><span>自查改动并直接优化</span></button>
   </div>
 
-  <!-- Authentic Latest ChatGPT iOS Unified Two-Row Composer -->
+  <!-- Three-State Adaptive Pill Composer + More Search Pill -->
   <footer class="composer-outer">
     <div id="slashMenu" class="slash-menu">
       <button type="button" class="slash-item" data-scmd="/screen"><span class="slash-cmd">/screen</span><span class="slash-desc">立即截取电脑桌面画面</span></button>
@@ -1713,34 +2113,52 @@
       <button type="button" class="slash-item" data-scmd="/new"><span class="slash-cmd">/new</span><span class="slash-desc">开启全新对话上下文</span></button>
     </div>
 
+    <!-- Search Pill Shown on "More" Tab (Exact Screenshot 1 Bottom Bar) -->
+    <div id="moreSearchPill" class="more-search-pill">
+      <span style="display:inline-flex;align-items:center;justify-content:center;color:#c7c7cc">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.2" y2="16.2"></line></svg>
+      </span>
+      <input id="moreSearchInput" class="more-search-input" type="search" placeholder="搜索" aria-label="搜索功能与会话" />
+      <button id="moreClearOrVoiceBtn" type="button" class="mic-btn" style="display:inline-flex;justify-self:center;color:#c7c7cc" title="清空或语音">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" y1="19" x2="12" y2="23"></line>
+        </svg>
+      </button>
+    </div>
+
     <input id="filePicker" type="file" multiple hidden />
-    <div id="composerCard" class="composer-card">
+    <div id="composerCard" class="composer-card compact-pill">
       <div id="ideApproveInline" style="display:none;gap:6px;flex-wrap:wrap;padding-bottom:2px"></div>
       <div id="attStrip" class="att-strip"></div>
 
-      <textarea id="msgInput" class="input-box" rows="1" placeholder="询问任何问题"></textarea>
+      <div class="input-slot">
+        <textarea id="msgInput" class="input-box" rows="1" placeholder="有问题，随便问" aria-label="有问题，随便问"></textarea>
+        <span id="centerPlaceholder" class="center-ph" aria-hidden="true">有问题，随便问</span>
+      </div>
 
       <div class="composer-toolbar">
         <div class="composer-tools-left">
           <button id="plusBtn" type="button" class="plus-btn" title="添加附件与快捷操作">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           </button>
-          <button id="composerTargetBtn" type="button" class="composer-pill-btn active-target" title="切换发送目标引擎或工作区">
+          <button id="composerTargetBtn" type="button" class="composer-pill-btn active-target composer-extra-chip" title="切换发送目标引擎或工作区">
             <span id="composerTargetLbl">Antigravity</span>
             <span style="font-size:10px;opacity:0.75">▾</span>
           </button>
-          <button id="qClipSysBtn" type="button" class="composer-pill-btn" title="浏览工作区文件、Git Diff 与电脑剪贴板">
+          <button id="qClipSysBtn" type="button" class="composer-pill-btn composer-extra-chip" title="浏览工作区文件、Git Diff 与电脑剪贴板">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
             <span>工作区</span>
           </button>
-          <button id="qCheckIdeBtn" type="button" class="composer-pill-btn" title="扫描电脑端待确认按钮">
+          <button id="qCheckIdeBtn" type="button" class="composer-pill-btn composer-extra-chip" title="扫描电脑端待确认按钮">
             <span>⚡ 确认检测</span>
           </button>
         </div>
 
         <div class="composer-tools-right">
           <button id="voiceBtn" type="button" class="mic-btn" title="语音听写">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
               <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
               <line x1="12" y1="19" x2="12" y2="23"></line>
@@ -1759,6 +2177,42 @@
       </div>
     </div>
   </footer>
+
+  <!-- Bottom Three-Slot Navigation Bar (Screenshots 1 & 2) -->
+  <nav id="tabbar" class="tabbar" aria-label="主导航">
+    <button id="tabHome" type="button" class="tab-item active" title="首页">
+      <svg width="23" height="23" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.1 3.2 10.3V20.5a1 1 0 0 0 1 1h5.3v-5.8h5v5.8h5.3a1 1 0 0 0 1-1V10.3z"/></svg>
+    </button>
+    <button id="tabPinned" type="button" class="tab-item" title="快捷空间">
+      <span id="tabPinnedIco" style="display:inline-flex;align-items:center;justify-content:center"></span>
+    </button>
+    <button id="tabMore" type="button" class="tab-item" title="更多">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="7.5" cy="7.5" r="3"/><circle cx="16.5" cy="7.5" r="3"/><circle cx="7.5" cy="16.5" r="3"/><circle cx="16.5" cy="16.5" r="3"/>
+      </svg>
+    </button>
+  </nav>
+
+  <!-- Settings & Quick Preferences Sheet (Gear Button in Screenshot 1 & 3) -->
+  <div id="settingsModal" class="overlay">
+    <div class="sheet" style="max-width:460px">
+      <div class="sheet-handle"></div>
+      <div class="sheet-hdr">
+        <h3>设置与连接中心</h3>
+        <button id="closeSettingsBtn" type="button" class="pill-btn">完成</button>
+      </div>
+      <div id="settingsStatusCard" style="background:rgba(255,255,255,0.04);border:1px solid var(--border-subtle);border-radius:16px;padding:13px 15px;margin-bottom:10px;font-size:13.5px;line-height:1.6;color:var(--text-sec)">
+        正在检测电脑网关连接状态...
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <button type="button" id="setOpenModelBtn" class="model-opt" style="margin:0;padding:12px"><b>🎛 切换 AI 模型</b><br/><span style="font-size:11.5px;color:var(--text-muted)">Sonnet / Opus / Gemini</span></button>
+        <button type="button" id="setOpenNewWsBtn" class="model-opt" style="margin:0;padding:12px"><b>📁 新建电脑会话</b><br/><span style="font-size:11.5px;color:var(--text-muted)">选目录与引擎开启</span></button>
+        <button type="button" id="setOpenSysBtn" class="model-opt" style="margin:0;padding:12px"><b>💻 电脑与剪贴板</b><br/><span style="font-size:11.5px;color:var(--text-muted)">CPU / 端口 / 剪贴板</span></button>
+        <button type="button" id="setCleanCacheBtn" class="model-opt" style="margin:0;padding:12px"><b>🧹 清理过期缓存</b><br/><span style="font-size:11.5px;color:var(--text-muted)">安全释放临时截图</span></button>
+      </div>
+      <button type="button" id="setResetTokenBtn" class="pill-btn" style="width:100%;padding:10px;color:#fca5a5;border-color:rgba(239,68,68,0.28)">重新输入或更换访问密钥 (WEB_ACCESS_TOKEN)</button>
+    </div>
+  </div>
 
   <!-- Auth Token Modal -->
   <div id="authModal" class="overlay center">
@@ -2102,15 +2556,55 @@
     if (sidebarDrawer.classList.contains('show')) renderConvList();
   }
 
+  let currentIdeActions = [];
+  let currentMainView = 'home'; // 'home' | 'more'
+  let isInputFocused = false;
+  let heroDeckIdx = 0;
+
+  function syncAppChromeState() {
+    const inConv = Boolean(activeConvId) || renderedIds.size > 0 || isStreaming;
+    const isMore = currentMainView === 'more';
+    const isOnline = Boolean(ws && ws.readyState === 1);
+
+    document.body.classList.toggle('view-more', isMore);
+    document.body.classList.toggle('in-conversation', inConv);
+    document.body.classList.toggle('is-home-empty', !inConv && !isMore);
+    document.body.classList.toggle('conn-ready', isOnline);
+
+    // Top-right circular controls adapt cleanly between More (Gear), Empty Home (Waveform), and Active Chat (Search/New)
+    if ($('topSettingsBtn')) $('topSettingsBtn').style.display = isMore ? 'inline-flex' : 'none';
+    if ($('topWaveBtn')) $('topWaveBtn').style.display = (!isMore && !inConv) ? 'inline-flex' : 'none';
+    if ($('chatSearchToggleBtn')) $('chatSearchToggleBtn').style.display = (!isMore && inConv) ? 'inline-flex' : 'none';
+    if ($('newChatTopBtn')) $('newChatTopBtn').style.display = (!isMore && inConv) ? 'inline-flex' : 'none';
+    if ($('syncPcBtn')) {
+      $('syncPcBtn').style.display = (!isMore && inConv && (activeConvStore === 'ide' || activeConvStore === 'codex'))
+        ? 'inline-flex'
+        : 'none';
+    }
+
+    // Keep single `<textarea id="msgInput">` node stable while morphing between Screenshot-2 Compact Pill and Expanded Card
+    const shouldCompact = !isInputFocused
+      && !msgInput.value
+      && pendingAttachments.length === 0
+      && currentIdeActions.length === 0
+      && !isStreaming
+      && !inConv;
+    const card = $('composerCard');
+    if (card) card.classList.toggle('compact-pill', shouldCompact);
+  }
+
   function renderIdeActionButtons(actions) {
     const inlineBox = $('ideApproveInline');
     const deskBox = $('deskApproveBar');
     inlineBox.innerHTML = '';
     deskBox.innerHTML = '';
     const arr = Array.isArray(actions) ? actions : [];
+    currentIdeActions = arr;
     if (!arr.length) {
       inlineBox.style.display = 'none';
       deskBox.style.display = 'none';
+      syncAppChromeState();
+      if (!renderedIds.size) renderHeroDeck();
       return;
     }
     inlineBox.style.display = 'flex';
@@ -2136,6 +2630,8 @@
       inlineBox.appendChild(makeBtn());
       deskBox.appendChild(makeBtn());
     });
+    syncAppChromeState();
+    if (!renderedIds.size) renderHeroDeck();
   }
 
   function showToast(text, ms = 2400) {
@@ -2153,6 +2649,7 @@
 
   function openDrawer() {
     setPlusOpen(false);
+    chatScroll.style.overflowY = 'hidden';
     sidebarDrawer.classList.add('show');
     drawerBackdrop.classList.add('show');
     if (ws && ws.readyState === 1) {
@@ -2162,6 +2659,7 @@
   function closeDrawer() {
     sidebarDrawer.classList.remove('show');
     drawerBackdrop.classList.remove('show');
+    chatScroll.style.overflowY = 'auto';
   }
 
   // Edge swipe gesture to open/close left sidebar drawer (like native ChatGPT iOS/Android)
@@ -2235,16 +2733,19 @@
   function refreshHeaderSubtitle() {
     const wsName = subInfo.dataset.wsName || '';
     const mShort = shortModelName(currentModelLabel);
-    const storeTag = activeConvStore === 'ide' ? 'Antigravity 电脑端 · ' : (activeConvStore === 'codex' ? 'Codex 电脑端 · ' : '');
     const rttTag = lastRttMs ? ` · ${lastRttMs}ms` : '';
-    subInfo.textContent = `${storeTag}${mShort}${wsName ? ' · ' + wsName : ''}${rttTag}`;
-    $('syncPcBtn').style.display = (activeConvStore === 'ide' || activeConvStore === 'codex') ? 'inline-flex' : 'none';
+    // Never append standalone CLI model name (`Sonnet 5.5`) onto PC IDE or PC Codex sessions!
+    let engineLabel = mShort;
+    if (activeConvStore === 'ide') engineLabel = 'Antigravity 电脑端';
+    else if (activeConvStore === 'codex') engineLabel = 'Codex 电脑端';
+    subInfo.textContent = `${engineLabel}${wsName ? ' · ' + wsName : ''}${rttTag}`;
     const tgtLbl = $('composerTargetLbl');
     if (tgtLbl) {
       if (activeConvStore === 'ide' || !activeConvStore) tgtLbl.textContent = 'Antigravity';
       else if (activeConvStore === 'codex') tgtLbl.textContent = 'Codex';
       else tgtLbl.textContent = mShort;
     }
+    syncAppChromeState();
   }
 
   function escapeHtml(s) {
@@ -2583,31 +3084,152 @@
   function hideHero() {
     const hero = $('emptyHero');
     if (hero) hero.style.display = 'none';
+    syncAppChromeState();
+  }
+
+  function buildContinuationCandidates() {
+    const out = [];
+    if (currentIdeActions.length > 0) {
+      const act = currentIdeActions[0];
+      out.push({
+        kind: 'approve',
+        action: act,
+        title: `电脑窗口等待确认：「${act.label}」`,
+        sub: 'Antigravity 电脑端 · 点击立即放行并继续执行',
+        icoSvg: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>',
+      });
+    }
+    const recentPc = allConvItems.slice(0, 4);
+    recentPc.forEach((it) => {
+      if (out.length >= 3) return;
+      const wsShort = it.workspace ? (it.workspace.split(/[\\/]/).pop() || '') : '';
+      const src = it.store === 'codex' ? 'Codex 电脑端' : (it.store === 'ide' ? 'Antigravity 电脑端' : '远程会话');
+      const subParts = [src, wsShort, it.updated_human || '可无缝接力'].filter(Boolean);
+      const ico = it.store === 'codex'
+        ? '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>'
+        : '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"></circle><polyline points="12 9 12 13 14.5 14.5"></polyline><path d="M5 3 2 6"></path><path d="m22 6-3-3"></path></svg>';
+      out.push({
+        kind: 'conv',
+        conv: it,
+        title: it.title || '未命名电脑会话',
+        sub: subParts.join(' · '),
+        icoSvg: ico,
+      });
+    });
+    if (!out.length) {
+      out.push({
+        kind: 'git',
+        title: '审阅当前工作区代码改动与运行状态',
+        sub: '实时同步电脑端 Antigravity IDE 与 Codex 编程进展',
+        icoSvg: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"></circle><polyline points="12 9 12 13 14.5 14.5"></polyline><path d="M5 3 2 6"></path><path d="m22 6-3-3"></path></svg>',
+      });
+    }
+    return out;
+  }
+
+  function renderHeroDeck() {
+    const hero = $('emptyHero');
+    if (!hero) return;
+    const cards = buildContinuationCandidates();
+    if (heroDeckIdx >= cards.length) heroDeckIdx = 0;
+    const cur = cards[heroDeckIdx] || cards[0];
+
+    hero.innerHTML = '';
+    const g1 = document.createElement('p');
+    g1.className = 'hero-greet-1';
+    g1.textContent = '很高兴见到您';
+    const g2 = document.createElement('p');
+    g2.className = 'hero-greet-2';
+    g2.textContent = '我们从哪里继续呢？';
+    hero.appendChild(g1);
+    hero.appendChild(g2);
+
+    if (cur) {
+      const deck = document.createElement('div');
+      deck.className = 'cont-deck' + (cards.length > 1 ? ' has-stack' : '');
+      const cardBtn = document.createElement('button');
+      cardBtn.type = 'button';
+      cardBtn.className = 'cont-card';
+
+      const icoBox = document.createElement('span');
+      icoBox.className = 'cont-ico-box';
+      icoBox.innerHTML = cur.icoSvg;
+
+      const body = document.createElement('div');
+      body.className = 'cont-body';
+      const tEl = document.createElement('div');
+      tEl.className = 'cont-title';
+      tEl.textContent = cur.title;
+      const sEl = document.createElement('div');
+      sEl.className = 'cont-sub';
+      sEl.textContent = cur.sub;
+      body.appendChild(tEl);
+      body.appendChild(sEl);
+
+      cardBtn.appendChild(icoBox);
+      cardBtn.appendChild(body);
+
+      let swipeX = 0;
+      cardBtn.addEventListener('touchstart', (ev) => {
+        if (ev.touches && ev.touches.length === 1) swipeX = ev.touches[0].clientX;
+      }, { passive: true });
+      cardBtn.addEventListener('touchend', (ev) => {
+        if (!ev.changedTouches || !ev.changedTouches.length || cards.length <= 1) return;
+        const dx = ev.changedTouches[0].clientX - swipeX;
+        if (Math.abs(dx) > 42) {
+          ev.preventDefault();
+          heroDeckIdx = (heroDeckIdx + (dx < 0 ? 1 : -1) + cards.length) % cards.length;
+          renderHeroDeck();
+        }
+      });
+
+      cardBtn.onclick = () => {
+        if (cur.kind === 'approve' && cur.action) {
+          if (ws && ws.readyState === 1) {
+            ws.send(JSON.stringify({
+              type: 'ide_action_invoke',
+              action_token: cur.action.action_token,
+              conversation_id: activeConvId || '',
+            }));
+          }
+        } else if (cur.kind === 'conv' && cur.conv) {
+          if (!ws || ws.readyState !== 1) return showToast('正在连接电脑...');
+          saveCurrentSlotState();
+          ws.send(JSON.stringify({
+            type: 'select_conversation',
+            conversation_id: cur.conv.conversation_id,
+            store: cur.conv.store,
+            max_messages: 200,
+          }));
+        } else {
+          openWsModal('git');
+        }
+      };
+
+      deck.appendChild(cardBtn);
+      hero.appendChild(deck);
+
+      if (cards.length > 1) {
+        const dots = document.createElement('div');
+        dots.className = 'cont-dots';
+        cards.forEach((_, idx) => {
+          const d = document.createElement('button');
+          d.type = 'button';
+          d.className = 'cont-dot' + (idx === heroDeckIdx ? ' active' : '');
+          d.ariaLabel = `切换推荐项 ${idx + 1}`;
+          d.onclick = () => {
+            heroDeckIdx = idx;
+            renderHeroDeck();
+          };
+          dots.appendChild(d);
+        });
+        hero.appendChild(dots);
+      }
+    }
   }
 
   function buildHeroHtml() {
-    return `
-      <div id="emptyHero" class="empty-hero">
-        <h2>有什么可以帮你的？</h2>
-        <div class="suggestion-pills">
-          <button class="suggest-pill" data-act="chats">
-            <span class="sug-ico" style="color:#60a5fa"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
-            <span class="sug-title">接力电脑会话</span>
-          </button>
-          <button class="suggest-pill" data-act="files">
-            <span class="sug-ico" style="color:#34d399"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg></span>
-            <span class="sug-title">审阅代码改动</span>
-          </button>
-          <button class="suggest-pill" data-act="desktop">
-            <span class="sug-ico" style="color:#a78bfa"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2.5"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></span>
-            <span class="sug-title">触控远程桌面</span>
-          </button>
-          <button class="suggest-pill" data-cmd="运行全量测试，如果发现报错请直接修复">
-            <span class="sug-ico" style="color:#fbbf24"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></span>
-            <span class="sug-title">跑测试修错</span>
-          </button>
-        </div>
-      </div>`;
+    return '<div id="emptyHero" class="empty-hero"></div>';
   }
 
   function refreshSendBtnVisual() {
@@ -2623,6 +3245,7 @@
       sendBtn.classList.toggle('empty', !hasText);
       sendBtn.title = '发送';
     }
+    syncAppChromeState();
   }
 
   function setStreamingState(active) {
@@ -2925,6 +3548,20 @@
     }
   }
 
+  function flushOutboundQueue(wsConn) {
+    const nowTs = Date.now();
+    while (outboundQueue.length && ws === wsConn && wsConn.readyState === 1) {
+      const qItem = outboundQueue.shift();
+      if (qItem._queuedAt && nowTs - qItem._queuedAt > 120000) continue;
+      const cleanPayload = Object.assign({}, qItem);
+      if (!cleanPayload.slot || cleanPayload.slot === 'default-chat') {
+        cleanPayload.slot = activeSlot || cleanPayload.slot;
+      }
+      delete cleanPayload._queuedAt;
+      wsConn.send(JSON.stringify(cleanPayload));
+    }
+  }
+
   function clearConnectWatchdog() {
     if (connectWatchdog) {
       clearTimeout(connectWatchdog);
@@ -3205,6 +3842,7 @@
       reconnectAttempt = 0;
       connDot.className = 'conn-dot online';
       $('authModal').classList.remove('show');
+      syncAppChromeState();
       clearInterval(pingTimer);
       const sendPing = () => {
         if (ws === wsInstance && wsInstance.readyState === 1) {
@@ -3229,11 +3867,32 @@
         return;
       }
       if (data.type === 'hello') {
+        const prevCid = activeConvId;
+        const prevStore = activeConvStore;
+        let remembered = null;
+        try { remembered = JSON.parse(sessionStorage.getItem('agy_active_conv_v1') || 'null'); } catch (_) {}
+        const targetReattachCid = (!data.active_conversation_id && (!data.history || !data.history.length))
+          ? (prevCid || (remembered && remembered.cid) || '')
+          : '';
+        const targetReattachStore = prevStore || (remembered && remembered.store) || 'auto';
+
+        if (targetReattachCid) {
+          // Server restarted onto empty `default-chat` while mobile was viewing a PC conversation:
+          // wait for `conversation_loaded` ack BEFORE flushing `outboundQueue` so `select` and `chat` never race!
+          wsInstance.send(JSON.stringify({
+            type: 'select_conversation',
+            conversation_id: targetReattachCid,
+            store: targetReattachStore,
+            max_messages: 200,
+          }));
+          return;
+        }
+
         activeSlot = data.slot || '';
         currentModelLabel = data.model || '';
         activeConvId = data.active_conversation_id || '';
         activeConvStore = data.active_store || '';
-        if (data.active_title) $('headerTitle').textContent = data.active_title;
+        $('headerTitle').textContent = data.active_title || '反重力助手';
         subInfo.dataset.wsName = (data.workspace || '').split(/[\\/]/).pop() || '';
         refreshHeaderSubtitle();
         setStreamingState(Boolean(data.busy));
@@ -3246,19 +3905,18 @@
             chatScroll.scrollTop = savedAnchor.top;
             updateJumpButton();
           }
+        } else if (!data.inflight) {
+          chatScroll.innerHTML = buildHeroHtml();
+          renderedIds.clear();
+          streamBuffers.clear();
+          rawMessageTexts.clear();
+          renderHeroDeck();
         }
         if (data.inflight) {
           restoreInflightStream(data.inflight);
         }
-        // Flush any non-expired queued messages sent while waking up from lock screen!
-        const nowTs = Date.now();
-        while (outboundQueue.length && ws === wsInstance && wsInstance.readyState === 1) {
-          const qItem = outboundQueue.shift();
-          if (qItem._queuedAt && nowTs - qItem._queuedAt > 120000) continue;
-          const cleanPayload = Object.assign({}, qItem);
-          delete cleanPayload._queuedAt;
-          wsInstance.send(JSON.stringify(cleanPayload));
-        }
+        syncAppChromeState();
+        flushOutboundQueue(wsInstance);
       } else if (data.type === 'slots_overview') {
         applySlotsOverview(data);
       } else if (data.type === 'chat_ack') {
@@ -3291,11 +3949,20 @@
         updateConvCounts();
         renderConvList();
         renderWorkspaceChips(data.workspaces || [], data.current_workspace || '');
+        renderHeroDeck();
+        renderMoreBentoGrid();
+        syncAppChromeState();
       } else if (data.type === 'conversation_loaded') {
+        if (!data.silent) setMainView('home');
         const switchingSlot = !data.silent && data.slot && data.slot !== activeSlot;
         activeSlot = data.slot || activeSlot;
         activeConvId = data.conversation_id || '';
         activeConvStore = data.store || '';
+        if (activeConvId) {
+          try {
+            sessionStorage.setItem('agy_active_conv_v1', JSON.stringify({ cid: activeConvId, store: activeConvStore }));
+          } catch (_) {}
+        }
         hasMoreHistory = Boolean(data.has_more);
         totalConvMessages = Number(data.total_messages || 0);
         $('headerTitle').textContent = data.title || '反重力助手';
@@ -3307,9 +3974,10 @@
         const hist = data.history || [];
         const savedScroll = slotScrollMap.get(activeSlot);
         if (!hist.length && !data.inflight) {
-          chatScroll.innerHTML = `<div class="empty-hero"><div class="hero-logo">✦</div><h2>${escapeHtml(data.title || '空会话')}</h2></div>`;
+          chatScroll.innerHTML = buildHeroHtml();
           renderedIds.clear();
           streamBuffers.clear();
+          renderHeroDeck();
         } else {
           renderHistoryBatch(hist, Boolean(data.silent) || Boolean(savedScroll && !savedScroll.nearBottom));
           if (!data.silent && savedScroll && !savedScroll.nearBottom) {
@@ -3320,6 +3988,8 @@
         if (data.inflight) {
           restoreInflightStream(data.inflight);
         }
+        syncAppChromeState();
+        flushOutboundQueue(wsInstance);
         if (!data.silent) {
           closeDrawer();
           if ($('inChatSearchBar').classList.contains('show')) {
@@ -3330,6 +4000,7 @@
           }
         }
       } else if (data.type === 'clear_history') {
+        setMainView('home');
         if (data.slot) activeSlot = data.slot;
         clearOptimisticPlaceholder();
         setStreamingState(false);
@@ -3337,6 +4008,7 @@
         totalConvMessages = 0;
         activeConvId = '';
         activeConvStore = '';
+        try { sessionStorage.removeItem('agy_active_conv_v1'); } catch (_) {}
         $('headerTitle').textContent = '反重力助手';
         refreshHeaderSubtitle();
         branchingInFlight = false;
@@ -3360,10 +4032,13 @@
         renderedIds.clear();
         streamBuffers.clear();
         rawMessageTexts.clear();
+        renderHeroDeck();
+        syncAppChromeState();
         closeDrawer();
       } else if (data.type === 'workspace_state') {
         latestWsData = data;
         renderWsInspector();
+        renderMoreBentoGrid();
       } else if (data.type === 'workspace_diff') {
         renderDiffDetail(data);
       } else if (data.type === 'workspace_file') {
@@ -3423,6 +4098,11 @@
         if (data.req_id && branchDraftByReq.has(data.req_id)) {
           branchingInFlight = false;
           branchDraftByReq.delete(data.req_id);
+        }
+        if (String(data.text || '').includes('未找到该对话记录') && !activeConvId) {
+          try { sessionStorage.removeItem('agy_active_conv_v1'); } catch (_) {}
+          renderHeroDeck();
+          syncAppChromeState();
         }
         showToast(data.text);
       }
@@ -3669,13 +4349,29 @@
     }
     refreshSendBtnVisual();
   });
-  msgInput.addEventListener('focus', () => setPlusOpen(false));
+  msgInput.addEventListener('focus', () => {
+    isInputFocused = true;
+    setPlusOpen(false);
+    syncAppChromeState();
+  });
+  msgInput.addEventListener('blur', () => {
+    isInputFocused = false;
+    syncAppChromeState();
+  });
   msgInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 700) {
       e.preventDefault();
       if (!isStreaming) sendChat();
     }
   });
+
+  // Fallback click on microphone when SpeechRecognition is unavailable on iOS WebKit
+  if (!SpeechRec && $('voiceBtn')) {
+    $('voiceBtn').onclick = () => {
+      msgInput.focus();
+      showToast('可使用键盘左下角 iOS 麦克风直接听写输入');
+    };
+  }
 
   document.querySelectorAll('.slash-item').forEach((it) => {
     it.onclick = () => {
@@ -3708,7 +4404,7 @@
   };
   $('qClipSysBtn').onclick = () => openWsModal('git');
 
-  // In-Conversation Search Logic (ChatGPT iOS Search)
+  // In-Conversation Search Logic
   let inChatMatches = [];
   let inChatIdx = -1;
   function clearInChatSearchHighlights() {
@@ -3801,6 +4497,53 @@
     }
   };
 
+  // Settings & Connection Sheet (Gear Button in Screenshot 1 & 3)
+  function openSettingsModal() {
+    closeDrawer();
+    const isOnline = Boolean(ws && ws.readyState === 1);
+    const wsName = subInfo.dataset.wsName || '默认工作区';
+    const rtt = lastRttMs ? `${lastRttMs} ms` : '测速中';
+    const statusEl = $('settingsStatusCard');
+    if (statusEl) {
+      statusEl.textContent = '';
+      const l1 = document.createElement('div');
+      l1.style.cssText = 'color:#fff;font-weight:600;margin-bottom:4px';
+      l1.textContent = isOnline ? `● 已连接电脑网关 (${rtt})` : '○ 正在连接电脑网关...';
+      const l2 = document.createElement('div');
+      l2.textContent = `当前目录：${wsName} · 会话总数：${allConvItems.length}`;
+      statusEl.appendChild(l1);
+      statusEl.appendChild(l2);
+    }
+    $('settingsModal').classList.add('show');
+  }
+  $('topSettingsBtn').onclick = openSettingsModal;
+  $('drawerSettingsBtn').onclick = openSettingsModal;
+  $('closeSettingsBtn').onclick = () => $('settingsModal').classList.remove('show');
+  $('setOpenModelBtn').onclick = () => {
+    $('settingsModal').classList.remove('show');
+    $('modelModal').classList.add('show');
+  };
+  $('setOpenNewWsBtn').onclick = () => {
+    $('settingsModal').classList.remove('show');
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'list_conversations' }));
+    $('wsPickerModal').classList.add('show');
+  };
+  $('setOpenSysBtn').onclick = () => {
+    $('settingsModal').classList.remove('show');
+    openWsModal('sys');
+  };
+  $('setCleanCacheBtn').onclick = () => {
+    $('settingsModal').classList.remove('show');
+    setMainView('home');
+    sendChat('/clean');
+  };
+  $('setResetTokenBtn').onclick = () => {
+    $('settingsModal').classList.remove('show');
+    $('tokenInput').value = token || '';
+    $('authModal').classList.add('show');
+  };
+  $('topWaveBtn').onclick = openDesktopModal;
+
   // Drawer & New PC Agent Chat Actions
   let newChatTarget = 'ide';
   document.querySelectorAll('.new-target-tab').forEach((btn) => {
@@ -3814,6 +4557,7 @@
     if (!ws || ws.readyState !== 1) return showToast('尚未连接服务器');
     saveCurrentSlotState();
     closeDrawer();
+    setMainView('home');
     $('wsPickerModal').classList.remove('show');
     ws.send(JSON.stringify({
       type: 'new_conversation',
@@ -3824,13 +4568,335 @@
 
   $('newChatTopBtn').onclick = () => startNewConversation('', 'ide');
   $('drawerNewChatBtn').onclick = () => startNewConversation('', 'ide');
-  $('drawerWsPickerBtn').onclick = () => {
+
+  // ── 2x4 Bento Modules + Long-Press Pin to Bottom Tab Bar & Drawer (Screenshots 1, 2, 3) ──
+  const BENTO_MODULES = [
+    {
+      key: 'files',
+      title: '资料空间',
+      icoSvg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="#f5b82e"><path d="M5 4a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4z" opacity="0.55"/><rect x="3" y="6" width="14" height="16" rx="2.5" fill="#fbbf24"/></svg>',
+      tabSvg: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+      countFn: () => '',
+      run: () => { setMainView('home'); openWsModal('files'); },
+    },
+    {
+      key: 'projects',
+      title: '项目',
+      icoSvg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="#2aabee"><path d="M3 6a2 2 0 0 1 2-2h4.5l2 2.2H19a2 2 0 0 1 2 2v9.8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"/></svg>',
+      tabSvg: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+      countFn: () => {
+        const s = new Set(allConvItems.map((x) => x.workspace).filter(Boolean));
+        return s.size ? `${s.size}` : '';
+      },
+      run: () => {
+        setMainView('home');
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'list_conversations' }));
+        $('wsPickerModal').classList.add('show');
+      },
+    },
+    {
+      key: 'desktop',
+      title: '图像与桌面',
+      icoSvg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="6" y="3" width="15" height="13" rx="3" fill="#0284c7" opacity="0.6"/><rect x="3" y="7" width="15" height="13" rx="3" fill="#38bdf8"/><circle cx="7.5" cy="11.5" r="1.5" fill="#fff"/><path d="m4.5 18 4.2-4.2 3.2 3 2.3-2 3.3 3.2" stroke="#fef08a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      tabSvg: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2.5"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+      countFn: () => '',
+      run: () => { setMainView('home'); openDesktopModal(); },
+    },
+    {
+      key: 'git',
+      title: 'Git 变更',
+      icoSvg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9.5" fill="#9333ea"/><polyline points="12 7 12 12.2 15.2 14.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      tabSvg: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>',
+      countFn: () => {
+        const n = latestWsData && latestWsData.git && Array.isArray(latestWsData.git.changes) ? latestWsData.git.changes.length : 0;
+        return n > 0 ? `${n}` : '';
+      },
+      run: () => { setMainView('home'); openWsModal('git'); },
+    },
+    {
+      key: 'codex',
+      title: 'Codex',
+      icoSvg: '<svg width="25" height="25" viewBox="0 0 24 24" fill="none"><path d="M12 2.5c2.2 0 4 1.3 4.7 3.2 1.9.6 3.3 2.4 3.3 4.5 0 1.4-.6 2.7-1.6 3.6.3 2.2-1 4.4-3.1 5.2-1.1.4-2.2.4-3.3 0-1.1.4-2.2.4-3.3 0-2.1-.8-3.4-3-3.1-5.2-1-.9-1.6-2.2-1.6-3.6 0-2.1 1.4-3.9 3.3-4.5C8 3.8 9.8 2.5 12 2.5z" fill="#6366f1"/><polyline points="9 10 11.5 12.2 9 14.4" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="13" y1="14.4" x2="15.8" y2="14.4" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>',
+      tabSvg: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c2 0 3.7 1.2 4.4 2.9 1.8.6 3.1 2.2 3.1 4.2 0 1.3-.5 2.5-1.4 3.3.2 2.1-.9 4.1-2.9 4.8-1 .4-2.1.4-3.2 0-1.1.4-2.2.4-3.2 0-2-.7-3.1-2.7-2.9-4.8-.9-.8-1.4-2-1.4-3.3 0-2 1.3-3.6 3.1-4.2C8.3 4.2 10 3 12 3z"/><path d="M9.5 11.2c.4-.5 1.1-.5 1.5 0m2 0c.4-.5 1.1-.5 1.5 0"/></svg>',
+      countFn: () => {
+        const c = allConvItems.filter((x) => x.store === 'codex').length;
+        return c > 0 ? `${c}` : '';
+      },
+      run: () => {
+        setMainView('home');
+        const hasCodex = allConvItems.some((x) => x.store === 'codex');
+        if (hasCodex) {
+          convFilter = 'codex';
+          document.querySelectorAll('.drawer-tab[data-f]').forEach((x) => x.classList.toggle('active', x.dataset.f === 'codex'));
+          $('drawerFilterBox').classList.add('show');
+          renderConvList();
+          openDrawer();
+        } else {
+          newChatTarget = 'codex';
+          document.querySelectorAll('.new-target-tab').forEach((x) => x.classList.toggle('active', x.dataset.t === 'codex'));
+          if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'list_conversations' }));
+          $('wsPickerModal').classList.add('show');
+        }
+      },
+    },
+    {
+      key: 'approve',
+      title: '待办审批',
+      icoSvg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#2dd4bf" stroke-width="2.2"/><path d="M9 12.2l2.1 2.2L15.5 10" stroke="#2dd4bf" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      tabSvg: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+      countFn: () => (currentIdeActions.length ? `${currentIdeActions.length}` : ''),
+      run: () => {
+        setMainView('home');
+        $('qCheckIdeBtn').click();
+      },
+    },
+    {
+      key: 'custom',
+      title: '自定义',
+      icoSvg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="14" cy="8" r="2.6" fill="#c084fc" stroke="#a855f7"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="9" cy="16" r="2.6" fill="#c084fc" stroke="#a855f7"/></svg>',
+      tabSvg: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="14" cy="8" r="2.5"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="9" cy="16" r="2.5"/></svg>',
+      countFn: () => '',
+      run: () => {
+        setMainView('home');
+        $('modelModal').classList.add('show');
+      },
+    },
+    {
+      key: 'sys',
+      title: '电脑与端口',
+      icoSvg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="#22d3ee"><rect x="4" y="4" width="6.8" height="6.8" rx="1.8"/><circle cx="16.6" cy="7.4" r="3.4"/><circle cx="7.4" cy="16.6" r="3.4"/><rect x="13.2" y="13.2" width="6.8" height="6.8" rx="1.8"/></svg>',
+      tabSvg: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></svg>',
+      countFn: () => '',
+      run: () => { setMainView('home'); openWsModal('sys'); },
+    },
+  ];
+
+  let pinnedTabKey = 'codex';
+  try {
+    const savedPin = localStorage.getItem('agy_pinned_tab_v1');
+    if (savedPin && BENTO_MODULES.some((m) => m.key === savedPin)) pinnedTabKey = savedPin;
+  } catch (_) {}
+
+  function getPinnedModule() {
+    return BENTO_MODULES.find((m) => m.key === pinnedTabKey) || BENTO_MODULES[4];
+  }
+
+  function applyPinnedTabVisual() {
+    const mod = getPinnedModule();
+    if ($('tabPinnedIco')) $('tabPinnedIco').innerHTML = mod.tabSvg;
+    if ($('tabPinned')) $('tabPinned').title = mod.title;
+    if ($('drawerNavPinnedIco')) $('drawerNavPinnedIco').innerHTML = mod.tabSvg;
+    if ($('drawerNavPinnedLbl')) $('drawerNavPinnedLbl').textContent = mod.title;
+  }
+
+  function setPinnedTabKey(newKey) {
+    const mod = BENTO_MODULES.find((m) => m.key === newKey);
+    if (!mod) return;
+    pinnedTabKey = mod.key;
+    try { localStorage.setItem('agy_pinned_tab_v1', pinnedTabKey); } catch (_) {}
+    if (navigator.vibrate) {
+      try { navigator.vibrate(15); } catch (_) {}
+    }
+    applyPinnedTabVisual();
+    renderMoreBentoGrid($('moreSearchInput') ? $('moreSearchInput').value : '');
+    showToast(`📌 已将「${mod.title}」置顶到底部标签栏`);
+  }
+
+  function setMainView(viewName) {
+    currentMainView = viewName === 'more' ? 'more' : 'home';
+    $('tabHome').classList.toggle('active', currentMainView === 'home');
+    $('tabMore').classList.toggle('active', currentMainView === 'more');
+    $('drawerNavHome').classList.toggle('active', currentMainView === 'home');
+    $('drawerNavMore').classList.toggle('active', currentMainView === 'more');
+    if (currentMainView === 'more') {
+      renderMoreBentoGrid($('moreSearchInput') ? $('moreSearchInput').value : '');
+      if (ws && ws.readyState === 1 && !latestWsData) {
+        ws.send(JSON.stringify({ type: 'workspace_inspect', rel_dir: '' }));
+      }
+    }
+    syncAppChromeState();
+  }
+
+  function renderMoreBentoGrid(filterText = '') {
+    const grid = $('moreGrid');
+    const resBox = $('moreSearchResults');
+    if (!grid) return;
+    const q = String(filterText || '').trim().toLowerCase();
+    grid.innerHTML = '';
+
+    const matchedMods = BENTO_MODULES.filter((m) => !q || m.title.toLowerCase().includes(q) || m.key.includes(q));
+    matchedMods.forEach((mod) => {
+      const card = document.createElement('button');
+      card.type = 'button';
+      const isPin = mod.key === pinnedTabKey;
+      card.className = 'more-card' + (isPin ? ' pinned-tab' : '');
+
+      const topRow = document.createElement('div');
+      topRow.className = 'more-card-top';
+      const tSpan = document.createElement('span');
+      tSpan.textContent = mod.title;
+      topRow.appendChild(tSpan);
+
+      const cnt = mod.countFn ? mod.countFn() : '';
+      if (isPin) {
+        const pTag = document.createElement('span');
+        pTag.className = 'more-pin-tag';
+        pTag.textContent = '已置顶';
+        topRow.appendChild(pTag);
+      } else if (cnt) {
+        const cTag = document.createElement('span');
+        cTag.className = 'more-count-tag';
+        cTag.textContent = cnt;
+        topRow.appendChild(cTag);
+      }
+
+      const ico = document.createElement('span');
+      ico.className = 'mc-ico';
+      ico.innerHTML = mod.icoSvg;
+
+      card.appendChild(topRow);
+      card.appendChild(ico);
+
+      // Safe iOS Pointer-Event long-press (480ms) with 10px movement cancel & click suppression
+      let pressTimer = null;
+      let startX = 0;
+      let startY = 0;
+      let longPressed = false;
+      const clearPress = () => {
+        if (pressTimer) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+        }
+      };
+      card.addEventListener('pointerdown', (ev) => {
+        longPressed = false;
+        startX = ev.clientX;
+        startY = ev.clientY;
+        clearPress();
+        pressTimer = setTimeout(() => {
+          longPressed = true;
+          setPinnedTabKey(mod.key);
+        }, 480);
+      });
+      card.addEventListener('pointermove', (ev) => {
+        if (!pressTimer) return;
+        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > 10) clearPress();
+      });
+      card.addEventListener('pointerup', clearPress);
+      card.addEventListener('pointercancel', clearPress);
+      card.addEventListener('contextmenu', (ev) => ev.preventDefault());
+      card.addEventListener('click', (ev) => {
+        if (longPressed) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          longPressed = false;
+          return;
+        }
+        mod.run();
+      });
+
+      grid.appendChild(card);
+    });
+
+    if (resBox) {
+      resBox.innerHTML = '';
+      if (q) {
+        const hitConvs = allConvItems.filter((it) =>
+          `${it.title || ''} ${it.preview || ''} ${it.workspace || ''}`.toLowerCase().includes(q)
+        ).slice(0, 8);
+        if (hitConvs.length) {
+          resBox.classList.add('show');
+          const lbl = document.createElement('div');
+          lbl.className = 'conv-group-label';
+          lbl.textContent = `匹配的会话 (${hitConvs.length})`;
+          resBox.appendChild(lbl);
+          hitConvs.forEach((it) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'file-row';
+            const left = document.createElement('span');
+            left.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+            left.textContent = it.title || '未命名会话';
+            const right = document.createElement('span');
+            right.className = it.store === 'codex' ? 'conv-tag codex' : 'conv-tag ide';
+            right.textContent = it.store === 'codex' ? 'Codex' : (it.store === 'ide' ? 'Antigravity' : '远程');
+            b.appendChild(left);
+            b.appendChild(right);
+            b.onclick = () => {
+              if (!ws || ws.readyState !== 1) return;
+              setMainView('home');
+              saveCurrentSlotState();
+              ws.send(JSON.stringify({
+                type: 'select_conversation',
+                conversation_id: it.conversation_id,
+                store: it.store,
+                max_messages: 200,
+              }));
+            };
+            resBox.appendChild(b);
+          });
+        } else {
+          resBox.classList.remove('show');
+        }
+      } else {
+        resBox.classList.remove('show');
+      }
+    }
+  }
+
+  $('tabHome').onclick = () => {
     closeDrawer();
-    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'list_conversations' }));
-    $('wsPickerModal').classList.add('show');
+    if (currentMainView === 'more') {
+      setMainView('home');
+    } else if (activeConvId || renderedIds.size > 0) {
+      startNewConversation('', activeConvStore || 'ide');
+    }
   };
-  $('drawerDeskBtn').onclick = () => { closeDrawer(); openDesktopModal(); };
-  $('drawerGitBtn').onclick = () => { closeDrawer(); openWsModal('git'); };
+  $('tabPinned').onclick = () => {
+    closeDrawer();
+    getPinnedModule().run();
+  };
+  $('tabMore').onclick = () => {
+    closeDrawer();
+    setMainView(currentMainView === 'more' ? 'home' : 'more');
+  };
+
+  $('drawerNavHome').onclick = () => {
+    closeDrawer();
+    setMainView('home');
+    if (activeConvId || renderedIds.size > 0) {
+      startNewConversation('', 'ide');
+    }
+  };
+  $('drawerNavPinned').onclick = () => {
+    closeDrawer();
+    getPinnedModule().run();
+  };
+  $('drawerNavMore').onclick = () => {
+    closeDrawer();
+    setMainView('more');
+  };
+
+  $('drawerSearchToggleBtn').onclick = () => {
+    const box = $('drawerFilterBox');
+    const open = !box.classList.contains('show');
+    box.classList.toggle('show', open);
+    $('drawerSearchToggleBtn').classList.toggle('active', open);
+    if (open) $('convSearchInput').focus();
+  };
+
+  $('moreSearchInput').addEventListener('input', (e) => {
+    renderMoreBentoGrid(e.target.value);
+  });
+  $('moreClearOrVoiceBtn').onclick = () => {
+    const inp = $('moreSearchInput');
+    if (inp.value) {
+      inp.value = '';
+      renderMoreBentoGrid('');
+    } else {
+      inp.focus();
+    }
+  };
 
   $('closeWsPickerBtn').onclick = () => $('wsPickerModal').classList.remove('show');
   $('confirmNewChatBtn').onclick = () => startNewConversation($('customWsInput').value.trim(), newChatTarget);
@@ -3876,16 +4942,6 @@
     });
   }
 
-  function dateBucketLabel(tsMs) {
-    if (!tsMs) return '更早';
-    const now = new Date();
-    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    if (tsMs >= startToday) return '今天';
-    if (tsMs >= startToday - 86400000) return '昨天';
-    if (tsMs >= startToday - 7 * 86400000) return '最近 7 天';
-    return '更早';
-  }
-
   let activeProjectFilter = '';
 
   function renderDrawerProjects() {
@@ -3925,6 +4981,16 @@
     });
   }
 
+  function updateDrawerFadeMask() {
+    const listEl = $('convList');
+    const fade = $('drawerBottomFade');
+    if (!listEl || !fade) return;
+    const atEnd = (listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight) < 16;
+    fade.classList.toggle('at-end', atEnd);
+  }
+  $('convList').addEventListener('scroll', updateDrawerFadeMask, { passive: true });
+
+  // Clean Borderless Single-Line Chat List (Exact Screenshot 3 Style!)
   function renderConvList() {
     renderDrawerProjects();
     const listEl = $('convList');
@@ -3949,13 +5015,15 @@
 
     if (!filtered.length) {
       listEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:24px;font-size:13px">暂无匹配的聊天记录</div>';
+      updateDrawerFadeMask();
       return;
     }
     listEl.innerHTML = '';
+    const showFilterBadges = $('drawerFilterBox').classList.contains('show');
     let lastGroup = '';
     filtered.forEach((it) => {
       const isPinned = pinnedConvIds.has(it.conversation_id);
-      const grp = isPinned ? '★ 已置顶' : dateBucketLabel(it.updated_ms);
+      const grp = isPinned ? '置顶' : '聊天';
       if (grp !== lastGroup) {
         lastGroup = grp;
         const gEl = document.createElement('div');
@@ -3966,40 +5034,57 @@
 
       const btn = document.createElement('div');
       btn.className = 'conv-item' + (it.conversation_id === activeConvId ? ' active' : '');
-      let tagCls = 'conv-tag';
-      let tagTxt = '远程';
-      if (it.store === 'ide') { tagCls = 'conv-tag ide'; tagTxt = 'Antigravity'; }
-      else if (it.store === 'codex') { tagCls = 'conv-tag codex'; tagTxt = 'Codex'; }
 
       const slotCand = `${it.store}:${it.conversation_id}`;
       const isUnread = slotsOverview.unread.some((u) => u.slot === slotCand || u.conversation_id === it.conversation_id);
       const isRun = it.running || slotsOverview.running.some((r) => r.slot === slotCand || r.conversation_id === it.conversation_id);
-      const runHtml = isRun ? '<span class="conv-tag run">运行中</span>' : '';
-      const unreadHtml = isUnread ? '<span class="unread-dot" title="有新完成回复"></span>' : '';
-      const wsShort = it.workspace ? (it.workspace.split(/[\\/]/).pop() || '') : '';
 
-      btn.innerHTML = `
-        <div class="conv-item-top">
-          <div style="display:flex;align-items:center;gap:5px;min-width:0">
-            ${unreadHtml}
-            <div class="conv-item-title">${escapeHtml(it.title || '未命名对话')}</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
-            ${runHtml}
-            <span class="${tagCls}">${tagTxt}</span>
-            <button type="button" class="pin-star-btn${isPinned ? ' pinned' : ''}" title="${isPinned ? '取消置顶' : '置顶会话'}">${isPinned ? '★' : '☆'}</button>
-          </div>
-        </div>
-        <div class="conv-item-sub">
-          <span style="overflow:hidden;text-overflow:ellipsis">${escapeHtml(wsShort || it.preview || '')}</span>
-          <span style="flex-shrink:0">${escapeHtml(it.updated_human || '')}</span>
-        </div>
-      `;
-      const starBtn = btn.querySelector('.pin-star-btn');
+      const topDiv = document.createElement('div');
+      topDiv.className = 'conv-item-top';
+
+      const leftWrap = document.createElement('div');
+      leftWrap.style.cssText = 'display:flex;align-items:center;gap:7px;min-width:0;flex:1';
+      if (isRun || isUnread) {
+        const dot = document.createElement('span');
+        dot.className = 'unread-dot';
+        dot.title = isRun ? '运行中' : '有新完成回复';
+        leftWrap.appendChild(dot);
+      }
+      const titleDiv = document.createElement('div');
+      titleDiv.className = 'conv-item-title';
+      titleDiv.textContent = it.title || '未命名对话';
+      leftWrap.appendChild(titleDiv);
+
+      const rightWrap = document.createElement('div');
+      rightWrap.style.cssText = 'display:flex;align-items:center;gap:5px;flex-shrink:0';
+      if (isRun) {
+        const rTag = document.createElement('span');
+        rTag.className = 'conv-tag run';
+        rTag.textContent = '运行中';
+        rightWrap.appendChild(rTag);
+      } else if (showFilterBadges || it.store === 'codex') {
+        const sTag = document.createElement('span');
+        sTag.className = it.store === 'codex' ? 'conv-tag codex' : 'conv-tag';
+        sTag.textContent = it.store === 'codex' ? 'Codex' : (it.store === 'ide' ? 'PC' : '远程');
+        rightWrap.appendChild(sTag);
+      }
+
+      const starBtn = document.createElement('button');
+      starBtn.type = 'button';
+      starBtn.className = 'pin-star-btn' + (isPinned ? ' pinned' : '');
+      starBtn.style.opacity = isPinned ? '0.95' : '0.32';
+      starBtn.title = isPinned ? '取消置顶' : '置顶会话';
+      starBtn.textContent = isPinned ? '★' : '☆';
       starBtn.onclick = (ev) => {
         ev.stopPropagation();
         togglePinConv(it.conversation_id);
       };
+      rightWrap.appendChild(starBtn);
+
+      topDiv.appendChild(leftWrap);
+      topDiv.appendChild(rightWrap);
+      btn.appendChild(topDiv);
+
       btn.onclick = () => {
         if (!ws || ws.readyState !== 1) return;
         saveCurrentSlotState();
@@ -4012,6 +5097,7 @@
       };
       listEl.appendChild(btn);
     });
+    requestAnimationFrame(updateDrawerFadeMask);
   }
 
   $('convSearchInput').addEventListener('input', (e) => {
@@ -4418,8 +5504,9 @@
   };
   $('lightbox').onclick = () => $('lightbox').classList.remove('show');
 
-  ['deskModal', 'modelModal', 'wsModal', 'wsPickerModal', 'canvasModal'].forEach((mid) => {
+  ['deskModal', 'modelModal', 'wsModal', 'wsPickerModal', 'canvasModal', 'settingsModal'].forEach((mid) => {
     const el = $(mid);
+    if (!el) return;
     el.addEventListener('click', (e) => {
       if (e.target === el) {
         if (mid === 'deskModal') closeDesktopModal();
@@ -4447,13 +5534,16 @@
 
   $('modelBtn').onclick = () => $('modelModal').classList.add('show');
   $('closeModelBtn').onclick = () => $('modelModal').classList.remove('show');
-  document.querySelectorAll('.model-opt').forEach((opt) => {
+  document.querySelectorAll('.model-opt[data-m]').forEach((opt) => {
     opt.onclick = () => {
       $('modelModal').classList.remove('show');
       sendChat('/model ' + opt.dataset.m);
     };
   });
 
+  applyPinnedTabVisual();
+  renderMoreBentoGrid();
+  renderHeroDeck();
   if (msgInput.value) {
     msgInput.style.height = Math.min(msgInput.scrollHeight, 136) + 'px';
   }
