@@ -165,6 +165,7 @@ class AgySession:
         if sys.platform == "win32":
             extra_kwargs["creationflags"] = CREATE_NO_WINDOW
 
+        gen_before = getattr(self, "_cancel_gen", 0)
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -175,14 +176,28 @@ class AgySession:
             limit=STREAM_BUFFER_LIMIT,
             **extra_kwargs,
         )
+        if getattr(self, "_cancel_gen", 0) != gen_before:
+            try:
+                if sys.platform == "win32" and proc.pid:
+                    await asyncio.to_thread(_kill_process_tree_win32, proc.pid)
+                else:
+                    proc.kill()
+                await asyncio.wait_for(proc.wait(), timeout=1.5)
+            except Exception:
+                pass
+            raise asyncio.CancelledError("AgySession cancelled while spawning process")
+
         self._proc = proc
         self._stderr_task = asyncio.create_task(self._drain_stderr(proc))
         return proc
 
     async def stop(self, *, force_tree: bool = False) -> None:
         """Gracefully close stdin and terminate the underlying agy process (and child tree if forced)."""
+        self._cancel_gen = getattr(self, "_cancel_gen", 0) + 1
         proc = self._proc
+        stderr_task = self._stderr_task
         self._proc = None
+        self._stderr_task = None
 
         if proc is not None:
             pid = proc.pid
@@ -215,13 +230,12 @@ class AgySession:
                     except asyncio.TimeoutError:
                         pass
 
-        if self._stderr_task is not None:
-            self._stderr_task.cancel()
+        if stderr_task is not None:
+            stderr_task.cancel()
             try:
-                await self._stderr_task
+                await stderr_task
             except asyncio.CancelledError:
                 pass
-            self._stderr_task = None
 
     async def cancel_current(self) -> bool:
         """Force-kill any currently running turn and its child tools without waiting for the session lock."""

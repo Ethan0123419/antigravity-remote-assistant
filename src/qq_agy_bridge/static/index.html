@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
+  <meta name="referrer" content="no-referrer" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#0D0D0F" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1602,7 +1603,9 @@
   let reconnectTimer = null;
   let reconnectAttempt = 0;
   let pongWatchdog = null;
+  let connectWatchdog = null;
   let isStreaming = false;
+  let activeStreamMsgId = '';
   let liveScreenOn = false;
   let pendingAttachments = [];
   let pingTimer = null;
@@ -1760,6 +1763,7 @@
     let i = 0;
 
     while (i < lines.length) {
+      const loopStart = i;
       const rawLine = lines[i];
       const trimmed = rawLine.trim();
       if (!trimmed) { i++; continue; }
@@ -1793,12 +1797,13 @@
         continue;
       }
 
-      if (trimmed.startsWith('&gt;') || trimmed.startsWith('>')) {
+      if (/^\s*(?:>|&gt;)/.test(rawLine)) {
         const qLines = [];
-        while (i < lines.length && /^\s*>/.test(lines[i])) {
-          qLines.push(formatInlineMarkdown(escapeHtml(lines[i].replace(/^\s*>\s?/, ''))));
+        while (i < lines.length && /^\s*(?:>|&gt;)/.test(lines[i])) {
+          qLines.push(formatInlineMarkdown(escapeHtml(lines[i].replace(/^\s*(?:>|&gt;)\s?/, ''))));
           i++;
         }
+        if (i === loopStart) i++;
         out.push(`<blockquote>${qLines.join('<br/>')}</blockquote>`);
         continue;
       }
@@ -1827,13 +1832,13 @@
       while (
         i < lines.length &&
         lines[i].trim() &&
-        !/^(#{1,4}\s+|-{3,}$|\*{3,}$|\s*[-*•]\s+|\s*\d+\.\s+|\s*>)/.test(lines[i])
+        !/^(#{1,4}\s+|-{3,}$|\*{3,}$|\s*[-*•]\s+|\s*\d+\.\s+|\s*(?:>|&gt;))/.test(lines[i])
       ) {
         pLines.push(formatInlineMarkdown(escapeHtml(lines[i])));
         i++;
       }
       if (pLines.length) out.push(`<p>${pLines.join('<br/>')}</p>`);
-      else i++;
+      else if (i === loopStart) i++;
     }
     return out.join('');
   }
@@ -1966,6 +1971,7 @@
 
   function setStreamingState(active) {
     isStreaming = active;
+    if (!active) activeStreamMsgId = '';
     refreshSendBtnVisual();
   }
 
@@ -2006,13 +2012,38 @@
   }
 
   function ensureAssistantRow(id) {
-    let row = document.getElementById('row-' + id);
+    const safeId = String(id || '');
+    let row = document.getElementById('row-' + safeId);
     if (!row) {
       hideHero();
       row = document.createElement('div');
       row.className = 'msg-row assistant';
-      row.id = 'row-' + id;
-      row.innerHTML = `<div class="asst-body" id="bub-${id}"><span class="gpt-dot"></span></div><div class="msg-actions" id="act-${id}" style="display:none"><button type="button" class="msg-act-btn copy-msg-btn" data-mid="${escapeHtml(id)}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span>复制</span></button><span class="msg-origin-tag" id="orig-${id}"></span></div>`;
+      row.id = 'row-' + safeId;
+
+      const bub = document.createElement('div');
+      bub.className = 'asst-body';
+      bub.id = 'bub-' + safeId;
+      bub.innerHTML = '<span class="gpt-dot"></span>';
+
+      const act = document.createElement('div');
+      act.className = 'msg-actions';
+      act.id = 'act-' + safeId;
+      act.style.display = 'none';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'msg-act-btn copy-msg-btn';
+      copyBtn.dataset.mid = safeId;
+      copyBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span>复制</span>';
+
+      const orig = document.createElement('span');
+      orig.className = 'msg-origin-tag';
+      orig.id = 'orig-' + safeId;
+
+      act.appendChild(copyBtn);
+      act.appendChild(orig);
+      row.appendChild(bub);
+      row.appendChild(act);
       chatScroll.appendChild(row);
     }
     return row;
@@ -2107,6 +2138,7 @@
     if (!inf || !inf.msg_id) return;
     clearOptimisticPlaceholder();
     setStreamingState(true);
+    activeStreamMsgId = inf.msg_id;
     const curText = inf.text || '';
     streamBuffers.set(inf.msg_id, curText);
     rawMessageTexts.set(inf.msg_id, curText);
@@ -2126,6 +2158,13 @@
     if (pongWatchdog) {
       clearTimeout(pongWatchdog);
       pongWatchdog = null;
+    }
+  }
+
+  function clearConnectWatchdog() {
+    if (connectWatchdog) {
+      clearTimeout(connectWatchdog);
+      connectWatchdog = null;
     }
   }
 
@@ -2265,6 +2304,7 @@
     pagesUrls.push(`./beacon.json?_t=${Date.now()}`);
 
     let fallbackTunnel = '';
+    let sawMacMismatch = false;
     for (const pu of pagesUrls) {
       try {
         const env = await fetchJsonWithTimeout(pu, 3500);
@@ -2281,11 +2321,11 @@
           break;
         }
       } catch (e) {
-        if (String((e && e.message) || '') === 'BEACON_MAC_MISMATCH') throw e;
+        if (String((e && e.message) || '') === 'BEACON_MAC_MISMATCH') sawMacMismatch = true;
       }
     }
 
-    // 2. Secondary race (only if PC rebooted <15s ago while GitHub Pages CDN is still updating): strict 3.5s timeout so raw.githubusercontent NEVER hangs!
+    // 2. Secondary race (only if PC rebooted <15s ago or token was rotated while GitHub Pages CDN is still updating): strict 3.5s timeout!
     if (beaconRepo) {
       const tasks = [
         fetchJsonWithTimeout(
@@ -2308,9 +2348,10 @@
               try { localStorage.setItem('agy_last_tunnel', cand2); } catch (_) {}
               return cand2;
             }
+            if (cand2 && !fallbackTunnel) fallbackTunnel = cand2;
           }
         } catch (e) {
-          if (String((e && e.message) || '') === 'BEACON_MAC_MISMATCH') throw e;
+          if (String((e && e.message) || '') === 'BEACON_MAC_MISMATCH') sawMacMismatch = true;
         }
       }
     }
@@ -2319,10 +2360,17 @@
       try { localStorage.setItem('agy_last_tunnel', fallbackTunnel); } catch (_) {}
       return fallbackTunnel;
     }
+    if (sawMacMismatch) throw new Error('BEACON_MAC_MISMATCH');
     throw new Error('BEACON_NOT_FOUND');
   }
 
   function openSocketWithBase(baseOrigin) {
+    clearConnectWatchdog();
+    if (ws) {
+      const stale = ws;
+      ws = null;
+      try { stale.close(); } catch (_) {}
+    }
     apiBase = baseOrigin ? baseOrigin.replace(/\/$/, '') : '';
     const qs = token ? `?token=${encodeURIComponent(token)}` : '';
     let wsUrl = '';
@@ -2332,8 +2380,18 @@
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       wsUrl = `${proto}//${location.host}/ws${qs}`;
     }
-    ws = new WebSocket(wsUrl);
-    bindSocketEvents(ws);
+    const sock = new WebSocket(wsUrl);
+    ws = sock;
+    bindSocketEvents(sock);
+    connectWatchdog = setTimeout(() => {
+      if (ws === sock && sock.readyState === 0) {
+        ws = null;
+        try { sock.close(); } catch (_) {}
+        const delay = Math.min(3500, 450 * Math.pow(1.45, reconnectAttempt++));
+        subInfo.textContent = '握手超时，正在切换重连...';
+        reconnectTimer = setTimeout(connect, delay);
+      }
+    }, 8000);
   }
 
   function connect() {
@@ -2378,24 +2436,27 @@
 
   function bindSocketEvents(wsInstance) {
     wsInstance.onopen = () => {
+      if (ws !== wsInstance) return;
+      clearConnectWatchdog();
       reconnectAttempt = 0;
       connDot.className = 'conn-dot online';
       $('authModal').classList.remove('show');
       clearInterval(pingTimer);
       const sendPing = () => {
-        if (ws && ws.readyState === 1) {
-          ws.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
+        if (ws === wsInstance && wsInstance.readyState === 1) {
+          wsInstance.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
         }
       };
       sendPing();
       pingTimer = setInterval(sendPing, 8000);
-      ws.send(JSON.stringify({ type: 'list_conversations' }));
+      wsInstance.send(JSON.stringify({ type: 'list_conversations' }));
       if (liveScreenOn && $('deskModal').classList.contains('show')) {
-        ws.send(JSON.stringify({ type: 'live_screen', enable: true, interval_ms: 1600 }));
+        wsInstance.send(JSON.stringify({ type: 'live_screen', enable: true, interval_ms: 1600 }));
       }
     };
 
     wsInstance.onmessage = (ev) => {
+      if (ws !== wsInstance) return;
       clearPongWatchdog();
       const data = JSON.parse(ev.data);
       if (data.type === 'pong' && data.ts) {
@@ -2485,6 +2546,7 @@
         if (data.slot && activeSlot && data.slot !== activeSlot) return;
         clearOptimisticPlaceholder();
         setStreamingState(true);
+        activeStreamMsgId = data.msg_id || '';
         streamBuffers.set(data.msg_id, '');
         ensureAssistantRow(data.msg_id);
         scrollToBottom(true);
@@ -2534,12 +2596,14 @@
     };
 
     wsInstance.onclose = (ev) => {
+      if (ws !== wsInstance) return;
+      clearConnectWatchdog();
       clearInterval(pingTimer);
       clearPongWatchdog();
-      if (ws === wsInstance) ws = null;
+      ws = null;
       connDot.className = 'conn-dot offline';
       setStreamingState(false);
-      if (ev.code === 4001) {
+      if (ev.code === 4001 || ev.code === 4003) {
         subInfo.textContent = '需要验证访问密钥';
         try { localStorage.removeItem('agy_pwa_token'); } catch (_) {}
         token = '';
@@ -2656,7 +2720,7 @@
     }
     if (isStreaming && overrideText === null) {
       // Stop ONLY the current conversation's stream without losing any text typed in msgInput!
-      ws.send(JSON.stringify({ type: 'cancel' }));
+      ws.send(JSON.stringify({ type: 'cancel', slot: activeSlot, msg_id: activeStreamMsgId }));
       return;
     }
     const text = overrideText !== null ? overrideText : msgInput.value.trim();
@@ -2673,6 +2737,7 @@
 
     ws.send(JSON.stringify({
       type: 'chat',
+      slot: activeSlot,
       client_id: clientId,
       text,
       attachments: atts,

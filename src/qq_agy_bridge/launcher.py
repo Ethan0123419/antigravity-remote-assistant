@@ -19,6 +19,7 @@ import math
 import os
 import queue
 import re
+import shutil
 import socket
 import struct
 import subprocess
@@ -26,6 +27,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+import urllib.request
 import webbrowser
 import zlib
 from dataclasses import dataclass
@@ -446,6 +448,27 @@ def is_tcp_port_open(host: str, port: int, timeout: float = 0.35) -> bool:
         return False
 
 
+def probe_agy_gateway_identity(host: str, port: int, timeout: float = 0.6) -> str:
+    """Verify whether `host:port` is genuinely our Antigravity Assistant gateway (`'agy'`), `'foreign'`, or `'closed'`."""
+    if not is_tcp_port_open(host, port, timeout=min(0.35, timeout)):
+        return "closed"
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(f"http://{host}:{port}/ping", timeout=timeout) as resp:
+            if resp.status != 200:
+                return "foreign"
+            data = json.loads(resp.read(4096).decode("utf-8", errors="replace"))
+            if (
+                isinstance(data, dict)
+                and data.get("ok") is True
+                and data.get("service") == "antigravity-assistant"
+            ):
+                return "agy"
+            return "foreign"
+    except Exception:
+        return "foreign"
+
+
 def find_external_server_processes(exclude_pids: set[int]) -> list[int]:
     """Return running backend server PIDs outside this launcher."""
     ps_script = r"""
@@ -454,10 +477,9 @@ $srv = @(
     $procs | Where-Object {
         ($_.Name -ieq 'qq-agy-bridge.exe') -or
         ($_.Name -ieq 'antigravity-assistant.exe') -or (
-            $_.Name -like 'python*' -and (
-                ($_.CommandLine -like '*qq-agy-bridge*') -or
-                ($_.CommandLine -like '*qq_agy_bridge.main*')
-            ) -and ($_.CommandLine -notlike '*qq_agy_bridge.launcher*')
+            $_.Name -like 'python*' -and
+            ($_.CommandLine -like '*-m qq_agy_bridge.main*') -and
+            ($_.CommandLine -notlike '*qq_agy_bridge.launcher*')
         )
     } | ForEach-Object { [int]$_.ProcessId }
 )
@@ -572,7 +594,9 @@ class LauncherApp:
         self._server_proc: subprocess.Popen[str] | None = None
         self._tunnel_proc: subprocess.Popen[str] | None = None
         self._tunnel_url: str = ""
+        self._tunnel_gen: int = 0
         self._server_external = False
+        self._port_conflict = False
         self._desired_running = True
         self._auto_restart_timestamps: list[float] = []
         self._tunnel_restart_timestamps: list[float] = []
@@ -1429,42 +1453,65 @@ class LauncherApp:
     def _health_poll_worker(self, force: bool = False) -> None:
         if self._closing or (self._busy and not force):
             return
-        pwa_open = is_tcp_port_open("127.0.0.1", self.settings.web_pwa_port, timeout=0.3)
+        gw_ident = probe_agy_gateway_identity("127.0.0.1", self.settings.web_pwa_port, timeout=0.45)
+        pwa_open = gw_ident == "agy"
         srv_alive = self._server_proc is not None and self._server_proc.poll() is None
         tun_alive = self._tunnel_proc is not None and self._tunnel_proc.poll() is None
 
-        if (
+        need_srv_heal = (
             self._desired_running
             and not self._busy
-            and self._server_proc is not None
             and not srv_alive
             and not self._server_external
+            and not self._port_conflict
             and not self._closing
-        ):
-            now = time.monotonic()
-            self._auto_restart_timestamps = [t for t in self._auto_restart_timestamps if now - t < 120.0]
-            if len(self._auto_restart_timestamps) < 3:
-                self._auto_restart_timestamps.append(now)
-                self._enqueue_log("系统", "检测到核心服务意外退出，正在自动自愈重启...", "warn")
-                self._launch_server()
-                srv_alive = self._server_proc is not None and self._server_proc.poll() is None
-
-        if (
+        )
+        need_tun_heal = (
             self._desired_running
             and not self._busy
+            and not self._port_conflict
             and self.settings.web_pwa_enabled
             and self.settings.tunnel_enabled
-            and self._tunnel_proc is not None
+            and pwa_open
             and not tun_alive
             and not self._closing
-        ):
-            now_t = time.monotonic()
-            self._tunnel_restart_timestamps = [t for t in self._tunnel_restart_timestamps if now_t - t < 180.0]
-            if len(self._tunnel_restart_timestamps) < 4:
-                self._tunnel_restart_timestamps.append(now_t)
-                self._enqueue_log("Tunnel", "检测到外网加密隧道中断，正在自动重连并同步信标...", "warn")
-                self._launch_tunnel()
-                tun_alive = self._tunnel_proc is not None and self._tunnel_proc.poll() is None
+        )
+
+        if (need_srv_heal or need_tun_heal) and self._op_lock.acquire(blocking=False):
+            try:
+                if (
+                    self._desired_running
+                    and not self._closing
+                    and not self._server_external
+                    and not self._port_conflict
+                    and (self._server_proc is None or self._server_proc.poll() is not None)
+                ):
+                    now = time.monotonic()
+                    self._auto_restart_timestamps = [t for t in self._auto_restart_timestamps if now - t < 120.0]
+                    if len(self._auto_restart_timestamps) < 3:
+                        self._auto_restart_timestamps.append(now)
+                        self._enqueue_log("系统", "检测到核心服务未就绪，正在自动自愈拉起...", "warn")
+                        self._launch_server()
+                        srv_alive = self._server_proc is not None and self._server_proc.poll() is None
+
+                if (
+                    self._desired_running
+                    and not self._closing
+                    and not self._port_conflict
+                    and self.settings.web_pwa_enabled
+                    and self.settings.tunnel_enabled
+                    and pwa_open
+                    and (self._tunnel_proc is None or self._tunnel_proc.poll() is not None)
+                ):
+                    now_t = time.monotonic()
+                    self._tunnel_restart_timestamps = [t for t in self._tunnel_restart_timestamps if now_t - t < 180.0]
+                    if len(self._tunnel_restart_timestamps) < 4:
+                        self._tunnel_restart_timestamps.append(now_t)
+                        self._enqueue_log("Tunnel", "检测到外网加密隧道中断，正在自动重连并同步信标...", "warn")
+                        self._launch_tunnel()
+                        tun_alive = self._tunnel_proc is not None and self._tunnel_proc.poll() is None
+            finally:
+                self._op_lock.release()
 
         self._post_ui(lambda: self._refresh_status_ui(pwa_open, srv_alive, tun_alive))
 
@@ -1473,6 +1520,16 @@ class LauncherApp:
             return
         lan_ip = get_lan_ipv4()
         port = self.settings.web_pwa_port
+
+        if self._port_conflict:
+            self._set_card(
+                self.engine_orb_lbl,
+                self.engine_status_lbl,
+                "red",
+                f"端口冲突 · 本地 :{port} 已被其他未知程序占用（已阻止公网隧道映射）",
+            )
+            self._set_card(self.net_orb_lbl, self.net_status_lbl, "red", "网络与外网隧道已安全阻断")
+            return
 
         if srv_alive and pwa_open:
             self._set_card(
@@ -1570,24 +1627,41 @@ class LauncherApp:
         if self._server_proc and self._server_proc.poll() is None:
             managed_pids.add(self._server_proc.pid)
 
+        self._port_conflict = False
         ext_srv = find_external_server_processes(managed_pids)
-        port_open = is_tcp_port_open("127.0.0.1", self.settings.web_pwa_port)
+        gw_ident = probe_agy_gateway_identity("127.0.0.1", self.settings.web_pwa_port, timeout=0.6)
 
         if self._server_proc and self._server_proc.poll() is None:
             self._server_external = False
             self._enqueue_log("系统", "反重力核心引擎已在本窗口运行中。", "sys")
-        elif ext_srv or port_open:
+        elif gw_ident == "agy" or (ext_srv and gw_ident != "foreign"):
             self._server_external = True
             self._enqueue_log(
                 "系统",
-                f"检测到后台已有运行中的核心进程，已直接复用（点『↻ 重启并接管』可加载最新配置）。",
+                "检测到后台已有通过身份校验的反重力核心进程，已安全复用（点『↻ 重启接管』可加载最新配置）。",
                 "sys",
             )
+        elif gw_ident == "foreign":
+            self._server_external = False
+            self._port_conflict = True
+            self._enqueue_log(
+                "系统",
+                f"端口冲突：本地端口 :{self.settings.web_pwa_port} 已被其他非反重力程序占用！已中止建立公网隧道，请修改 WEB_PWA_PORT 或关闭占用程序。",
+                "err",
+            )
+            return
         else:
             self._server_external = False
             self._launch_server()
+            for _ in range(12):
+                time.sleep(0.25)
+                gw_ident = probe_agy_gateway_identity("127.0.0.1", self.settings.web_pwa_port, timeout=0.45)
+                if gw_ident == "agy":
+                    break
+                if self._server_proc is not None and self._server_proc.poll() is not None:
+                    break
 
-        if self.settings.web_pwa_enabled and self.settings.tunnel_enabled:
+        if self.settings.web_pwa_enabled and self.settings.tunnel_enabled and gw_ident == "agy":
             if self._tunnel_proc is None or self._tunnel_proc.poll() is not None:
                 self._launch_tunnel()
 
@@ -1634,13 +1708,15 @@ class LauncherApp:
     def _launch_tunnel(self) -> None:
         cf_exe = self.settings.project_dir / "bin" / "cloudflared.exe"
         if not cf_exe.is_file():
-            found = os.popen("where cloudflared 2>nul").read().strip().splitlines()
-            if found and Path(found[0]).is_file():
-                cf_exe = Path(found[0])
+            which_cf = shutil.which("cloudflared")
+            if which_cf and Path(which_cf).is_file():
+                cf_exe = Path(which_cf)
             else:
                 self._enqueue_log("系统", "未检测到 cloudflared.exe，当前可通过同 Wi-Fi 1ms 扫码直连。", "warn")
                 return
 
+        self._tunnel_gen += 1
+        cur_gen = self._tunnel_gen
         self._tunnel_url = ""
         cmd = [
             str(cf_exe),
@@ -1673,7 +1749,7 @@ class LauncherApp:
             )
             threading.Thread(
                 target=self._stream_process_output,
-                args=(self._tunnel_proc, "Tunnel", "tunnel"),
+                args=(self._tunnel_proc, "Tunnel", "tunnel", cur_gen),
                 daemon=True,
             ).start()
         except Exception as exc:
@@ -1684,6 +1760,7 @@ class LauncherApp:
         proc: subprocess.Popen[str],
         source: str,
         default_tag: str,
+        tun_gen: int = 0,
     ) -> None:
         assert proc.stdout is not None
         try:
@@ -1696,7 +1773,7 @@ class LauncherApp:
 
                 if source == "Tunnel":
                     m_cf = TRYCLOUDFLARE_RE.search(line)
-                    if m_cf and not self._tunnel_url:
+                    if m_cf and tun_gen == self._tunnel_gen and not self._tunnel_url:
                         self._tunnel_url = m_cf.group(0)
                         self._enqueue_log(
                             "Tunnel",
@@ -1707,7 +1784,7 @@ class LauncherApp:
                         threading.Thread(target=self._health_poll_worker, daemon=True).start()
                         threading.Thread(
                             target=self._sync_ios_beacon_worker,
-                            args=(self._tunnel_url,),
+                            args=(self._tunnel_url, tun_gen),
                             daemon=True,
                         ).start()
                     if not self._show_debug:
@@ -1737,8 +1814,8 @@ class LauncherApp:
             if not self._closing and code is not None:
                 self._enqueue_log("系统", f"{source} 进程已退出（退出码 {code}）。", "warn")
 
-    def _sync_ios_beacon_worker(self, tunnel_url: str) -> None:
-        if not self._ios_pages_url or not tunnel_url:
+    def _sync_ios_beacon_worker(self, tunnel_url: str, tun_gen: int = 0) -> None:
+        if not self._ios_pages_url or not tunnel_url or (tun_gen and tun_gen != self._tunnel_gen):
             return
         lan_url = f"http://{get_lan_ipv4()}:{self.settings.web_pwa_port}"
         ok, info = publish_ios_pwa_and_beacon(
@@ -1747,6 +1824,8 @@ class LauncherApp:
             tunnel_url=tunnel_url,
             lan_url=lan_url,
         )
+        if tun_gen and tun_gen != self._tunnel_gen:
+            return
         if ok:
             self._beacon_synced = True
             self._enqueue_log(
@@ -1767,6 +1846,7 @@ class LauncherApp:
         self._enqueue_log("系统", "所有服务已安全停止。", "sys")
 
     def _stop_all_internal(self, include_external: bool) -> None:
+        self._tunnel_gen += 1
         if self._tunnel_proc and self._tunnel_proc.poll() is None:
             kill_pid_tree(self._tunnel_proc.pid)
         self._tunnel_proc = None
@@ -1776,6 +1856,7 @@ class LauncherApp:
             kill_pid_tree(self._server_proc.pid)
         self._server_proc = None
         self._server_external = False
+        self._port_conflict = False
 
         if include_external:
             for pid in find_external_server_processes({os.getpid()}):

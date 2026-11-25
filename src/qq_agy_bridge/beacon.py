@@ -21,6 +21,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 PBKDF2_ITERATIONS = 100_000
 BEACON_DOMAIN_TAG = b"AGY-BEACON-V1"
+_BEACON_PUBLISH_LOCK = threading.Lock()
 
 GITHUB_REMOTE_RE = re.compile(
     r"github\.com[:/](?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+?)(?:\.git)?/?$"
@@ -91,8 +93,13 @@ def encrypt_beacon_payload(payload: dict[str, Any], access_token: str) -> dict[s
     }
 
 
-def decrypt_beacon_payload(envelope: dict[str, Any], access_token: str) -> dict[str, Any]:
-    """Verify MAC and decrypt `beacon.json` envelope."""
+def decrypt_beacon_payload(
+    envelope: dict[str, Any],
+    access_token: str,
+    *,
+    max_age_sec: float | None = None,
+) -> dict[str, Any]:
+    """Verify MAC, decrypt `beacon.json` envelope, and optionally enforce inner timestamp freshness."""
     if int(envelope.get("v") or 0) != 1:
         raise ValueError("Unsupported beacon version")
     salt = _b64u_decode(str(envelope["salt"]))
@@ -109,6 +116,11 @@ def decrypt_beacon_payload(envelope: dict[str, Any], access_token: str) -> dict[
     parsed = json.loads(pt.decode("utf-8"))
     if not isinstance(parsed, dict):
         raise ValueError("Decrypted beacon payload is not an object")
+    if max_age_sec is not None:
+        inner_ts = int(parsed.get("ts") or 0)
+        now_ms = int(time.time() * 1000)
+        if inner_ts <= 0 or (now_ms - inner_ts) > int(max_age_sec * 1000) or (inner_ts - now_ms) > 300_000:
+            raise ValueError("Beacon payload timestamp expired or invalid")
     return parsed
 
 
@@ -141,7 +153,7 @@ def detect_github_pages_info(project_dir: Path) -> tuple[str, str, str, str] | N
 
 
 STATIC_PWA_SW_JS = """\
-const CACHE_NAME = 'antigravity-ios-shell-v7';
+const CACHE_NAME = 'antigravity-ios-shell-v8';
 const SHELL_ASSETS = ['./', './index.html', './apple-touch-icon.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -267,46 +279,63 @@ def publish_ios_pwa_and_beacon(
     stage_dir = project_dir / ".gh_pages_stage"
     extra = {"creationflags": CREATE_NO_WINDOW} if sys.platform == "win32" else {}
 
-    try:
-        # Clean previous git dir inside stage_dir so every push is 1 tiny orphan commit (~120 KB)
-        git_sub = stage_dir / ".git"
-        if git_sub.is_dir():
-            shutil.rmtree(git_sub, ignore_errors=True)
+    with _BEACON_PUBLISH_LOCK:
+        try:
+            # Wipe the entire staging folder so stray residual files can never leak onto public gh-pages
+            if stage_dir.exists():
+                shutil.rmtree(stage_dir, ignore_errors=True)
+            stage_dir.mkdir(parents=True, exist_ok=True)
 
-        build_static_pwa_bundle(
-            project_dir,
-            stage_dir,
-            owner=owner,
-            repo=repo,
-            access_token=access_token,
-            tunnel_url=tunnel_url,
-            lan_url=lan_url,
-        )
-
-        def _git(*args: str, timeout: int = 25) -> subprocess.CompletedProcess[str]:
-            return subprocess.run(
-                ["git", *args],
-                cwd=str(stage_dir),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=timeout,
-                **extra,
+            build_static_pwa_bundle(
+                project_dir,
+                stage_dir,
+                owner=owner,
+                repo=repo,
+                access_token=access_token,
+                tunnel_url=tunnel_url,
+                lan_url=lan_url,
             )
 
-        _git("init", "-b", "gh-pages")
-        _git("config", "user.name", "Antigravity Beacon")
-        _git("config", "user.email", "beacon@antigravity.local")
-        _git("add", "-A")
-        c_res = _git("commit", "-m", "chore(pwa): sync encrypted tunnel beacon & iOS shell")
-        if c_res.returncode != 0:
-            return (False, f"生成信标提交失败：{(c_res.stderr or c_res.stdout).strip()[:120]}")
+            def _git(*args: str, timeout: int = 25) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    ["git", *args],
+                    cwd=str(stage_dir),
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=timeout,
+                    **extra,
+                )
 
-        p_res = _git("push", "-f", remote_url, "HEAD:gh-pages", timeout=30)
-        if p_res.returncode != 0:
-            return (False, f"推送 gh-pages 失败：{(p_res.stderr or p_res.stdout).strip()[:140]}")
+            init_res = _git("init", "-b", "gh-pages")
+            if init_res.returncode != 0:
+                return (False, f"初始化信标仓库失败：{(init_res.stderr or init_res.stdout).strip()[:120]}")
+            _git("config", "user.name", "Antigravity Beacon")
+            _git("config", "user.email", "beacon@antigravity.local")
+            add_res = _git(
+                "add",
+                "--",
+                "index.html",
+                ".nojekyll",
+                "sw.js",
+                "manifest.json",
+                "beacon.json",
+                "apple-touch-icon.png",
+                "icon-192.png",
+                "icon-512.png",
+            )
+            if add_res.returncode != 0:
+                return (False, f"暂存信标文件失败：{(add_res.stderr or add_res.stdout).strip()[:120]}")
 
-        return (True, pages_url)
-    except Exception as exc:
-        return (False, f"同步永久入口异常：{exc}")
+            c_res = _git("commit", "-m", "chore(pwa): sync encrypted tunnel beacon & iOS shell")
+            if c_res.returncode != 0:
+                return (False, f"生成信标提交失败：{(c_res.stderr or c_res.stdout).strip()[:120]}")
+
+            p_res = _git("push", "-f", remote_url, "HEAD:gh-pages", timeout=30)
+            if p_res.returncode != 0:
+                return (False, f"推送 gh-pages 失败：{(p_res.stderr or p_res.stdout).strip()[:140]}")
+
+            return (True, pages_url)
+        except Exception as exc:
+            return (False, f"同步永久入口异常：{exc}")

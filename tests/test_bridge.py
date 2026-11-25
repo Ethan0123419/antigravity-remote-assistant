@@ -1087,3 +1087,191 @@ async def test_duplicate_inflight_chat_guard_and_new_codex_thread(tmp_path: Path
         stop_event.set()
         await asyncio.wait_for(pwa_task, timeout=5.0)
         await sessions.shutdown_all()
+
+
+@pytest.mark.asyncio
+async def test_security_cswsh_port_identity_codex_reconnect_and_no_double_exec(tmp_path: Path) -> None:
+    """Regression suite for Neon x GPT-6.2 Astra joint red-team audit:
+    1. `probe_agy_gateway_identity` distinguishes genuine Antigravity gateway (`'agy'`) from an unrelated HTTP listener (`'foreign'`).
+    2. Cookie-authenticated WebSocket rejects cross-origin `Origin` (CSWSH defense), while same-origin Cookie WS succeeds.
+    3. Direct non-loopback peers cannot spoof `CF-Connecting-IP` to bypass rate-limiting, and `manifest.json` does not echo HttpOnly Cookie tokens.
+    4. Reconnecting mid-Codex turn cleanly serializes `hello.inflight` (no `Process` JSON crash), and if Codex fails AFTER `thread.started`, it reports `ERROR` WITHOUT double-submitting the prompt to `agy`.
+    5. Aborted chunk uploads clean up `.part` files on disconnect, and frontend HTML enforces `no-referrer` + safe DOM creation.
+    """
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import threading
+    from websockets.datastructures import Headers
+    from qq_agy_bridge.beacon import decrypt_beacon_payload, encrypt_beacon_payload
+    from qq_agy_bridge.launcher import probe_agy_gateway_identity
+
+    # Static frontend safety assertions
+    html_src = (Path(__file__).resolve().parents[1] / "src" / "qq_agy_bridge" / "static" / "index.html").read_text(encoding="utf-8")
+    assert '<meta name="referrer" content="no-referrer" />' in html_src
+    assert 'id="bub-${id}"' not in html_src
+    assert r"/^\s*(?:>|&gt;)/.test(lines[i])" in html_src
+
+    # Beacon inner timestamp freshness check
+    stale_env = encrypt_beacon_payload({"tunnel_url": "https://a.trycloudflare.com", "lan_url": "", "ts": 1000}, "tok-123")
+    with pytest.raises(ValueError, match="expired"):
+        decrypt_beacon_payload(stale_env, "tok-123", max_age_sec=60.0)
+    fresh_env = encrypt_beacon_payload(
+        {"tunnel_url": "https://a.trycloudflare.com", "lan_url": "", "ts": int(time.time() * 1000)},
+        "tok-123",
+    )
+    assert decrypt_beacon_payload(fresh_env, "tok-123", max_age_sec=60.0)["tunnel_url"] == "https://a.trycloudflare.com"
+
+    # 1. Foreign HTTP listener on random port MUST be detected as `'foreign'`
+    class _ForeignHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{"hello":"other-app"}')
+
+        def log_message(self, *args) -> None:
+            pass
+
+    foreign_httpd = HTTPServer(("127.0.0.1", 0), _ForeignHandler)
+    f_port = foreign_httpd.server_address[1]
+    f_thread = threading.Thread(target=foreign_httpd.serve_forever, daemon=True)
+    f_thread.start()
+    try:
+        assert probe_agy_gateway_identity("127.0.0.1", f_port) == "foreign"
+    finally:
+        foreign_httpd.shutdown()
+        foreign_httpd.server_close()
+
+    # 2. Spin up WebPwaServer with a mock Codex script that sleeps briefly, emits `thread.started`, then exits 1
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    mock_cdx_fail_py = tmp_path / "mock_cdx_midfail.py"
+    mock_cdx_fail_py.write_text(
+        "import json, sys, time\n"
+        "_ = sys.stdin.read()\n"
+        "print(json.dumps({'type':'thread.started','thread_id':'cdx-midfail-999'}), flush=True)\n"
+        "sys.stderr.write('simulated mid-turn failure after thread started\\n')\n"
+        "sys.stderr.flush()\n"
+        "time.sleep(0.35)\n"
+        "sys.exit(2)\n",
+        encoding="utf-8",
+    )
+    mock_cdx_cmd = tmp_path / ("mock_cdx_midfail.cmd" if sys.platform == "win32" else "mock_cdx_midfail.sh")
+    if sys.platform == "win32":
+        mock_cdx_cmd.write_text(f'@"{sys.executable}" "{mock_cdx_fail_py}" %*\r\n', encoding="utf-8")
+    else:
+        mock_cdx_cmd.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{mock_cdx_fail_py}" "$@"\n', encoding="utf-8")
+        mock_cdx_cmd.chmod(0o755)
+
+    tok = "astra-redteam-token-999"
+    cfg = _make_config(tmp_path, web_pwa_port=port, web_access_token=tok)
+    agy_calls: list[str] = []
+    sessions = SessionManager(cfg, command_override=[sys.executable, str(MOCK_AGY)])
+    pwa = WebPwaServer(
+        cfg,
+        session_manager=sessions,
+        access_token=tok,
+        ide_store_dir=tmp_path / "ide_sec",
+        cli_store_dir=tmp_path / "cli_sec",
+        codex_store_dir=tmp_path / "cdx_sec",
+        codex_cli_path=mock_cdx_cmd,
+    )
+
+    # Verify non-loopback peer cannot spoof `CF-Connecting-IP`
+    class _FakeLanConn:
+        remote_address = ("192.168.1.88", 54321)
+
+    hdr_spoof = Headers([("CF-Connecting-IP", "8.8.8.8")])
+    assert pwa._client_ip(_FakeLanConn(), hdr_spoof) == "192.168.1.88"  # type: ignore[arg-type]
+
+    stop_event = asyncio.Event()
+    pwa_task = asyncio.create_task(pwa.run(stop_event=stop_event))
+    try:
+        await asyncio.sleep(0.2)
+        assert (await asyncio.to_thread(probe_agy_gateway_identity, "127.0.0.1", port)) == "agy"
+
+        # Cookie-only GET /manifest.json MUST NOT echo secret token into `start_url`
+        def _fetch_manifest_with_cookie() -> dict:
+            req_m = urllib.request.Request(
+                f"http://127.0.0.1:{port}/manifest.json",
+                headers={"Cookie": f"agy_pwa_token={tok}"},
+            )
+            with urllib.request.urlopen(req_m, timeout=3) as resp_m:
+                return json.loads(resp_m.read().decode("utf-8"))
+
+        manifest_obj = await asyncio.to_thread(_fetch_manifest_with_cookie)
+        assert manifest_obj["start_url"] == "/"
+
+        # Cookie-authenticated cross-origin WebSocket MUST be rejected with 4003 (CSWSH block!)
+        async with websockets.connect(
+            f"ws://127.0.0.1:{port}/ws",
+            origin="https://evil.example",
+            additional_headers={"Cookie": f"agy_pwa_token={tok}"},
+        ) as ws_evil:
+            with pytest.raises(websockets.exceptions.ConnectionClosed) as exc_info:
+                await asyncio.wait_for(ws_evil.recv(), timeout=3.0)
+            assert exc_info.value.rcvd is not None and exc_info.value.rcvd.code == 4003
+
+        # Aborted upload MUST NOT leave `.part` or partial files behind on disconnect
+        from qq_agy_bridge.desktop_tools import PROJECT_INBOX_DIR
+
+        before_parts = set(PROJECT_INBOX_DIR.glob("*.part")) if PROJECT_INBOX_DIR.is_dir() else set()
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws?token={tok}") as ws_up:
+            await asyncio.wait_for(ws_up.recv(), timeout=3.0)
+            await ws_up.send(json.dumps({"type": "upload_init", "upload_id": "abort1", "name": "half.bin", "size": 100}))
+            await asyncio.wait_for(ws_up.recv(), timeout=3.0)  # upload_ack
+            await ws_up.send(json.dumps({"type": "upload_chunk", "upload_id": "abort1", "data": base64.b64encode(b"12345").decode()}))
+            await asyncio.wait_for(ws_up.recv(), timeout=3.0)  # upload_progress
+        await asyncio.sleep(0.15)
+        after_parts = set(PROJECT_INBOX_DIR.glob("*.part")) if PROJECT_INBOX_DIR.is_dir() else set()
+        assert after_parts - before_parts == set()
+
+        # Reconnect while Codex turn is in-flight + verify NO fallback double-exec to `agy` when Codex fails post-accept
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws?token={tok}") as ws1:
+            await asyncio.wait_for(ws1.recv(), timeout=3.0)  # hello
+            await ws1.send(json.dumps({"type": "new_conversation", "workspace": str(tmp_path), "target": "codex"}))
+            for _ in range(6):
+                ev = json.loads(await asyncio.wait_for(ws1.recv(), timeout=3.0))
+                if ev["type"] == "meta_update":
+                    cdx_slot = ev["slot"]
+                    break
+            else:
+                cdx_slot = ""
+            assert cdx_slot
+
+            orig_ask = pwa._session_for_slot(cdx_slot).ask
+
+            async def _spy_ask(p: str, **kw):  # type: ignore[no-untyped-def]
+                agy_calls.append(p)
+                return await orig_ask(p, **kw)
+
+            pwa._session_for_slot(cdx_slot).ask = _spy_ask  # type: ignore[method-assign]
+
+            await ws1.send(json.dumps({"type": "chat", "slot": cdx_slot, "text": "只允许执行一次的修改指令"}))
+            for _ in range(8):
+                ev = json.loads(await asyncio.wait_for(ws1.recv(), timeout=3.0))
+                if ev["type"] == "stream_start":
+                    break
+
+            # Open a second WS client mid-Codex turn -> `hello` MUST serialize cleanly without `TypeError: Process`!
+            async with websockets.connect(f"ws://127.0.0.1:{port}/ws?token={tok}") as ws2:
+                hello2 = json.loads(await asyncio.wait_for(ws2.recv(), timeout=3.0))
+                assert hello2["type"] == "hello"
+                assert hello2["busy"] is True
+                assert isinstance(hello2["inflight"], dict)
+                assert "codex_proc" not in hello2["inflight"]
+
+            final_item = None
+            for _ in range(20):
+                ev = json.loads(await asyncio.wait_for(ws1.recv(), timeout=5.0))
+                if ev["type"] == "stream_end":
+                    final_item = ev["item"]
+                    break
+            assert final_item is not None
+            assert "simulated mid-turn failure" in final_item["text"]
+            # CRITICAL: `agy` fallback MUST NOT have been called!
+            assert agy_calls == []
+    finally:
+        stop_event.set()
+        await asyncio.wait_for(pwa_task, timeout=5.0)
+        await sessions.shutdown_all()

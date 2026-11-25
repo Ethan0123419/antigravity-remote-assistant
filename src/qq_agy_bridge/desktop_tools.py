@@ -9,12 +9,14 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+_DESKTOP_UIA_LOCK = threading.Lock()
 
 THOUGHT_TAG_RE = re.compile(
     r"<(?:thought|thinking|analysis)\b[^>]*>.*?</(?:thought|thinking|analysis)>",
@@ -445,6 +447,7 @@ public static class AgyWin32 {
     [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
     [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, UIntPtr dwExtraInfo);
     [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
@@ -663,8 +666,8 @@ if ($activeCid -ne $targetCid) {
     }
 
     $activeCid = Get-ActiveCid $agyWin
-    if ($activeCid -ne "" -and $activeCid -ne $targetCid) {
-        Write-Output "ERR:桌面端当前未能切换到该会话窗口"
+    if ($activeCid -ne $targetCid) {
+        Write-Output "ERR:桌面端当前未能确认切换到该会话窗口"
         exit 0
     }
 }
@@ -706,30 +709,62 @@ if ($boxRect.IsEmpty -or $boxRect.Width -lt 30 -or $boxRect.Height -lt 10) {
     exit 0
 }
 
-$hadText = $false
-$oldClip = ""
+$clipKind = "empty"
+$oldClipText = ""
+$oldClipImg = $null
+$oldClipFiles = $null
 try {
     if ([System.Windows.Forms.Clipboard]::ContainsText()) {
-        $hadText = $true
-        $oldClip = [System.Windows.Forms.Clipboard]::GetText()
+        $clipKind = "text"
+        $oldClipText = [System.Windows.Forms.Clipboard]::GetText()
+    } elseif ([System.Windows.Forms.Clipboard]::ContainsImage()) {
+        $clipKind = "image"
+        $oldClipImg = [System.Windows.Forms.Clipboard]::GetImage()
+    } elseif ([System.Windows.Forms.Clipboard]::ContainsFileDropList()) {
+        $clipKind = "files"
+        $oldClipFiles = [System.Windows.Forms.Clipboard]::GetFileDropList()
     }
 } catch {}
 
 [AgyWin32]::SetForegroundWindow($hwnd) | Out-Null
+Start-Sleep -Milliseconds 40
+if ([AgyWin32]::GetForegroundWindow() -ne $hwnd) {
+    Write-Output "ERR:桌面窗口未处于前台焦点，已安全中止投递"
+    exit 0
+}
+
 $cx = [int]($boxRect.Left + [Math]::Min(120, $boxRect.Width / 2))
 $cy = [int]($boxRect.Top + ($boxRect.Height / 2))
 [AgyWin32]::ClickAt($cx, $cy)
 Start-Sleep -Milliseconds 140
 
 [System.Windows.Forms.Clipboard]::SetText($promptText)
-Start-Sleep -Milliseconds 60
-[AgyWin32]::PasteAndEnter()
-Start-Sleep -Milliseconds 230
-[AgyWin32]::PressEnter()
-Start-Sleep -Milliseconds 200
+$clipSeqAfterSet = [AgyWin32]::GetClipboardSequenceNumber()
+Start-Sleep -Milliseconds 50
 
-if ($hadText) {
-    try { [System.Windows.Forms.Clipboard]::SetText($oldClip) } catch {}
+try {
+    $recheckCid = Get-ActiveCid $agyWin
+    if ([AgyWin32]::GetForegroundWindow() -ne $hwnd -or $recheckCid -ne $targetCid) {
+        Write-Output "ERR:桌面窗口焦点或目标会话发生变化，已安全中止投递"
+        exit 0
+    }
+    [AgyWin32]::PasteAndEnter()
+    Start-Sleep -Milliseconds 230
+    if ([AgyWin32]::GetForegroundWindow() -ne $hwnd) {
+        Write-Output "ERR:粘贴后桌面窗口失去焦点，已中止回车提交（草稿保留在输入框）"
+        exit 0
+    }
+    [AgyWin32]::PressEnter()
+    Start-Sleep -Milliseconds 180
+} finally {
+    try {
+        if ([AgyWin32]::GetClipboardSequenceNumber() -eq $clipSeqAfterSet) {
+            if ($clipKind -eq "text") { [System.Windows.Forms.Clipboard]::SetText($oldClipText) }
+            elseif ($clipKind -eq "image" -and $null -ne $oldClipImg) { [System.Windows.Forms.Clipboard]::SetImage($oldClipImg) }
+            elseif ($clipKind -eq "files" -and $null -ne $oldClipFiles) { [System.Windows.Forms.Clipboard]::SetFileDropList($oldClipFiles) }
+            else { [System.Windows.Forms.Clipboard]::Clear() }
+        }
+    } catch {}
 }
 
 Write-Output "OK:已投递至电脑端 Antigravity 窗口"
@@ -741,36 +776,37 @@ Write-Output "OK:已投递至电脑端 Antigravity 窗口"
     env["AGY_TARGET_TITLE"] = (title or "").strip()
     env["AGY_PROMPT_B64"] = base64.b64encode((prompt or "").encode("utf-8")).decode("ascii")
 
-    try:
-        res = subprocess.run(
-            [
-                "powershell.exe",
-                "-Sta",
-                "-NoProfile",
-                "-NonInteractive",
-                "-WindowStyle",
-                "Hidden",
-                "-EncodedCommand",
-                encoded,
-            ],
-            env=env,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=16,
-            creationflags=CREATE_NO_WINDOW,
-        )
-        lines = [ln.strip() for ln in (res.stdout or "").splitlines() if ln.strip()]
-        for ln in reversed(lines):
-            if ln.startswith("OK:"):
-                return (True, ln.removeprefix("OK:").strip())
-            if ln.startswith("ERR:"):
-                return (False, ln.removeprefix("ERR:").strip())
-        err_tail = (res.stderr or "").strip()[:160]
-        return (False, f"桌面窗口投递未返回确认 {err_tail}".strip())
-    except Exception as exc:
-        return (False, f"桌面窗口投递异常：{exc}")
+    with _DESKTOP_UIA_LOCK:
+        try:
+            res = subprocess.run(
+                [
+                    "powershell.exe",
+                    "-Sta",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-WindowStyle",
+                    "Hidden",
+                    "-EncodedCommand",
+                    encoded,
+                ],
+                env=env,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=16,
+                creationflags=CREATE_NO_WINDOW,
+            )
+            lines = [ln.strip() for ln in (res.stdout or "").splitlines() if ln.strip()]
+            for ln in reversed(lines):
+                if ln.startswith("OK:"):
+                    return (True, ln.removeprefix("OK:").strip())
+                if ln.startswith("ERR:"):
+                    return (False, ln.removeprefix("ERR:").strip())
+            err_tail = (res.stderr or "").strip()[:160]
+            return (False, f"桌面窗口投递未返回确认 {err_tail}".strip())
+        except Exception as exc:
+            return (False, f"桌面窗口投递异常：{exc}")
 
 
 def cancel_antigravity_ide_window_turn(conversation_id: str) -> bool:
@@ -833,20 +869,21 @@ foreach ($el in $root.FindAll([System.Windows.Automation.TreeScope]::Children, [
     encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
     env = os.environ.copy()
     env["AGY_TARGET_CID"] = conversation_id.strip()
-    try:
-        res = subprocess.run(
-            ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
-            env=env,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=8,
-            creationflags=CREATE_NO_WINDOW,
-        )
-        return "STOPPED" in (res.stdout or "")
-    except Exception:
-        return False
+    with _DESKTOP_UIA_LOCK:
+        try:
+            res = subprocess.run(
+                ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
+                env=env,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=8,
+                creationflags=CREATE_NO_WINDOW,
+            )
+            return "STOPPED" in (res.stdout or "")
+        except Exception:
+            return False
 
 
 def open_new_antigravity_ide_chat_window() -> tuple[bool, str]:
@@ -866,6 +903,8 @@ public static class AgyNewWin32 {
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
     [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, UIntPtr dwExtraInfo);
     public static void ClickAt(int x, int y) {
@@ -955,24 +994,25 @@ Start-Sleep -Milliseconds 260
 Write-Output "OK:已在电脑端打开新对话窗口"
 """
     encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
-    try:
-        res = subprocess.run(
-            ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=10,
-            creationflags=CREATE_NO_WINDOW,
-        )
-        for ln in reversed([x.strip() for x in (res.stdout or "").splitlines() if x.strip()]):
-            if ln.startswith("OK:"):
-                return (True, ln.removeprefix("OK:").strip())
-            if ln.startswith("ERR:"):
-                return (False, ln.removeprefix("ERR:").strip())
-        return (False, "打开电脑端新对话未返回确认")
-    except Exception as exc:
-        return (False, f"打开电脑端新对话异常：{exc}")
+    with _DESKTOP_UIA_LOCK:
+        try:
+            res = subprocess.run(
+                ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
+                creationflags=CREATE_NO_WINDOW,
+            )
+            for ln in reversed([x.strip() for x in (res.stdout or "").splitlines() if x.strip()]):
+                if ln.startswith("OK:"):
+                    return (True, ln.removeprefix("OK:").strip())
+                if ln.startswith("ERR:"):
+                    return (False, ln.removeprefix("ERR:").strip())
+            return (False, "打开电脑端新对话未返回确认")
+        except Exception as exc:
+            return (False, f"打开电脑端新对话异常：{exc}")
 
 
 def create_and_send_antigravity_ide_new_chat(
@@ -1004,6 +1044,8 @@ public static class AgyCreateWin32 {
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
     [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, UIntPtr dwExtraInfo);
     [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
@@ -1166,37 +1208,68 @@ if ($boxRect.IsEmpty -or $boxRect.Width -lt 30 -or $boxRect.Height -lt 10) {
     exit 0
 }
 
-$hadText = $false
-$oldClip = ""
+$clipKind = "empty"
+$oldClipText = ""
+$oldClipImg = $null
+$oldClipFiles = $null
 try {
     if ([System.Windows.Forms.Clipboard]::ContainsText()) {
-        $hadText = $true
-        $oldClip = [System.Windows.Forms.Clipboard]::GetText()
+        $clipKind = "text"
+        $oldClipText = [System.Windows.Forms.Clipboard]::GetText()
+    } elseif ([System.Windows.Forms.Clipboard]::ContainsImage()) {
+        $clipKind = "image"
+        $oldClipImg = [System.Windows.Forms.Clipboard]::GetImage()
+    } elseif ([System.Windows.Forms.Clipboard]::ContainsFileDropList()) {
+        $clipKind = "files"
+        $oldClipFiles = [System.Windows.Forms.Clipboard]::GetFileDropList()
     }
 } catch {}
 
 [AgyCreateWin32]::SetForegroundWindow($hwnd) | Out-Null
+Start-Sleep -Milliseconds 40
+if ([AgyCreateWin32]::GetForegroundWindow() -ne $hwnd) {
+    Write-Output "ERR:桌面窗口未处于前台焦点，已安全中止新建投递"
+    exit 0
+}
+
 [AgyCreateWin32]::ClickAt([int]($boxRect.Left + [Math]::Min(120, $boxRect.Width / 2)), [int]($boxRect.Top + $boxRect.Height / 2))
 Start-Sleep -Milliseconds 140
 
 [System.Windows.Forms.Clipboard]::SetText($promptText)
-Start-Sleep -Milliseconds 60
-[AgyCreateWin32]::PasteClip()
-Start-Sleep -Milliseconds 230
-[AgyCreateWin32]::PressEnter()
+$clipSeqAfterSet = [AgyCreateWin32]::GetClipboardSequenceNumber()
+Start-Sleep -Milliseconds 50
 
 $newCid = ""
-for ($w = 0; $w -lt 22; $w++) {
-    Start-Sleep -Milliseconds 180
-    $cand = Get-ActiveCid $agyWin
-    if ($cand -ne "" -and ((-not $prevHasHistory) -or ($cand -ne $prevCid))) {
-        $newCid = $cand
-        break
+try {
+    if ([AgyCreateWin32]::GetForegroundWindow() -ne $hwnd) {
+        Write-Output "ERR:桌面窗口失去焦点，已安全中止新建投递"
+        exit 0
     }
-}
+    [AgyCreateWin32]::PasteClip()
+    Start-Sleep -Milliseconds 230
+    if ([AgyCreateWin32]::GetForegroundWindow() -ne $hwnd) {
+        Write-Output "ERR:粘贴后桌面窗口失去焦点，已中止回车提交（草稿保留在输入框）"
+        exit 0
+    }
+    [AgyCreateWin32]::PressEnter()
 
-if ($hadText) {
-    try { [System.Windows.Forms.Clipboard]::SetText($oldClip) } catch {}
+    for ($w = 0; $w -lt 22; $w++) {
+        Start-Sleep -Milliseconds 180
+        $cand = Get-ActiveCid $agyWin
+        if ($cand -ne "" -and ((-not $prevHasHistory) -or ($cand -ne $prevCid))) {
+            $newCid = $cand
+            break
+        }
+    }
+} finally {
+    try {
+        if ([AgyCreateWin32]::GetClipboardSequenceNumber() -eq $clipSeqAfterSet) {
+            if ($clipKind -eq "text") { [System.Windows.Forms.Clipboard]::SetText($oldClipText) }
+            elseif ($clipKind -eq "image" -and $null -ne $oldClipImg) { [System.Windows.Forms.Clipboard]::SetImage($oldClipImg) }
+            elseif ($clipKind -eq "files" -and $null -ne $oldClipFiles) { [System.Windows.Forms.Clipboard]::SetFileDropList($oldClipFiles) }
+            else { [System.Windows.Forms.Clipboard]::Clear() }
+        }
+    } catch {}
 }
 
 Write-Output "OK:$newCid"
@@ -1206,50 +1279,52 @@ Write-Output "OK:$newCid"
     env["AGY_PROMPT_B64"] = base64.b64encode((prompt or "").encode("utf-8")).decode("ascii")
     env["AGY_IDE_BRAIN_DIR"] = str(brain_dir)
 
-    try:
-        res = subprocess.run(
-            ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
-            env=env,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=18,
-            creationflags=CREATE_NO_WINDOW,
-        )
-        ok_matched = False
-        new_cid = ""
-        for ln in reversed([x.strip() for x in (res.stdout or "").splitlines() if x.strip()]):
-            if ln.startswith("OK:"):
-                ok_matched = True
-                new_cid = ln.removeprefix("OK:").strip()
-                break
-            if ln.startswith("ERR:"):
-                return (False, "", ln.removeprefix("ERR:").strip())
+    with _DESKTOP_UIA_LOCK:
+        try:
+            res = subprocess.run(
+                ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
+                env=env,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=18,
+                creationflags=CREATE_NO_WINDOW,
+            )
+            ok_matched = False
+            new_cid = ""
+            for ln in reversed([x.strip() for x in (res.stdout or "").splitlines() if x.strip()]):
+                if ln.startswith("OK:"):
+                    ok_matched = True
+                    new_cid = ln.removeprefix("OK:").strip()
+                    break
+                if ln.startswith("ERR:"):
+                    return (False, "", ln.removeprefix("ERR:").strip())
 
-        if not ok_matched:
-            return (False, "", "新建桌面会话未返回确认")
+            if not ok_matched:
+                return (False, "", "新建桌面会话未返回确认")
 
-        # Fallback: if Document URL hadn't updated yet, inspect newly created brain/<uuid> directory
-        if not new_cid and brain_dir.is_dir():
-            for _ in range(10):
-                time.sleep(0.45)
-                try:
-                    candidates = [
-                        d
-                        for d in brain_dir.iterdir()
-                        if d.is_dir() and d.name != "tempmediaStorage" and d.name not in before_ids
-                    ]
-                    if candidates:
-                        candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-                        new_cid = candidates[0].name
-                        break
-                except OSError:
-                    pass
+            # Fallback: only accept an unambiguous single newly created brain/<uuid> directory
+            if not new_cid and brain_dir.is_dir():
+                for _ in range(10):
+                    time.sleep(0.45)
+                    try:
+                        candidates = [
+                            d
+                            for d in brain_dir.iterdir()
+                            if d.is_dir() and d.name != "tempmediaStorage" and d.name not in before_ids
+                        ]
+                        if len(candidates) == 1:
+                            new_cid = candidates[0].name
+                            break
+                        if len(candidates) > 1:
+                            break
+                    except OSError:
+                        pass
 
-        if not new_cid:
-            return (False, "", "未能捕获新建桌面会话 ID")
+            if not new_cid:
+                return (False, "", "未能唯一定位新建桌面会话 ID，请点击同步刷新")
 
-        return (True, new_cid, "已在电脑端新建 Antigravity 会话并发送")
-    except Exception as exc:
-        return (False, "", f"新建桌面会话异常：{exc}")
+            return (True, new_cid, "已在电脑端新建 Antigravity 会话并发送")
+        except Exception as exc:
+            return (False, "", f"新建桌面会话异常：{exc}")

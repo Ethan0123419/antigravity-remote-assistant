@@ -37,7 +37,7 @@ from websockets.asyncio.server import ServerConnection
 from websockets.datastructures import Headers
 from websockets.http11 import Request, Response
 
-from .agy_session import AgySession, SessionManager, TurnResult
+from .agy_session import AgySession, SessionManager, TurnResult, _kill_process_tree_win32
 from .config import BridgeConfig
 from .conversations import (
     SAVED_PATH_RE,
@@ -411,21 +411,48 @@ def _extend_deduplicated_turns(base_hist: list[dict[str, Any]], extra_turns: lis
 class _UploadState:
     def __init__(self, path: Path, name: str, expected_size: int) -> None:
         self.path = path
+        self.temp_path = path.with_name(path.name + ".part")
         self.name = name
-        self.expected_size = expected_size
+        self.expected_size = max(0, int(expected_size))
         self.written = 0
-        self.fh = path.open("wb")
+        self._closed = False
+        self.fh = self.temp_path.open("wb")
 
     def write(self, data: bytes) -> None:
         if self.written + len(data) > MAX_UPLOAD_BYTES:
             raise ValueError("上传文件超过 100MB 上限")
+        if self.expected_size > 0 and self.written + len(data) > self.expected_size:
+            raise ValueError("上传分片超出声明文件大小")
         self.fh.write(data)
         self.written += len(data)
 
     def close(self) -> None:
+        if not self._closed:
+            self._closed = True
+            try:
+                self.fh.close()
+            except Exception:
+                pass
+
+    def finalize(self) -> Path:
         try:
-            self.fh.close()
+            if not self._closed:
+                self.fh.flush()
+                self.fh.close()
+                self._closed = True
+            if self.expected_size > 0 and self.written != self.expected_size:
+                raise ValueError("上传文件不完整，请重试")
+            self.temp_path.replace(self.path)
+            return self.path
         except Exception:
+            self.abort()
+            raise
+
+    def abort(self) -> None:
+        self.close()
+        try:
+            self.temp_path.unlink(missing_ok=True)
+        except OSError:
             pass
 
 
@@ -494,6 +521,7 @@ class WebPwaServer:
         self._slot_history: dict[str, list[dict[str, Any]]] = {DEFAULT_SLOT_KEY: []}
         self._slot_local_turns: dict[str, list[dict[str, Any]]] = {}
         self._slot_inflight: dict[str, dict[str, Any]] = {}
+        self._slot_codex_procs: dict[str, asyncio.subprocess.Process] = {}
         self._slot_meta: dict[str, dict[str, Any]] = {
             DEFAULT_SLOT_KEY: {"conversation_id": "", "title": "", "store": ""}
         }
@@ -549,15 +577,29 @@ class WebPwaServer:
         if loc:
             self._slot_local_turns[slot_key] = [x for x in loc if x.get("id") != item_id]
 
+    def _public_inflight(self, slot_key: str) -> dict[str, Any] | None:
+        inf = self._slot_inflight.get(slot_key)
+        if not inf:
+            return None
+        return {
+            "msg_id": str(inf.get("msg_id") or ""),
+            "slot": str(inf.get("slot") or slot_key),
+            "model": str(inf.get("model") or ""),
+            "text": str(inf.get("text") or ""),
+            "status": str(inf.get("status") or ""),
+        }
+
     def _client_ip(self, connection: ServerConnection, headers: Headers | None = None) -> str:
-        if headers is not None:
-            cf_ip = headers.get("CF-Connecting-IP", "").strip()
-            if cf_ip:
-                return cf_ip
+        peer_ip = "unknown"
         peer = connection.remote_address
         if isinstance(peer, tuple) and peer:
-            return str(peer[0])
-        return "unknown"
+            peer_ip = str(peer[0])
+        # Only trust `CF-Connecting-IP` when socket originates from local loopback (`cloudflared.exe`)!
+        if headers is not None and peer_ip in {"127.0.0.1", "::1", "::ffff:127.0.0.1"}:
+            cf_ip = headers.get("CF-Connecting-IP", "").strip()
+            if cf_ip:
+                return cf_ip[:64]
+        return peer_ip
 
     def _is_ip_locked(self, ip: str) -> bool:
         now = time.monotonic()
@@ -570,6 +612,15 @@ class WebPwaServer:
 
     def _record_auth_failure(self, ip: str) -> None:
         now = time.monotonic()
+        if len(self._failed_auth) >= 512 and ip not in self._failed_auth:
+            stale_keys = [
+                k for k, ts_list in list(self._failed_auth.items()) if not ts_list or now - ts_list[-1] >= 60.0
+            ]
+            for k in stale_keys:
+                self._failed_auth.pop(k, None)
+            if len(self._failed_auth) >= 512:
+                oldest_key = next(iter(self._failed_auth))
+                self._failed_auth.pop(oldest_key, None)
         arr = [t for t in self._failed_auth.get(ip, []) if now - t < 60.0]
         arr.append(now)
         self._failed_auth[ip] = arr
@@ -658,7 +709,8 @@ class WebPwaServer:
         if path == "/ws":
             return None
 
-        if request.method not in {"GET", "HEAD"}:
+        req_method = str(getattr(request, "method", "GET") or "GET").upper()
+        if req_method not in {"GET", "HEAD"}:
             return self._http_response(405, "Method Not Allowed", b"Method Not Allowed", "text/plain")
 
         if path in {"/", "/index.html"}:
@@ -669,9 +721,11 @@ class WebPwaServer:
             extra_hdrs = {"Cache-Control": "no-cache"}
             ip = self._client_ip(connection, request.headers)
             cand_tok = (parse_qs(parsed.query).get("token") or [""])[0].strip()
-            if cand_tok and self._verify_token(cand_tok, ip, record_failure=False):
+            if cand_tok and self._verify_token(cand_tok, ip, record_failure=True):
+                is_https = request.headers.get("X-Forwarded-Proto", "").strip().lower() == "https"
+                sec_attr = "; Secure" if is_https else ""
                 extra_hdrs["Set-Cookie"] = (
-                    f"agy_pwa_token={cand_tok}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax"
+                    f"agy_pwa_token={cand_tok}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax{sec_attr}"
                 )
             return self._http_response(
                 200,
@@ -683,10 +737,10 @@ class WebPwaServer:
 
         if path == "/manifest.json":
             ip = self._client_ip(connection, request.headers)
-            cand_tok = self._extract_token(parsed.query, request.headers)
+            q_tok = (parse_qs(parsed.query).get("token") or [""])[0].strip()
             start_url = "/"
-            if cand_tok and self._verify_token(cand_tok, ip, record_failure=False):
-                start_url = f"/?token={quote(cand_tok)}"
+            if q_tok and self._verify_token(q_tok, ip, record_failure=True):
+                start_url = f"/?token={quote(q_tok)}"
             manifest = {
                 "name": "反重力助手",
                 "short_name": "反重力助手",
@@ -720,7 +774,9 @@ class WebPwaServer:
             )
 
         if path == "/ping":
-            body = json.dumps({"ok": True, "ts": int(time.time() * 1000)}).encode("utf-8")
+            body = json.dumps(
+                {"ok": True, "service": "antigravity-assistant", "ts": int(time.time() * 1000)}
+            ).encode("utf-8")
             return self._http_response(
                 200,
                 "OK",
@@ -798,44 +854,27 @@ class WebPwaServer:
         req = ws.request
         ip = self._client_ip(ws, req.headers if req else None)
         parsed = urlsplit(req.path if req else "")
-        tok = self._extract_token(parsed.query, req.headers if req else None)
+        q_tok = (parse_qs(parsed.query).get("token") or [""])[0].strip()
+        tok = q_tok or self._extract_token(parsed.query, req.headers if req else None)
+
+        # Block Cross-Site WebSocket Hijacking (CSWSH) when relying on ambient Cookie without explicit `?token=`
+        if not q_tok and req is not None:
+            origin_hdr = (req.headers.get("Origin") or "").strip()
+            host_hdr = (req.headers.get("Host") or "").strip().lower()
+            if origin_hdr:
+                origin_host = urlsplit(origin_hdr).netloc.strip().lower()
+                if not host_hdr or origin_host != host_hdr:
+                    logger.warning("Blocked cross-origin Cookie WS handshake from Origin=%s (%s)", origin_hdr, ip)
+                    await ws.close(code=4003, reason="Forbidden Origin")
+                    return
 
         if not self._verify_token(tok, ip):
             logger.warning("Rejected unauthorized Web PWA WS connection from %s", ip)
             await ws.close(code=4001, reason="Unauthorized")
             return
 
-        self._clients.add(ws)
-        logger.info("反重力助手客户端已连接 (%s)", ip)
         uploads: dict[str, _UploadState] = {}
         live_screen_task: asyncio.Task[None] | None = None
-
-        slot = self._active_slot
-        session = self._session_for_slot(slot)
-        meta = self._slot_meta.get(slot, {})
-        active_cid = meta.get("conversation_id") or session.linked_ide_id or session.conversation_id
-        active_store = meta.get("store") or (
-            session.linked_store if session.linked_ide_id else ("cli" if session.conversation_id else "")
-        )
-        inflight = self._slot_inflight.get(slot)
-        await ws.send(
-            json.dumps(
-                {
-                    "type": "hello",
-                    "slot": slot,
-                    "model": session.model or "default",
-                    "workspace": str(session.workspace),
-                    "active_conversation_id": active_cid,
-                    "active_title": meta.get("title") or session.active_title or "",
-                    "active_store": active_store,
-                    "busy": inflight is not None,
-                    "inflight": inflight,
-                    "cooldowns": session.failover_pool.cooldown_summary(),
-                    "history": self._slot_history.get(slot, []),
-                },
-                ensure_ascii=False,
-            )
-        )
 
         def _stop_live_screen() -> None:
             nonlocal live_screen_task
@@ -843,7 +882,36 @@ class WebPwaServer:
                 live_screen_task.cancel()
                 live_screen_task = None
 
+        self._clients.add(ws)
+        logger.info("反重力助手客户端已连接 (%s)", ip)
         try:
+            slot = self._active_slot
+            session = self._session_for_slot(slot)
+            meta = self._slot_meta.get(slot, {})
+            active_cid = meta.get("conversation_id") or session.linked_ide_id or session.conversation_id
+            active_store = meta.get("store") or (
+                session.linked_store if session.linked_ide_id else ("cli" if session.conversation_id else "")
+            )
+            pub_inflight = self._public_inflight(slot)
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "hello",
+                        "slot": slot,
+                        "model": session.model or "default",
+                        "workspace": str(session.workspace),
+                        "active_conversation_id": active_cid,
+                        "active_title": meta.get("title") or session.active_title or "",
+                        "active_store": active_store,
+                        "busy": pub_inflight is not None,
+                        "inflight": pub_inflight,
+                        "cooldowns": session.failover_pool.cooldown_summary(),
+                        "history": self._slot_history.get(slot, []),
+                    },
+                    ensure_ascii=False,
+                )
+            )
+
             async for raw in ws:
                 if not isinstance(raw, str):
                     continue
@@ -903,10 +971,15 @@ class WebPwaServer:
                         live_screen_task = asyncio.create_task(_stream_screen())
 
                 elif mtype == "upload_init":
+                    if len(uploads) >= 8:
+                        await ws.send(json.dumps({"type": "toast", "level": "err", "text": "同时上传文件过多，请稍候"}))
+                        continue
                     uid = str(msg.get("upload_id") or uuid.uuid4().hex)
+                    if uid in uploads:
+                        uploads.pop(uid).abort()
                     safe_name = sanitize_filename(str(msg.get("name") or "upload.bin"))
                     size = int(msg.get("size") or 0)
-                    if size > MAX_UPLOAD_BYTES:
+                    if size < 0 or size > MAX_UPLOAD_BYTES:
                         await ws.send(json.dumps({"type": "toast", "level": "err", "text": "文件超过 100MB 上限"}))
                         continue
                     PROJECT_INBOX_DIR.mkdir(parents=True, exist_ok=True)
@@ -933,7 +1006,7 @@ class WebPwaServer:
                             )
                         )
                     except Exception as exc:
-                        state.close()
+                        state.abort()
                         uploads.pop(uid, None)
                         await ws.send(json.dumps({"type": "toast", "level": "err", "text": f"上传出错：{exc}"}))
 
@@ -942,10 +1015,14 @@ class WebPwaServer:
                     state = uploads.pop(uid, None)
                     if state is None:
                         continue
-                    state.close()
+                    try:
+                        final_path = await asyncio.to_thread(state.finalize)
+                    except Exception as exc:
+                        await ws.send(json.dumps({"type": "toast", "level": "err", "text": f"上传校验未通过：{exc}"}))
+                        continue
                     prune_inbox(PROJECT_INBOX_DIR, keep=40)
-                    mid = self.register_media(state.path)
-                    is_img = state.path.suffix.lower() in ALLOWED_IMAGE_EXTS
+                    mid = self.register_media(final_path)
+                    is_img = final_path.suffix.lower() in ALLOWED_IMAGE_EXTS
                     await ws.send(
                         json.dumps(
                             {
@@ -953,7 +1030,7 @@ class WebPwaServer:
                                 "upload_id": uid,
                                 "media_id": mid,
                                 "name": state.name,
-                                "path": str(state.path),
+                                "path": str(final_path),
                                 "is_image": is_img,
                             },
                             ensure_ascii=False,
@@ -961,17 +1038,26 @@ class WebPwaServer:
                     )
 
                 elif mtype == "cancel":
-                    cur_slot = self._active_slot
+                    cur_slot = str(msg.get("slot") or self._active_slot)
+                    req_mid = str(msg.get("msg_id") or "")
                     inf = self._slot_inflight.get(cur_slot)
+                    if req_mid and inf and str(inf.get("msg_id") or "") != req_mid:
+                        await ws.send(
+                            json.dumps({"type": "toast", "level": "info", "text": "该轮生成已结束。"}, ensure_ascii=False)
+                        )
+                        continue
                     killed = False
                     if inf and inf.get("msg_id"):
                         self._cancelled_reply_ids.add(str(inf["msg_id"]))
                     if inf and inf.get("pc_ide_cid") and self._pc_window_canceller is not None:
                         killed = await asyncio.to_thread(self._pc_window_canceller, str(inf["pc_ide_cid"])) or True
-                    if inf and inf.get("codex_proc") is not None:
-                        proc_cdx = inf.get("codex_proc")
+                    proc_cdx = self._slot_codex_procs.get(cur_slot)
+                    if proc_cdx is not None and proc_cdx.returncode is None:
                         try:
-                            proc_cdx.terminate()
+                            if sys.platform == "win32" and proc_cdx.pid:
+                                await asyncio.to_thread(_kill_process_tree_win32, proc_cdx.pid)
+                            else:
+                                proc_cdx.terminate()
                             killed = True
                         except Exception:
                             pass
@@ -1034,13 +1120,14 @@ class WebPwaServer:
                     await self._handle_workspace_file(ws, str(msg.get("path") or ""))
 
                 elif mtype == "chat":
-                    t = asyncio.create_task(self._handle_chat(msg))
+                    req_slot = str(msg.get("slot") or self._active_slot)
+                    t = asyncio.create_task(self._handle_chat(ws, msg, req_slot))
                     self._tasks.add(t)
                     t.add_done_callback(self._tasks.discard)
         finally:
             _stop_live_screen()
             for st in uploads.values():
-                st.close()
+                st.abort()
             self._clients.discard(ws)
             logger.info("反重力助手客户端已断开 (%s)", ip)
 
@@ -1287,7 +1374,7 @@ class WebPwaServer:
                 "store": detail.store,
                 "running": detail.running or slot_is_running,
                 "busy": slot_is_running,
-                "inflight": self._slot_inflight.get(slot_key),
+                "inflight": self._public_inflight(slot_key),
                 "workspace": str(session.workspace),
                 "silent": only_refresh,
                 "has_more": detail.has_more,
@@ -1596,11 +1683,11 @@ class WebPwaServer:
     async def _try_run_codex_cli_turn(
         self,
         *,
+        chat_slot: str,
         codex_cid: str,
         workspace: Path,
         prompt_text: str,
         reply_id: str,
-        inflight_state: dict[str, Any],
         on_delta: Callable[[str], Any],
         on_tool: Callable[[str], Any],
         on_status: Callable[[str], Any],
@@ -1647,19 +1734,53 @@ class WebPwaServer:
             logger.info("Failed starting codex.exe (%s): %s", codex_cid[:8] or "new", exc)
             return None
 
-        inflight_state["codex_proc"] = proc
+        self._slot_codex_procs[chat_slot] = proc
         emitted_blocks: list[str] = []
+        stderr_tail: list[str] = []
         resolved_cid = codex_cid
+        turn_accepted = False
+        overall_deadline = time.monotonic() + max(15.0, float(self.config.agy_timeout_seconds))
+
+        async def _drain_cdx_stderr() -> None:
+            if proc.stderr is None:
+                return
+            try:
+                while True:
+                    sline = await proc.stderr.readline()
+                    if not sline:
+                        break
+                    txt_err = sline.decode("utf-8", errors="replace").strip()
+                    if txt_err:
+                        stderr_tail.append(txt_err)
+                        if len(stderr_tail) > 25:
+                            del stderr_tail[:-25]
+            except Exception:
+                pass
+
+        stderr_task = asyncio.create_task(_drain_cdx_stderr())
 
         try:
+            if reply_id in self._cancelled_reply_ids:
+                return TurnResult(
+                    status="CANCELLED",
+                    response="",
+                    conversation_id=resolved_cid,
+                    active_model="Codex 电脑端",
+                )
             if proc.stdin is not None:
                 proc.stdin.write(prompt_text.encode("utf-8"))
-                await proc.stdin.drain()
+                await asyncio.wait_for(
+                    proc.stdin.drain(),
+                    timeout=max(1.0, overall_deadline - time.monotonic()),
+                )
                 proc.stdin.close()
 
             assert proc.stdout is not None
             while True:
-                raw_line = await asyncio.wait_for(proc.stdout.readline(), timeout=self.config.agy_timeout_seconds)
+                remaining = overall_deadline - time.monotonic()
+                if remaining <= 0:
+                    raise asyncio.TimeoutError("Codex 执行超时")
+                raw_line = await asyncio.wait_for(proc.stdout.readline(), timeout=remaining)
                 if not raw_line:
                     break
                 line = raw_line.decode("utf-8", errors="replace").strip()
@@ -1670,8 +1791,12 @@ class WebPwaServer:
                 except json.JSONDecodeError:
                     continue
                 ev_type = str(ev.get("type") or "")
-                if ev_type == "thread.started" and ev.get("thread_id"):
-                    resolved_cid = str(ev["thread_id"])
+                if ev_type == "thread.started":
+                    turn_accepted = True
+                    if ev.get("thread_id"):
+                        resolved_cid = str(ev["thread_id"])
+                elif ev_type.startswith("item.") or ev_type.startswith("turn."):
+                    turn_accepted = True
                 item = ev.get("item") if isinstance(ev.get("item"), dict) else {}
                 itype = str(item.get("type") or "")
                 if ev_type in {"item.started", "item.updated"} and itype in {"command_execution", "mcp_tool_call"}:
@@ -1699,6 +1824,15 @@ class WebPwaServer:
                     final_txt = file_txt
 
             if rc != 0 and not final_txt:
+                if turn_accepted:
+                    err_hint = stderr_tail[-1] if stderr_tail else f"Codex 进程异常退出 (exit={rc})"
+                    return TurnResult(
+                        status="ERROR",
+                        response="",
+                        conversation_id=resolved_cid,
+                        active_model="Codex 电脑端",
+                        error=err_hint,
+                    )
                 return None
 
             if resolved_cid:
@@ -1717,29 +1851,59 @@ class WebPwaServer:
                 conversation_id=resolved_cid,
                 active_model="Codex 电脑端",
             )
+        except asyncio.CancelledError:
+            raise
+        except asyncio.TimeoutError:
+            if turn_accepted or emitted_blocks:
+                return TurnResult(
+                    status="TIMEOUT",
+                    response="\n\n".join(emitted_blocks),
+                    conversation_id=resolved_cid,
+                    active_model="Codex 电脑端",
+                    error="电脑端 Codex 会话执行超时，已安全中断（未重复重投）。",
+                )
+            return None
         except Exception as exc:
-            logger.info("Codex CLI turn fallback (%s): %s", codex_cid[:8], exc)
-            try:
-                proc.kill()
-            except Exception:
-                pass
+            logger.info("Codex CLI turn error (%s): %s", codex_cid[:8], exc)
+            if turn_accepted or emitted_blocks:
+                return TurnResult(
+                    status="ERROR",
+                    response="\n\n".join(emitted_blocks),
+                    conversation_id=resolved_cid,
+                    active_model="Codex 电脑端",
+                    error=f"Codex 会话中断：{exc}",
+                )
             return None
         finally:
-            inflight_state.pop("codex_proc", None)
+            if self._slot_codex_procs.get(chat_slot) is proc:
+                self._slot_codex_procs.pop(chat_slot, None)
+            if proc.returncode is None:
+                try:
+                    if sys.platform == "win32" and proc.pid:
+                        await asyncio.to_thread(_kill_process_tree_win32, proc.pid)
+                    else:
+                        proc.kill()
+                    await asyncio.wait_for(proc.wait(), timeout=2.0)
+                except Exception:
+                    pass
+            stderr_task.cancel()
+            try:
+                await stderr_task
+            except BaseException:
+                pass
             try:
                 if last_msg_file.is_file():
                     last_msg_file.unlink()
             except OSError:
                 pass
 
-    async def _handle_chat(self, msg: dict[str, Any]) -> None:
+    async def _handle_chat(self, ws: ServerConnection, msg: dict[str, Any], chat_slot: str) -> None:
         raw_text = str(msg.get("text") or "").strip()
         client_id = str(msg.get("client_id") or f"u-{uuid.uuid4().hex[:10]}")
         attachments = msg.get("attachments") or []
         if not raw_text and not attachments:
             return
 
-        chat_slot = self._active_slot
         session = self._session_for_slot(chat_slot)
 
         is_quick_slash = raw_text.startswith("/") and not attachments and raw_text.split()[0].lower() in {
@@ -1749,13 +1913,19 @@ class WebPwaServer:
             "/clean",
         }
         if chat_slot in self._slot_inflight and not is_quick_slash:
-            await self._broadcast(
-                {
-                    "type": "toast",
-                    "level": "info",
-                    "text": "当前对话正在执行中，请等待完成或先点击停止",
-                }
-            )
+            try:
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "toast",
+                            "level": "info",
+                            "text": "当前对话正在执行中，请等待完成或先点击停止",
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+            except Exception:
+                pass
             return
 
         slot_meta = self._slot_meta.get(chat_slot, {})
@@ -1778,11 +1948,11 @@ class WebPwaServer:
             ],
             "ts": int(time.time() * 1000),
         }
-        self._append_slot_history(chat_slot, user_entry)
-        if self._active_slot == chat_slot:
-            await self._broadcast({"type": "user_msg", "slot": chat_slot, "item": user_entry})
 
         if raw_text.startswith("/") and not attachments:
+            self._append_slot_history(chat_slot, user_entry)
+            if self._active_slot == chat_slot:
+                await self._broadcast({"type": "user_msg", "slot": chat_slot, "item": user_entry})
             handled = await self._handle_slash_command(chat_slot, session, raw_text)
             if handled:
                 return
@@ -1802,6 +1972,7 @@ class WebPwaServer:
         if not prompt_text:
             return
 
+        # Atomically claim `self._slot_inflight[chat_slot]` BEFORE the first `await` so concurrent sends cannot slip in!
         reply_id = f"a-{uuid.uuid4().hex[:10]}"
         initial_model_label = (
             "Antigravity 电脑端"
@@ -1816,15 +1987,15 @@ class WebPwaServer:
             "status": "正在思考...",
         }
         self._slot_inflight[chat_slot] = inflight_state
-        if self._active_slot == chat_slot:
-            await self._broadcast(
-                {
-                    "type": "stream_start",
-                    "slot": chat_slot,
-                    "msg_id": reply_id,
-                    "model": initial_model_label,
-                }
-            )
+        if not (raw_text.startswith("/") and not attachments):
+            self._append_slot_history(chat_slot, user_entry)
+
+        turn_start_sec = time.time()
+        partial_before_finish = ""
+        pc_direct_persisted = False
+        extra_pc_images: list[Path] = []
+        result: TurnResult | None = None
+        was_brand_new = not bool(slot_cid)
 
         async def _on_delta(delta: str) -> None:
             inflight_state["text"] = str(inflight_state.get("text") or "") + delta
@@ -1858,14 +2029,19 @@ class WebPwaServer:
                 hint = "电脑端正在检索与处理..."
             await _on_status(hint)
 
-        turn_start_sec = time.time()
-        partial_before_finish = ""
-        pc_direct_persisted = False
-        extra_pc_images: list[Path] = []
-        result: TurnResult | None = None
-
-        was_brand_new = not bool(slot_cid)
         try:
+            if self._active_slot == chat_slot:
+                if not (raw_text.startswith("/") and not attachments):
+                    await self._broadcast({"type": "user_msg", "slot": chat_slot, "item": user_entry})
+                await self._broadcast(
+                    {
+                        "type": "stream_start",
+                        "slot": chat_slot,
+                        "msg_id": reply_id,
+                        "model": initial_model_label,
+                    }
+                )
+
             # 1. Existing PC Antigravity IDE conversation -> deliver into live PC IDE window
             if slot_store == "ide" and slot_cid:
                 pc_ide_out = await self._try_run_pc_ide_window_turn(
@@ -1907,11 +2083,11 @@ class WebPwaServer:
             # 3. Existing OR brand-new PC OpenAI Codex conversation (`slot_store == "codex"`)
             elif slot_store == "codex":
                 cdx_out = await self._try_run_codex_cli_turn(
+                    chat_slot=chat_slot,
                     codex_cid=slot_cid,
                     workspace=session.workspace,
                     prompt_text=prompt_text,
                     reply_id=reply_id,
-                    inflight_state=inflight_state,
                     on_delta=_on_delta,
                     on_tool=_on_tool,
                     on_status=_on_status,
@@ -1944,15 +2120,30 @@ class WebPwaServer:
 
             # 4. Fallback to standalone `agy.exe` session when in a mobile/CLI chat or when PC desktop app is closed
             if result is None:
-                if slot_store in {"ide", "codex"} and (self._pc_window_sender is not None or slot_store == "codex"):
-                    await _on_status("桌面窗口未就绪，已切换后台引擎接力处理...")
-                result = await session.ask(
-                    prompt_text,
-                    on_delay_notice=None,
-                    on_stream_delta=_on_delta,
-                    on_stream_reset=_on_reset,
-                    on_tool_start=_on_tool,
-                )
+                if reply_id in self._cancelled_reply_ids:
+                    result = TurnResult(
+                        status="CANCELLED",
+                        response=str(inflight_state.get("text") or ""),
+                        active_model=initial_model_label,
+                    )
+                else:
+                    if slot_store in {"ide", "codex"} and (self._pc_window_sender is not None or slot_store == "codex"):
+                        await _on_status("桌面窗口未就绪，已切换后台引擎接力处理...")
+                    result = await session.ask(
+                        prompt_text,
+                        on_delay_notice=None,
+                        on_stream_delta=_on_delta,
+                        on_stream_reset=_on_reset,
+                        on_tool_start=_on_tool,
+                    )
+        except asyncio.CancelledError:
+            if reply_id not in self._cancelled_reply_ids:
+                raise
+            result = TurnResult(
+                status="CANCELLED",
+                response=str(inflight_state.get("text") or ""),
+                active_model=initial_model_label,
+            )
         finally:
             partial_before_finish = str(inflight_state.get("text") or "")
             if self._slot_inflight.get(chat_slot) is inflight_state:
