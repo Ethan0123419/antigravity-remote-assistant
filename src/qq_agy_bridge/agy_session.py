@@ -576,6 +576,10 @@ class AgySession:
                     cid = event.get("conversation_id") or ""
                     if cid:
                         self.conversation_id = cid
+                        if self.linked_ide_id:
+                            map_key = f"{self.linked_store}:{self.linked_ide_id}" if self.linked_store else self.linked_ide_id
+                            self._ide_continuation_map[map_key] = cid
+                            self._ide_continuation_map[self.linked_ide_id] = cid
                     init_info = event.get("init") or {}
                     if init_info.get("permission_mode"):
                         self.permission_mode = str(init_info["permission_mode"])
@@ -625,6 +629,8 @@ class AgySession:
                     if handoff_consumed and (status == "SUCCESS" or bool(self.conversation_id)):
                         self._pending_handoff_context = ""
                         if self.linked_ide_id and self.conversation_id:
+                            map_key = f"{self.linked_store}:{self.linked_ide_id}" if self.linked_store else self.linked_ide_id
+                            self._ide_continuation_map[map_key] = self.conversation_id
                             self._ide_continuation_map[self.linked_ide_id] = self.conversation_id
                     response_text = str(res.get("response") or "")
                     if not response_text and collected_deltas:

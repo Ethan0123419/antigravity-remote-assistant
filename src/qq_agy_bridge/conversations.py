@@ -31,6 +31,15 @@ HANDOFF_BLOCK_RE = re.compile(r"\[承接电脑端对话上下文\].*?\[/承接�
 
 CODEX_PLUGIN_LINK_RE = re.compile(r"\[(@[^\]]+)\]\(plugin://[^)]+\)")
 CODEX_FILE_LINE_RE = re.compile(r"^##\s+[^:\n]+:\s*([A-Za-z]:[\\/][^\r\n]+)$", re.MULTILINE)
+CODEX_VIEW_IMG_RE = re.compile(r'view_image\s*\(\s*\{\s*path\s*:\s*["\']([^"\']+)["\']')
+SAVED_PATH_RE = re.compile(
+    r"(?:Saved screenshot to|saved_path|save_path)\s*[:=]\s*[\"']?([A-Za-z]:[\\/][^\r\n\"'<>|]+?\.(?:png|jpg|jpeg|webp|gif|bmp))",
+    re.IGNORECASE,
+)
+MD_LOCAL_IMG_RE = re.compile(
+    r"!\[[^\]]*\]\(\s*<?((?:file:///)?[A-Za-z]:[\\/][^)\r\n>]+?\.(?:png|jpg|jpeg|webp|gif|bmp)|/dl/[a-f0-9]+)>?\s*\)",
+    re.IGNORECASE,
+)
 CODEX_HEARTBEAT_RE = re.compile(
     r"<heartbeat>\s*.*?<decision>\s*([A-Z_]+)\s*</decision>\s*(?:<message>(.*?)</message>)?\s*</heartbeat>",
     re.DOTALL,
@@ -667,22 +676,46 @@ def _load_codex_detail(
     parsed_msgs: list[ChatMessage] = []
     pending_commentary: list[str] = []
     pending_commentary_ts: int = 0
+    pending_tool_imgs: list[Path] = []
     step_counter = 0
 
+    def _add_unique_img(lst: list[Path], cand: Path) -> None:
+        try:
+            rp = cand.resolve()
+            if rp.is_file() and rp not in lst:
+                lst.append(rp)
+        except OSError:
+            pass
+
+    def _extract_md_imgs(text: str) -> list[Path]:
+        found: list[Path] = []
+        for m in MD_LOCAL_IMG_RE.finditer(text or ""):
+            raw_u = m.group(1).strip()
+            if raw_u.startswith("/dl/"):
+                continue
+            _add_unique_img(found, _uri_to_local_path(raw_u))
+        return found
+
     def _flush_commentary_if_needed() -> None:
-        nonlocal pending_commentary, pending_commentary_ts, step_counter
-        if pending_commentary:
+        nonlocal pending_commentary, pending_commentary_ts, pending_tool_imgs, step_counter
+        if pending_commentary or pending_tool_imgs:
             step_counter += 1
+            txt = "\n\n".join(pending_commentary)
+            imgs = list(pending_tool_imgs[-4:])
+            for im in _extract_md_imgs(txt):
+                _add_unique_img(imgs, im)
             parsed_msgs.append(
                 ChatMessage(
                     role="assistant",
-                    text="\n\n".join(pending_commentary),
+                    text=txt,
                     step_index=step_counter,
                     ts_ms=pending_commentary_ts,
+                    image_paths=imgs,
                 )
             )
             pending_commentary = []
             pending_commentary_ts = 0
+            pending_tool_imgs = []
 
     try:
         with rpath.open("r", encoding="utf-8", errors="replace") as fh:
@@ -707,7 +740,17 @@ def _load_codex_detail(
                 if otype != "response_item":
                     continue
                 pl = obj.get("payload") or {}
-                if not isinstance(pl, dict) or pl.get("type") != "message":
+                if not isinstance(pl, dict):
+                    continue
+
+                ptype = pl.get("type")
+                if ptype in {"custom_tool_call", "function_call"}:
+                    raw_in = str(pl.get("input") or pl.get("arguments") or "")
+                    for vm in CODEX_VIEW_IMG_RE.finditer(raw_in):
+                        _add_unique_img(pending_tool_imgs, _uri_to_local_path(vm.group(1)))
+                    continue
+
+                if ptype != "message":
                     continue
 
                 role = pl.get("role")
@@ -756,11 +799,16 @@ def _load_codex_detail(
                         # Final answer supersedes intermediate commentary for this turn
                         pending_commentary = []
                         pending_commentary_ts = 0
+                        md_imgs = _extract_md_imgs(joined)
+                        turn_imgs = list(md_imgs) if md_imgs else list(pending_tool_imgs[-4:])
+                        pending_tool_imgs = []
                         step_counter += 1
                         if parsed_msgs and parsed_msgs[-1].role == "assistant":
                             prev = parsed_msgs[-1]
                             if joined != prev.text:
                                 prev.text = f"{prev.text}\n\n{joined}".strip()
+                            for im in turn_imgs:
+                                _add_unique_img(prev.image_paths, im)
                             if ts_ms > prev.ts_ms:
                                 prev.ts_ms = ts_ms
                         else:
@@ -770,6 +818,7 @@ def _load_codex_detail(
                                     text=joined,
                                     step_index=step_counter,
                                     ts_ms=ts_ms,
+                                    image_paths=turn_imgs,
                                 )
                             )
 
@@ -898,18 +947,20 @@ def load_conversation_detail(
                 except json.JSONDecodeError:
                     continue
                 etype = obj.get("type")
-                if etype not in {"USER_INPUT", "PLANNER_RESPONSE"}:
+                has_media = bool(obj.get("media"))
+                has_saved_shot = etype == "GENERIC" and "Saved screenshot" in str(obj.get("content") or "")
+                if etype not in {"USER_INPUT", "PLANNER_RESPONSE"} and not has_media and not has_saved_shot:
                     continue
                 raw_entries.append((line_no, obj))
                 trunc = obj.get("truncated_fields") or []
-                if isinstance(trunc, list) and "content" in trunc:
+                if isinstance(trunc, list) and "content" in trunc and etype in {"USER_INPUT", "PLANNER_RESPONSE"}:
                     truncated_line_nums.add(line_no)
     except OSError as exc:
         logger.warning("Error reading transcript %s: %s", tfile, exc)
         return None
 
     # Upgrade truncated lines within our target slice
-    slice_raw = raw_entries[-(max_messages * 4) :] if max_messages > 0 else raw_entries
+    slice_raw = raw_entries[-(max_messages * 5) :] if max_messages > 0 else raw_entries
     needed_full = {ln for ln, _ in slice_raw if ln in truncated_line_nums}
     full_lookup: dict[int, dict[str, Any]] = {}
     if needed_full and full_tfile.is_file():
@@ -931,6 +982,16 @@ def load_conversation_detail(
         nonlocal title
         out_msgs: list[ChatMessage] = []
         skip_next_prewarm_reply = False
+        pending_tool_imgs: list[Path] = []
+
+        def _append_unique(dst: list[Path], src: list[Path]) -> None:
+            for p in src:
+                try:
+                    rp = p.resolve()
+                    if rp.is_file() and rp not in dst:
+                        dst.append(rp)
+                except OSError:
+                    pass
 
         for line_no, obj in entries:
             if line_no in full_lookup:
@@ -947,15 +1008,29 @@ def load_conversation_detail(
                     mime = str(m_item.get("mime_type") or "").lower()
                     if uri and (
                         mime.startswith("image/")
-                        or Path(uri).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+                        or Path(uri).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
                     ):
                         p = _uri_to_local_path(uri)
                         if p.is_file():
                             images.append(p)
 
+            if etype not in {"USER_INPUT", "PLANNER_RESPONSE"}:
+                for sm in SAVED_PATH_RE.finditer(str(obj.get("content") or "")):
+                    sp = _uri_to_local_path(sm.group(1))
+                    if sp.is_file():
+                        images.append(sp)
+                if images and not skip_next_prewarm_reply:
+                    _append_unique(pending_tool_imgs, images)
+                    if len(pending_tool_imgs) > 4:
+                        pending_tool_imgs = pending_tool_imgs[-4:]
+                continue
+
             if etype == "USER_INPUT":
                 if obj.get("source") not in {"USER_EXPLICIT", None, ""}:
                     continue
+                if pending_tool_imgs and out_msgs and out_msgs[-1].role == "assistant":
+                    _append_unique(out_msgs[-1].image_paths, pending_tool_imgs[-4:])
+                pending_tool_imgs = []
                 cleaned_u = clean_user_input_text(str(obj.get("content") or ""))
                 if PREWARM_PROMPT_MARKER in cleaned_u:
                     skip_next_prewarm_reply = True
@@ -979,16 +1054,27 @@ def load_conversation_detail(
                 content = str(obj.get("content") or "").strip()
                 if skip_next_prewarm_reply and content in {"就绪", "就绪。", "收到"}:
                     skip_next_prewarm_reply = False
+                    pending_tool_imgs = []
                     continue
-                if not content and not images:
+                for md_m in MD_LOCAL_IMG_RE.finditer(content):
+                    raw_u = md_m.group(1).strip()
+                    if not raw_u.startswith("/dl/"):
+                        p_md = _uri_to_local_path(raw_u)
+                        if p_md.is_file():
+                            images.append(p_md)
+                combined_imgs: list[Path] = []
+                _append_unique(combined_imgs, pending_tool_imgs[-4:])
+                _append_unique(combined_imgs, images)
+                if not content and not combined_imgs:
                     continue
+                pending_tool_imgs = []
                 if out_msgs and out_msgs[-1].role == "assistant":
                     prev = out_msgs[-1]
                     if content and content != prev.text:
                         prev.text = f"{prev.text}\n\n{content}".strip() if prev.text else content
-                    for im in images:
-                        if im not in prev.image_paths:
-                            prev.image_paths.append(im)
+                    _append_unique(prev.image_paths, combined_imgs)
+                    if len(prev.image_paths) > 4:
+                        prev.image_paths = prev.image_paths[-4:]
                     if ts_ms > prev.ts_ms:
                         prev.ts_ms = ts_ms
                 else:
@@ -998,9 +1084,22 @@ def load_conversation_detail(
                             text=content,
                             step_index=step_idx,
                             ts_ms=ts_ms,
-                            image_paths=images,
+                            image_paths=combined_imgs,
                         )
                     )
+        if pending_tool_imgs:
+            if out_msgs and out_msgs[-1].role == "assistant":
+                _append_unique(out_msgs[-1].image_paths, pending_tool_imgs[-4:])
+            else:
+                out_msgs.append(
+                    ChatMessage(
+                        role="assistant",
+                        text="",
+                        step_index=0,
+                        ts_ms=0,
+                        image_paths=list(pending_tool_imgs[-4:]),
+                    )
+                )
         return out_msgs
 
     parsed_msgs = _parse_entry_slice(slice_raw)

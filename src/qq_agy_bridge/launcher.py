@@ -314,9 +314,9 @@ def apply_win11_glass_dwm(root: tk.Misc) -> None:
 
         _set_int(20, 1)          # DWMWA_USE_IMMERSIVE_DARK_MODE
         _set_int(33, 2)          # DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND
-        _set_int(35, 0x00140B07) # DWMWA_CAPTION_COLOR (#070B14)
-        _set_int(36, 0x00FCF8F8) # DWMWA_TEXT_COLOR (#F8FAFC)
-        _set_int(34, 0x00583A22) # DWMWA_BORDER_COLOR (#223A58)
+        _set_int(35, 0x00171717) # DWMWA_CAPTION_COLOR (#171717)
+        _set_int(36, 0x00ECECEC) # DWMWA_TEXT_COLOR (#ECECEC)
+        _set_int(34, 0x00333333) # DWMWA_BORDER_COLOR (#333333)
     except Exception:
         pass
 
@@ -535,29 +535,30 @@ def request_lan_firewall_allow(port: int) -> bool:
 # ---------------------------------------------------------------------------
 
 class LauncherApp:
-    BG = "#070B14"
-    GLASS_SURFACE = "#0F1829"
-    QR_SURFACE = "#0D1525"
-    LOG_BG = "#050810"
+    # Authentic ChatGPT Desktop Dark Monochrome Palette
+    BG = "#171717"
+    GLASS_SURFACE = "#212121"
+    QR_SURFACE = "#212121"
+    LOG_BG = "#0D0D0D"
 
-    TEXT_PRIMARY = "#F8FAFC"
-    TEXT_SECONDARY = "#94A3B8"
-    TEXT_MUTED = "#64748B"
+    TEXT_PRIMARY = "#ECECEC"
+    TEXT_SECONDARY = "#B4B4B4"
+    TEXT_MUTED = "#8E8EA0"
 
-    CYAN = "#38BDF8"
-    INDIGO = "#818CF8"
-    EMERALD = "#34D399"
-    AMBER = "#FBBF24"
-    ROSE = "#FB7185"
+    CYAN = "#ECECEC"
+    INDIGO = "#ECECEC"
+    EMERALD = "#10A37F"
+    AMBER = "#F59E0B"
+    ROSE = "#EF4444"
 
-    PILL_PRIMARY = "#0284C7"
-    PILL_PRIMARY_HOVER = "#0369A1"
-    PILL_INDIGO = "#4338CA"
-    PILL_INDIGO_HOVER = "#4F46E5"
-    PILL_SLATE = "#152238"
-    PILL_SLATE_HOVER = "#1E314F"
-    PILL_DANGER = "#881337"
-    PILL_DANGER_HOVER = "#BE123C"
+    PILL_PRIMARY = "#10A37F"
+    PILL_PRIMARY_HOVER = "#0D8A6A"
+    PILL_INDIGO = "#2F2F2F"
+    PILL_INDIGO_HOVER = "#3D3D3D"
+    PILL_SLATE = "#262626"
+    PILL_SLATE_HOVER = "#343434"
+    PILL_DANGER = "#7F1D1D"
+    PILL_DANGER_HOVER = "#991B1B"
 
     MAX_LOG_LINES = 2000
 
@@ -698,8 +699,8 @@ class LauncherApp:
         if hasattr(self, "_alpha_btns"):
             for btn, val in self._alpha_btns:
                 active = abs(val - self._alpha) < 0.015
-                bg = "#0284C7" if active else "#101B2D"
-                fg = "#FFFFFF" if active else "#94A3B8"
+                bg = "#ECECEC" if active else "#262626"
+                fg = "#0D0D0D" if active else "#B4B4B4"
                 btn._base_bg = bg  # type: ignore[attr-defined]
                 btn.configure(bg=bg, fg=fg)
         self._prefs["alpha"] = round(self._alpha, 2)
@@ -722,11 +723,11 @@ class LauncherApp:
         emblem = tk.Label(
             title_row,
             text="✦",
-            bg="#0F2038",
-            fg=self.CYAN,
-            font=("Segoe UI Symbol", 14, "bold"),
-            padx=8,
-            pady=2,
+            bg="#FFFFFF",
+            fg="#0D0D0D",
+            font=("Segoe UI Symbol", 13, "bold"),
+            padx=7,
+            pady=1,
         )
         emblem.pack(side=tk.LEFT, padx=(0, 10))
 
@@ -739,20 +740,11 @@ class LauncherApp:
             anchor="w",
         ).pack(side=tk.LEFT)
 
-        tk.Label(
-            title_row,
-            text="ANTIGRAVITY REMOTE HUB",
-            bg=self.BG,
-            fg="#475569",
-            font=("Segoe UI", 8, "bold"),
-            padx=10,
-        ).pack(side=tk.LEFT, pady=(4, 0))
-
         self.subtitle_lbl = tk.Label(
             left_hdr,
-            text="电脑全会话实时同步 (Antigravity + Codex)   ·   Wi-Fi 1ms 极速直连 + 全球加密隧道   ·   免 API Key",
+            text="Antigravity + Codex 全会话同步   ·   Wi-Fi 1ms 直连 + 4G/5G 全球加密隧道",
             bg=self.BG,
-            fg=self.TEXT_SECONDARY,
+            fg=self.TEXT_MUTED,
             font=("Microsoft YaHei UI", 9),
             anchor="w",
             pady=4,
@@ -765,8 +757,8 @@ class LauncherApp:
 
         glass_bar = tk.Frame(
             right_hdr,
-            bg="#0C1524",
-            highlightbackground="#1E324F",
+            bg="#212121",
+            highlightbackground="#333333",
             highlightthickness=1,
             padx=6,
             pady=4,
@@ -775,8 +767,8 @@ class LauncherApp:
 
         tk.Label(
             glass_bar,
-            text="玻璃透感",
-            bg="#0C1524",
+            text="透感",
+            bg="#212121",
             fg=self.TEXT_MUTED,
             font=("Microsoft YaHei UI", 8),
             padx=4,
@@ -788,9 +780,9 @@ class LauncherApp:
                 glass_bar,
                 text=label,
                 command=lambda v=val: self._apply_window_alpha(v),
-                bg="#101B2D",
-                hover="#1B2E4B",
-                fg="#94A3B8",
+                bg="#262626",
+                hover="#363636",
+                fg="#B4B4B4",
                 padx=8,
                 pady=2,
                 font_size=8,
@@ -844,98 +836,98 @@ class LauncherApp:
 
         self.engine_orb_lbl, self.engine_status_lbl, self.engine_detail_lbl = self._create_glass_card(
             left_col,
-            title="CORE ENGINE · 反重力核心引擎与全会话同步",
-            detail=f"默认模型：{self.settings.active_model}  ·  {self._conv_stats_str}",
-            rim_color="#38BDF8",
+            title="反重力核心引擎 · 会话同步",
+            detail=f"模型：{self.settings.active_model}  ·  {self._conv_stats_str}",
+            rim_color="#454545",
             pady=(0, 10),
         )
 
         lan_ip = get_lan_ipv4()
         self.net_orb_lbl, self.net_status_lbl, self.net_detail_lbl = self._create_glass_card(
             left_col,
-            title="NETWORK · 局域网 1ms 直连与全球加密隧道",
-            detail=f"局域网地址：http://{lan_ip}:{self.settings.web_pwa_port}  ·  外网隧道准备中...",
-            rim_color="#818CF8",
+            title="网络连接 · 局域网与全球加密隧道",
+            detail=f"局域网：http://{lan_ip}:{self.settings.web_pwa_port}  ·  外网隧道准备中...",
+            rim_color="#454545",
             pady=(0, 12),
         )
 
-        # Action Pill Bar inside Left Column
+        # Action Pill Bar inside Left Column (compact spacing so zero buttons ever clip)
         self.btn_bar = tk.Frame(left_col, bg=self.BG)
         self.btn_bar.pack(fill=tk.X)
 
         self.btn_start = self._make_button(
             self.btn_bar,
-            text="▶  启动服务",
+            text="▶ 启动",
             command=lambda: self._run_async(self._start_all_worker, False),
             bg=self.PILL_PRIMARY,
             hover=self.PILL_PRIMARY_HOVER,
-            highlight="#38BDF8",
+            padx=12,
         )
-        self.btn_start.pack(side=tk.LEFT, padx=(0, 7))
+        self.btn_start.pack(side=tk.LEFT, padx=(0, 6))
 
         self.btn_restart = self._make_button(
             self.btn_bar,
-            text="↻  重启并接管",
+            text="↻ 重启接管",
             command=lambda: self._run_async(self._start_all_worker, True),
             bg=self.PILL_SLATE,
             hover=self.PILL_SLATE_HOVER,
-            highlight="#2D466B",
+            highlight="#383838",
+            padx=11,
         )
-        self.btn_restart.pack(side=tk.LEFT, padx=(0, 7))
+        self.btn_restart.pack(side=tk.LEFT, padx=(0, 6))
 
         self.btn_stop = self._make_button(
             self.btn_bar,
-            text="■  停止",
+            text="■ 停止",
             command=lambda: self._run_async(self._stop_all_worker, True),
             bg=self.PILL_DANGER,
             hover=self.PILL_DANGER_HOVER,
-            highlight="#F43F5E",
-            padx=13,
+            padx=11,
         )
-        self.btn_stop.pack(side=tk.LEFT, padx=(0, 10))
+        self.btn_stop.pack(side=tk.LEFT, padx=(0, 8))
 
         self.btn_open_web = self._make_button(
             self.btn_bar,
-            text="🖥  电脑浏览器打开",
+            text="🖥 网页端",
             command=self._open_local_browser,
-            bg=self.PILL_INDIGO,
-            hover=self.PILL_INDIGO_HOVER,
-            highlight="#818CF8",
-            padx=13,
+            bg="#ECECEC",
+            hover="#FFFFFF",
+            fg="#0D0D0D",
+            padx=11,
         )
-        self.btn_open_web.pack(side=tk.LEFT, padx=(0, 7))
+        self.btn_open_web.pack(side=tk.LEFT, padx=(0, 6))
 
         self.btn_folder = self._make_button(
             self.btn_bar,
-            text="📂  项目目录",
+            text="📂 目录",
             command=self._open_config_folder,
             bg=self.PILL_SLATE,
             hover=self.PILL_SLATE_HOVER,
-            highlight="#283E5E",
-            padx=12,
+            highlight="#383838",
+            padx=10,
         )
-        self.btn_folder.pack(side=tk.LEFT, padx=(0, 7))
+        self.btn_folder.pack(side=tk.LEFT, padx=(0, 6))
 
         self.btn_clean = self._make_button(
             self.btn_bar,
-            text="🧹  清缓存",
+            text="🧹 清理",
             command=self._clean_cache_async,
             bg=self.PILL_SLATE,
             hover=self.PILL_SLATE_HOVER,
-            highlight="#283E5E",
-            padx=12,
+            highlight="#383838",
+            padx=10,
         )
         self.btn_clean.pack(side=tk.LEFT)
 
-        # Right Column: Inline Frosted Glass QR Pairing Card (Zero-click mobile scan!)
+        # Right Column: Inline QR Pairing Card
         qr_card = tk.Frame(
             hero_grid,
             bg=self.QR_SURFACE,
-            highlightbackground="#274060",
+            highlightbackground="#333333",
             highlightthickness=1,
             padx=14,
             pady=12,
-            width=292,
+            width=286,
         )
         qr_card.grid(row=0, column=1, sticky="ns")
 
@@ -943,7 +935,7 @@ class LauncherApp:
         qr_hdr.pack(fill=tk.X)
         tk.Label(
             qr_hdr,
-            text="📱 手机扫码直连",
+            text="手机扫码直连",
             bg=self.QR_SURFACE,
             fg=self.TEXT_PRIMARY,
             font=("Microsoft YaHei UI", 10, "bold"),
@@ -953,8 +945,9 @@ class LauncherApp:
             qr_hdr,
             text="Wi-Fi 1ms",
             command=lambda: self._switch_qr_mode("lan"),
-            bg=self.PILL_PRIMARY,
-            hover=self.PILL_PRIMARY_HOVER,
+            bg="#ECECEC",
+            hover="#FFFFFF",
+            fg="#0D0D0D",
             padx=8,
             pady=2,
             font_size=8,
@@ -963,9 +956,9 @@ class LauncherApp:
             qr_hdr,
             text="4G/5G 外网",
             command=lambda: self._switch_qr_mode("tunnel"),
-            bg="#15233A",
-            hover="#1E3352",
-            fg="#94A3B8",
+            bg="#2F2F2F",
+            hover="#3D3D3D",
+            fg="#B4B4B4",
             padx=8,
             pady=2,
             font_size=8,
@@ -978,7 +971,7 @@ class LauncherApp:
             bg=self.QR_SURFACE,
             fg=self.TEXT_SECONDARY,
             font=("Microsoft YaHei UI", 8),
-            pady=6,
+            pady=4,
         )
         self.qr_img_lbl.pack(pady=(6, 2))
 
@@ -986,9 +979,9 @@ class LauncherApp:
             qr_card,
             text="",
             bg=self.QR_SURFACE,
-            fg=self.CYAN,
+            fg=self.TEXT_SECONDARY,
             font=("Consolas", 8),
-            wraplength=255,
+            wraplength=250,
         )
         self.qr_url_lbl.pack()
 
@@ -997,21 +990,21 @@ class LauncherApp:
 
         self._make_button(
             qr_actions,
-            text="📋 复制免密链接",
+            text="复制免密链接",
             command=self._copy_qr_link,
-            bg="#162944",
-            hover="#0284C7",
-            padx=10,
+            bg="#2F2F2F",
+            hover="#3D3D3D",
+            padx=11,
             pady=4,
             font_size=8,
         ).pack(side=tk.LEFT, padx=3)
 
         self.fw_btn = self._make_button(
             qr_actions,
-            text="🛡 放行防火墙",
+            text="放行防火墙",
             command=self._allow_firewall,
-            bg="#1E3A5F",
-            hover="#0284C7",
+            bg="#2F2F2F",
+            hover="#10A37F",
             padx=9,
             pady=4,
             font_size=8,
@@ -1253,8 +1246,8 @@ class LauncherApp:
             return
         m = self._qr_mode.get()
         for btn, active in ((self.qr_tab_lan, m == "lan"), (self.qr_tab_tunnel, m == "tunnel")):
-            bg = self.PILL_PRIMARY if active else "#15233A"
-            fg = "#FFFFFF" if active else "#94A3B8"
+            bg = "#ECECEC" if active else "#2F2F2F"
+            fg = "#0D0D0D" if active else "#B4B4B4"
             btn._base_bg = bg  # type: ignore[attr-defined]
             btn.configure(bg=bg, fg=fg)
 
@@ -1262,7 +1255,7 @@ class LauncherApp:
         if not target_u:
             self.qr_img_lbl.configure(
                 image="",
-                text="\n⏳ 正在建立全球加密隧道...\n约 3~6 秒自动生成外网二维码\n（同 Wi-Fi 可点右上 Wi-Fi 1ms 秒扫）\n",
+                text="\n正在建立全球加密隧道...\n约 3~6 秒自动生成外网二维码\n（同 Wi-Fi 可点 Wi-Fi 1ms 秒扫）\n",
             )
             self.qr_url_lbl.configure(text="等待分配 https://*.trycloudflare.com")
             return
@@ -1270,8 +1263,8 @@ class LauncherApp:
         try:
             import segno
             buf = io.BytesIO()
-            segno.make(target_u, error="m").write(
-                buf, kind="png", scale=4, border=2, dark="#F8FAFC", light=self.QR_SURFACE
+            segno.make(target_u, error="m").save(
+                buf, kind="png", scale=4, border=2, dark="#ECECEC", light=self.QR_SURFACE
             )
             b64 = base64.b64encode(buf.getvalue()).decode("ascii")
             photo = tk.PhotoImage(data=b64)
@@ -1316,10 +1309,10 @@ class LauncherApp:
                 parts.append(f"Codex {n_codex}")
             if n_cli > 0:
                 parts.append(f"远程 {n_cli}")
-            self._conv_stats_str = f"已同步会话：{' · '.join(parts)}（共 {len(items)} 个）"
+            self._conv_stats_str = f"{' · '.join(parts)}（共 {len(items)}）"
             self._post_ui(
                 lambda: self.engine_detail_lbl.configure(
-                    text=f"默认模型：{self.settings.active_model}  ·  {self._conv_stats_str}"
+                    text=f"模型：{self.settings.active_model}  ·  会话：{self._conv_stats_str}"
                 )
             )
         except Exception:

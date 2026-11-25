@@ -501,3 +501,141 @@ async def test_web_pwa_e2e_streaming_upload_inspector_and_pc_sync(tmp_path: Path
         stop_event.set()
         await asyncio.wait_for(pwa_task, timeout=5.0)
         await sessions.shutdown_all()
+
+
+def test_markdown_and_generic_tool_screenshot_extraction(tmp_path: Path) -> None:
+    from qq_agy_bridge.web_pwa import harvest_recent_cli_turn_images
+
+    shot1 = tmp_path / "Antigravity-窗口.png"
+    shot1.write_bytes(b"\x89PNG\r\n\x1a\n" + b"1" * 80)
+    shot2 = tmp_path / "step_6_media_0.png"
+    shot2.write_bytes(b"\x89PNG\r\n\x1a\n" + b"2" * 80)
+
+    # 1. Angle-bracketed Markdown image syntax (`![alt](<C:/path/中文.png>)`) used by Codex & Antigravity
+    clean_txt, imgs, _ = extract_pwa_media_and_text(
+        f"这是最新工作画面：\n\n![桌面工作截图](<{shot1.as_posix()}>)"
+    )
+    assert clean_txt == "这是最新工作画面："
+    assert imgs == [shot1.resolve()]
+
+    # 2. Antigravity IDE/CLI transcript `GENERIC` step carrying MCP screenshot `media`
+    ide_store = tmp_path / "ide"
+    cid = "shot-conv-99999999"
+    tf = ide_store / "brain" / cid / ".system_generated" / "logs" / "transcript.jsonl"
+    tf.parent.mkdir(parents=True)
+    tf.write_text(
+        "\n".join(
+            [
+                json.dumps({"step_index": 0, "type": "USER_INPUT", "source": "USER_EXPLICIT", "content": "帮我截个图"}, ensure_ascii=False),
+                json.dumps({"step_index": 1, "type": "PLANNER_RESPONSE", "source": "MODEL", "content": ""}, ensure_ascii=False),
+                json.dumps({"step_index": 2, "type": "GENERIC", "media": [{"mime_type": "image/png", "uri": shot2.as_uri()}], "content": "Cursor Position"}, ensure_ascii=False),
+                json.dumps({"step_index": 3, "type": "PLANNER_RESPONSE", "source": "MODEL", "content": "截好啦！"}, ensure_ascii=False),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    det = load_conversation_detail(cid, "ide", ide_dir=ide_store, cli_dir=tmp_path / "cli", codex_dir=tmp_path / "cdx")
+    assert det is not None
+    assert len(det.messages) == 2
+    assert det.messages[1].image_paths == [shot2.resolve()]
+
+    # 3. Live CLI turn media auto-harvesting when tool saves screenshot into logs/media/
+    cli_store = tmp_path / "cli_live"
+    live_cid = "live-cli-shot-111"
+    media_dir = cli_store / "brain" / live_cid / ".system_generated" / "logs" / "media"
+    media_dir.mkdir(parents=True)
+    t_before = time.time()
+    live_shot = media_dir / "step_4_media_0.png"
+    live_shot.write_bytes(b"\x89PNG\r\n\x1a\n" + b"3" * 80)
+    harvested = harvest_recent_cli_turn_images(cli_store, live_cid, t_before)
+    assert harvested == [live_shot.resolve()]
+
+
+def test_segno_qr_png_save_works() -> None:
+    import io
+    import segno
+
+    buf = io.BytesIO()
+    segno.make("http://127.0.0.1:8765/?token=demo", error="m").save(
+        buf, kind="png", scale=4, border=2, dark="#ECECEC", light="#212121"
+    )
+    data = buf.getvalue()
+    assert data.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+@pytest.mark.asyncio
+async def test_switching_conversations_never_kills_running_command(tmp_path: Path) -> None:
+    """Regression test: sending a command in Chat A and switching to view Chat B mid-run must NOT cancel Chat A."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    ide_store = tmp_path / "ide_iso"
+    for cid, prompt in (("chat-a-111111", "对话A初始内容"), ("chat-b-222222", "对话B初始内容")):
+        tf = ide_store / "brain" / cid / ".system_generated" / "logs" / "transcript.jsonl"
+        tf.parent.mkdir(parents=True)
+        tf.write_text(
+            json.dumps({"step_index": 0, "type": "USER_INPUT", "source": "USER_EXPLICIT", "content": prompt}, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+
+    tok = "iso-secret-token-12345678"
+    cfg = _make_config(tmp_path, web_pwa_port=port, web_access_token=tok)
+    sessions = SessionManager(cfg, command_override=[sys.executable, str(MOCK_AGY)])
+    pwa = WebPwaServer(
+        cfg,
+        session_manager=sessions,
+        access_token=tok,
+        ide_store_dir=ide_store,
+        cli_store_dir=tmp_path / "cli_iso",
+        codex_store_dir=tmp_path / "cdx_iso",
+    )
+    stop_event = asyncio.Event()
+    pwa_task = asyncio.create_task(pwa.run(stop_event=stop_event))
+
+    try:
+        await asyncio.sleep(0.2)
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws?token={tok}") as ws:
+            await asyncio.wait_for(ws.recv(), timeout=5.0)  # hello
+
+            # 1. Open Chat A and start a slow command (__SLOW_STREAM__ sleeps 0.65s)
+            await ws.send(json.dumps({"type": "select_conversation", "conversation_id": "chat-a-111111", "store": "ide"}))
+            assert json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))["type"] == "conversation_loaded"
+
+            await ws.send(json.dumps({"type": "chat", "text": "执行耗时命令 __SLOW_STREAM__"}))
+            # Wait until stream starts in Chat A
+            for _ in range(10):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                if ev["type"] == "stream_delta":
+                    break
+
+            # 2. Switch to Chat B WHILE Chat A is still running!
+            await ws.send(json.dumps({"type": "select_conversation", "conversation_id": "chat-b-222222", "store": "ide"}))
+            for _ in range(10):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                if ev["type"] == "conversation_loaded" and ev["conversation_id"] == "chat-b-222222":
+                    assert ev["busy"] is False
+                    break
+
+            # Wait for background completion toast from Chat A
+            for _ in range(15):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                if ev["type"] == "toast" and "已完成回复" in ev["text"]:
+                    break
+
+            # 3. Switch back to Chat A — command and full reply must be preserved!
+            await ws.send(json.dumps({"type": "select_conversation", "conversation_id": "chat-a-111111", "store": "ide"}))
+            reloaded_a = None
+            for _ in range(10):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                if ev["type"] == "conversation_loaded" and ev["conversation_id"] == "chat-a-111111":
+                    reloaded_a = ev
+                    break
+            assert reloaded_a is not None
+            texts_a = [m["text"] for m in reloaded_a["history"]]
+            assert any("前半段流式输出...后半段圆满结束！" in t for t in texts_a)
+    finally:
+        stop_event.set()
+        await asyncio.wait_for(pwa_task, timeout=5.0)
+        await sessions.shutdown_all()
