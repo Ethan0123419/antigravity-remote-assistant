@@ -141,7 +141,7 @@ def detect_github_pages_info(project_dir: Path) -> tuple[str, str, str, str] | N
 
 
 STATIC_PWA_SW_JS = """\
-const CACHE_NAME = 'antigravity-ios-shell-v2';
+const CACHE_NAME = 'antigravity-ios-shell-v3';
 const SHELL_ASSETS = ['./', './index.html', './apple-touch-icon.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -211,8 +211,8 @@ def build_static_pwa_bundle(
         "short_name": "反重力助手",
         "description": "专属 iPhone 远程电脑操控与全会话 AI 编程中枢",
         "display": "standalone",
-        "background_color": "#212121",
-        "theme_color": "#212121",
+        "background_color": "#0D0D0F",
+        "theme_color": "#0D0D0F",
         "orientation": "portrait-primary",
         "icons": [
             {"src": "./apple-touch-icon.png", "sizes": "180x180", "type": "image/png"},

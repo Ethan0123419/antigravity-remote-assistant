@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#212121" />
+  <meta name="theme-color" content="#0D0D0F" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -13,19 +13,22 @@
   <title>反重力助手</title>
   <style>
     :root {
-      /* Authentic ChatGPT iOS / Android Dark Palette */
-      --bg-main: #212121;
-      --bg-sidebar: #171717;
-      --bg-surface: #2f2f2f;
-      --bg-surface-hover: #3a3a3a;
-      --bg-code: #0d0d0d;
-      --bg-code-hdr: #2f2f2f;
-      --border-subtle: rgba(255, 255, 255, 0.08);
+      /* Obsidian Velvet iOS Pro Dark Palette */
+      --bg-main: #0d0d0f;
+      --bg-sidebar: rgba(16, 16, 20, 0.95);
+      --bg-surface: #1a1a1f;
+      --bg-surface-2: #222228;
+      --bg-surface-hover: #2a2a32;
+      --bg-code: #08080a;
+      --bg-code-hdr: #141418;
+      --border-hairline: rgba(255, 255, 255, 0.065);
+      --border-subtle: rgba(255, 255, 255, 0.085);
       --border-med: rgba(255, 255, 255, 0.14);
-      --text-pri: #ececec;
-      --text-sec: #b4b4b4;
-      --text-muted: #8e8ea0;
-      --accent-green: #10a37f;
+      --specular-top: inset 0 1px 0 rgba(255, 255, 255, 0.075);
+      --text-pri: #f2f2f5;
+      --text-sec: #a8a8b3;
+      --text-muted: #72727e;
+      --accent-green: #10b981;
       --danger: #ef4444;
       --safe-top: env(safe-area-inset-top, 0px);
       --safe-bot: env(safe-area-inset-bottom, 0px);
@@ -42,21 +45,27 @@
       height: var(--app-h, 100dvh);
       overflow: hidden;
       overscroll-behavior: none;
-      background: var(--bg-main);
+      background:
+        radial-gradient(120% 60% at 50% -10%, rgba(255, 255, 255, 0.038), transparent 62%),
+        var(--bg-main);
       color: var(--text-pri);
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei UI", system-ui, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "HarmonyOS Sans SC", "Segoe UI", system-ui, sans-serif;
       display: flex;
       flex-direction: column;
       -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
     }
 
     button { font-family: inherit; }
 
-    /* ── ChatGPT Mobile Minimalist Top Bar ── */
+    /* ── Frosted Obsidian Top Navigation Bar ── */
     .topbar {
       height: calc(var(--safe-top) + 52px);
       padding: var(--safe-top) 10px 0;
-      background: var(--bg-main);
+      background: rgba(13, 13, 15, 0.78);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border-bottom: 1px solid var(--border-hairline);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -66,9 +75,9 @@
     }
 
     .nav-icon-btn {
-      width: 40px;
-      height: 40px;
-      border-radius: 10px;
+      width: 38px;
+      height: 38px;
+      border-radius: 11px;
       border: none;
       background: transparent;
       color: var(--text-pri);
@@ -78,38 +87,43 @@
       cursor: pointer;
       flex-shrink: 0;
       position: relative;
-      transition: background 0.15s;
+      transition: background 0.16s, transform 0.12s;
     }
     .nav-icon-btn:hover { background: rgba(255, 255, 255, 0.06); }
-    .nav-icon-btn:active { background: rgba(255, 255, 255, 0.1); }
+    .nav-icon-btn:active { background: rgba(255, 255, 255, 0.11); transform: scale(0.93); }
 
     .conn-dot {
       position: absolute;
-      top: 9px;
-      right: 8px;
+      top: 8px;
+      right: 7px;
       width: 6px;
       height: 6px;
       border-radius: 50%;
       background: #f59e0b;
+      box-shadow: 0 0 0 2px #0d0d0f;
     }
-    .conn-dot.online { background: var(--accent-green); }
+    .conn-dot.online {
+      background: var(--accent-green);
+      box-shadow: 0 0 0 2px #0d0d0f, 0 0 8px rgba(16, 185, 129, 0.55);
+    }
     .conn-dot.offline { background: var(--danger); }
 
     .center-model-btn {
       border: none;
       background: transparent;
       color: var(--text-pri);
-      padding: 6px 12px;
-      border-radius: 10px;
+      padding: 5px 14px;
+      border-radius: 12px;
       cursor: pointer;
       display: flex;
       flex-direction: column;
       align-items: center;
       min-width: 0;
       max-width: 68vw;
-      transition: background 0.15s;
+      transition: background 0.16s, transform 0.12s;
     }
-    .center-model-btn:hover { background: rgba(255, 255, 255, 0.06); }
+    .center-model-btn:hover { background: rgba(255, 255, 255, 0.05); }
+    .center-model-btn:active { background: rgba(255, 255, 255, 0.09); transform: scale(0.98); }
 
     .header-title-row {
       display: flex;
@@ -118,21 +132,24 @@
       max-width: 100%;
     }
     .header-title {
-      font-size: 16px;
+      font-size: 15.5px;
       font-weight: 600;
-      letter-spacing: -0.1px;
+      letter-spacing: -0.2px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
     .header-chevron {
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: 11px;
       flex-shrink: 0;
+      opacity: 0.85;
     }
     .header-sub {
       font-size: 11px;
       color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.1px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -142,15 +159,17 @@
 
     .right-nav-group { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 
-    /* ── Slide-Over Left Drawer Sidebar (Authentic ChatGPT Mobile) ── */
+    /* ── Slide-Over Frosted Obsidian Drawer Sidebar ── */
     .drawer-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.58);
+      background: rgba(0, 0, 0, 0.64);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
       z-index: 45;
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.22s ease;
+      transition: opacity 0.24s ease;
     }
     .drawer-backdrop.show { opacity: 1; pointer-events: auto; }
 
@@ -159,43 +178,58 @@
       top: 0;
       left: 0;
       bottom: 0;
-      width: min(84vw, 316px);
+      width: min(84vw, 322px);
       background: var(--bg-sidebar);
+      backdrop-filter: blur(32px) saturate(160%);
+      -webkit-backdrop-filter: blur(32px) saturate(160%);
       z-index: 46;
-      transform: translateX(-102%);
-      transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+      transform: translateX(-103%);
+      transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
       display: flex;
       flex-direction: column;
-      padding: calc(var(--safe-top) + 12px) 10px calc(var(--safe-bot) + 12px);
+      padding: calc(var(--safe-top) + 12px) 12px calc(var(--safe-bot) + 12px);
       border-right: 1px solid var(--border-subtle);
+      box-shadow: 18px 0 48px rgba(0, 0, 0, 0.65);
     }
     .sidebar-drawer.show { transform: translateX(0); }
 
     .drawer-search-row {
+      position: relative;
       display: flex;
-      gap: 8px;
       align-items: center;
-      padding: 0 4px 10px;
+      margin-bottom: 10px;
+    }
+    .drawer-search-ico {
+      position: absolute;
+      left: 11px;
+      color: var(--text-muted);
+      pointer-events: none;
+      display: flex;
     }
     .drawer-search {
-      flex: 1;
-      background: var(--bg-surface);
-      border: 1px solid transparent;
-      border-radius: 10px;
-      padding: 8px 12px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.055);
+      border: 1px solid var(--border-hairline);
+      box-shadow: var(--specular-top);
+      border-radius: 12px;
+      padding: 8.5px 12px 8.5px 34px;
       color: var(--text-pri);
       font-size: 14px;
       outline: none;
+      transition: border-color 0.16s, background 0.16s;
     }
     .drawer-search::placeholder { color: var(--text-muted); }
-    .drawer-search:focus { border-color: var(--border-med); }
+    .drawer-search:focus {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
 
     .drawer-menu-list {
       display: flex;
       flex-direction: column;
       gap: 2px;
       padding-bottom: 10px;
-      border-bottom: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-hairline);
       margin-bottom: 10px;
     }
     .drawer-menu-item {
@@ -203,47 +237,62 @@
       border: none;
       background: transparent;
       color: var(--text-pri);
-      padding: 10px 12px;
-      border-radius: 10px;
-      font-size: 14.5px;
+      padding: 9px 10px;
+      border-radius: 11px;
+      font-size: 14px;
       font-weight: 500;
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 11px;
       cursor: pointer;
       text-align: left;
+      transition: background 0.14s;
     }
-    .drawer-menu-item:hover, .drawer-menu-item:active { background: var(--bg-surface); }
+    .drawer-menu-item:hover, .drawer-menu-item:active { background: rgba(255, 255, 255, 0.07); }
     .drawer-menu-icon {
-      width: 22px;
-      text-align: center;
-      font-size: 16px;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.055);
+      border: 1px solid var(--border-hairline);
+      color: var(--text-pri);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       flex-shrink: 0;
     }
 
+    /* Segmented Track Filter Tabs */
     .drawer-tabs {
       display: flex;
-      gap: 5px;
-      padding: 0 4px 8px;
+      gap: 3px;
+      padding: 3px;
+      margin-bottom: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-hairline);
+      border-radius: 11px;
       overflow-x: auto;
       scrollbar-width: none;
       flex-shrink: 0;
     }
     .drawer-tabs::-webkit-scrollbar { display: none; }
     .drawer-tab {
+      flex: 1;
       border: none;
       background: transparent;
       color: var(--text-muted);
-      padding: 5px 10px;
-      border-radius: 999px;
-      font-size: 12px;
+      padding: 5.5px 8px;
+      border-radius: 8px;
+      font-size: 11.5px;
       font-weight: 600;
       cursor: pointer;
       white-space: nowrap;
+      transition: background 0.15s, color 0.15s;
     }
     .drawer-tab.active {
-      background: var(--bg-surface);
+      background: var(--bg-surface-2);
       color: var(--text-pri);
+      box-shadow: var(--specular-top), 0 2px 6px rgba(0, 0, 0, 0.35);
     }
 
     .drawer-conv-list {
@@ -258,27 +307,35 @@
     .drawer-conv-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 999px; }
 
     .conv-group-label {
-      font-size: 11.5px;
+      font-size: 11px;
       font-weight: 600;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
       color: var(--text-muted);
-      padding: 10px 12px 4px;
+      padding: 12px 10px 4px;
     }
 
     .conv-item {
       width: 100%;
-      border: none;
+      border: 1px solid transparent;
       background: transparent;
       color: var(--text-pri);
-      padding: 9px 12px;
-      border-radius: 10px;
+      padding: 9.5px 11px;
+      border-radius: 12px;
       text-align: left;
       cursor: pointer;
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 4px;
+      position: relative;
+      transition: background 0.14s, border-color 0.14s;
     }
-    .conv-item:hover { background: rgba(255, 255, 255, 0.05); }
-    .conv-item.active { background: var(--bg-surface); }
+    .conv-item:hover { background: rgba(255, 255, 255, 0.045); }
+    .conv-item.active {
+      background: rgba(255, 255, 255, 0.075);
+      border-color: var(--border-subtle);
+      box-shadow: var(--specular-top);
+    }
 
     .conv-item-top {
       display: flex;
@@ -287,23 +344,26 @@
       gap: 6px;
     }
     .conv-item-title {
-      font-size: 14px;
+      font-size: 13.8px;
       font-weight: 500;
+      letter-spacing: -0.1px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
     .conv-tag {
       font-size: 10px;
-      padding: 1px 6px;
-      border-radius: 5px;
-      background: rgba(255, 255, 255, 0.07);
+      font-weight: 500;
+      padding: 1.5px 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.065);
+      border: 1px solid rgba(255, 255, 255, 0.07);
       color: var(--text-sec);
       flex-shrink: 0;
     }
-    .conv-tag.codex { color: #6ee7b7; background: rgba(16, 163, 127, 0.16); }
-    .conv-tag.ide { color: #93c5fd; background: rgba(59, 130, 246, 0.15); }
-    .conv-tag.run { color: #34d399; background: rgba(16, 185, 129, 0.2); }
+    .conv-tag.codex { color: #a7f3d0; background: rgba(16, 185, 129, 0.12); border-color: rgba(16, 185, 129, 0.22); }
+    .conv-tag.ide { color: #dbeafe; background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.13); }
+    .conv-tag.run { color: #6ee7b7; background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.35); }
     .conv-item-sub {
       font-size: 11.5px;
       color: var(--text-muted);
@@ -314,7 +374,7 @@
       overflow: hidden;
     }
 
-    /* ── Main Chat Stream (Authentic ChatGPT Mobile Editorial Flow) ── */
+    /* ── Main Chat Stream (Editorial Luxury Flow) ── */
     .chat-wrap {
       flex: 1;
       position: relative;
@@ -322,15 +382,26 @@
       display: flex;
       flex-direction: column;
     }
+    .chat-wrap::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 22px;
+      background: linear-gradient(to bottom, transparent, var(--bg-main));
+      pointer-events: none;
+      z-index: 4;
+    }
 
     .chat-scroll {
       flex: 1;
       overflow-y: auto;
       overflow-x: hidden;
-      padding: 12px 16px 18px;
+      padding: 16px 16px 26px;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 22px;
       -webkit-overflow-scrolling: touch;
     }
     .chat-scroll > * {
@@ -346,6 +417,7 @@
     .load-more-btn {
       background: var(--bg-surface);
       border: 1px solid var(--border-subtle);
+      box-shadow: var(--specular-top);
       color: var(--text-sec);
       font-size: 12.5px;
       padding: 7px 16px;
@@ -353,7 +425,7 @@
       cursor: pointer;
     }
 
-    /* ChatGPT Minimalist Empty State */
+    /* ── Bespoke Obsidian Hero Empty State + 2x2 Bento Grid ── */
     .empty-hero {
       margin-top: auto;
       margin-bottom: auto;
@@ -362,76 +434,124 @@
       align-items: center;
       justify-content: center;
       text-align: center;
-      padding: 24px 12px;
+      padding: 20px 6px;
     }
     .hero-logo {
-      width: 46px;
-      height: 46px;
-      border-radius: 50%;
-      background: #ffffff;
-      color: #0d0d0d;
+      width: 56px;
+      height: 56px;
+      border-radius: 17px;
+      background: linear-gradient(180deg, #23232a 0%, #141418 100%);
+      border: 1px solid rgba(255, 255, 255, 0.13);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.16),
+        0 14px 36px rgba(0, 0, 0, 0.65),
+        0 0 42px rgba(255, 255, 255, 0.045);
+      color: #f8fafc;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 22px;
-      font-weight: 700;
       margin-bottom: 18px;
     }
     .empty-hero h2 {
       font-size: 22px;
       font-weight: 600;
-      color: var(--text-pri);
-      margin: 0 0 22px;
-      letter-spacing: -0.2px;
+      color: #ffffff;
+      margin: 0 0 6px;
+      letter-spacing: -0.35px;
+    }
+    .hero-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin: 0 0 24px;
+      letter-spacing: 0.1px;
     }
     .suggestion-pills {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 8px;
-      max-width: 480px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      width: 100%;
+      max-width: 440px;
     }
     .suggest-pill {
-      border: 1px solid var(--border-med);
-      background: transparent;
-      color: var(--text-sec);
-      padding: 9px 15px;
-      border-radius: 999px;
-      font-size: 13.5px;
+      border: 1px solid var(--border-subtle);
+      background: linear-gradient(180deg, rgba(30, 30, 36, 0.85) 0%, rgba(22, 22, 27, 0.85) 100%);
+      box-shadow: var(--specular-top), 0 4px 16px rgba(0, 0, 0, 0.28);
+      color: var(--text-pri);
+      padding: 12px 13px;
+      border-radius: 16px;
       cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 7px;
+      text-align: left;
+      transition: transform 0.14s ease, background 0.16s, border-color 0.16s;
+    }
+    .suggest-pill:hover {
+      border-color: var(--border-med);
+      background: var(--bg-surface-2);
+    }
+    .suggest-pill:active {
+      transform: scale(0.97);
+      background: var(--bg-surface-hover);
+    }
+    .sug-ico {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-hairline);
+      color: var(--text-sec);
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      transition: background 0.15s, color 0.15s;
+      justify-content: center;
     }
-    .suggest-pill:hover, .suggest-pill:active {
-      background: var(--bg-surface);
+    .sug-title {
+      font-size: 13.5px;
+      font-weight: 600;
       color: var(--text-pri);
+      letter-spacing: -0.1px;
+    }
+    .sug-desc {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      line-height: 1.3;
     }
 
-    /* User Message: Right-aligned #2F2F2F Pill */
-    .msg-row { display: flex; flex-direction: column; }
+    /* ── User Message: Precision Smoked Capsule ── */
+    .msg-row {
+      display: flex;
+      flex-direction: column;
+      animation: msgFadeIn 0.18s ease-out;
+    }
+    @keyframes msgFadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
     .msg-row.user { align-items: flex-end; }
     .msg-row.user .user-pill {
-      max-width: min(80%, 540px);
-      background: var(--bg-surface);
+      max-width: min(82%, 540px);
+      background: linear-gradient(180deg, #25252d 0%, #1e1e25 100%);
+      border: 1px solid rgba(255, 255, 255, 0.085);
+      box-shadow: var(--specular-top), 0 4px 16px rgba(0, 0, 0, 0.28);
       color: var(--text-pri);
-      padding: 10px 16px;
-      border-radius: 22px;
+      padding: 10.5px 16px;
+      border-radius: 22px 22px 6px 22px;
       font-size: 15.5px;
-      line-height: 1.55;
+      line-height: 1.54;
       white-space: pre-wrap;
       word-break: break-word;
       overflow-wrap: anywhere;
     }
 
-    /* Assistant Message: Full-width Borderless Editorial Flow (True ChatGPT Mobile!) */
+    /* ── Assistant Message: Borderless Editorial Typography ── */
     .msg-row.assistant { align-items: flex-start; }
     .asst-body {
       width: 100%;
       color: var(--text-pri);
       font-size: 15.5px;
-      line-height: 1.68;
+      line-height: 1.72;
+      letter-spacing: -0.05px;
       word-break: break-word;
       overflow-wrap: anywhere;
     }
@@ -442,86 +562,100 @@
       margin: 18px 0 8px;
       line-height: 1.35;
       font-weight: 600;
+      letter-spacing: -0.25px;
       color: #ffffff;
     }
     .asst-body h1 { font-size: 20px; }
-    .asst-body h2 { font-size: 18px; }
+    .asst-body h2 { font-size: 17.5px; }
     .asst-body h3, .asst-body h4 { font-size: 16px; }
-    .asst-body ul, .asst-body ol { margin: 8px 0 12px; padding-left: 22px; }
+    .asst-body ul, .asst-body ol { margin: 8px 0 12px; padding-left: 21px; }
     .asst-body li { margin: 5px 0; }
+    .asst-body li::marker { color: var(--text-muted); }
     .asst-body blockquote {
-      margin: 10px 0;
-      padding: 4px 0 4px 14px;
-      border-left: 3px solid rgba(255, 255, 255, 0.25);
+      margin: 12px 0;
+      padding: 6px 12px 6px 14px;
+      border-left: 2.5px solid rgba(255, 255, 255, 0.28);
+      background: rgba(255, 255, 255, 0.025);
+      border-radius: 0 10px 10px 0;
       color: var(--text-sec);
     }
-    .asst-body hr { border: none; border-top: 1px solid var(--border-subtle); margin: 16px 0; }
-    .asst-body a { color: #60a5fa; text-decoration: underline; text-underline-offset: 3px; }
+    .asst-body hr { border: none; border-top: 1px solid var(--border-hairline); margin: 18px 0; }
+    .asst-body a { color: #93c5fd; text-decoration: underline; text-underline-offset: 3px; }
     .asst-body strong { color: #ffffff; font-weight: 600; }
 
     .asst-body code {
-      background: rgba(255, 255, 255, 0.1);
-      padding: 2px 5px;
-      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.085);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 1.5px 5.5px;
+      border-radius: 6px;
       font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
-      font-size: 13.5px;
-      color: #ececec;
+      font-size: 13.2px;
+      color: #f1f5f9;
     }
 
-    /* ChatGPT Code Block with #2F2F2F Header Bar */
+    /* ── Obsidian Code Card ── */
     .code-card {
-      margin: 12px 0;
-      border-radius: 12px;
+      margin: 14px 0;
+      border-radius: 14px;
       overflow: hidden;
       background: var(--bg-code);
       border: 1px solid var(--border-subtle);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38);
     }
     .code-hdr {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 7px 14px;
+      padding: 8px 14px;
       background: var(--bg-code-hdr);
-      color: var(--text-sec);
-      font-size: 12px;
+      border-bottom: 1px solid var(--border-hairline);
+      color: var(--text-muted);
+      font-family: "SF Mono", Consolas, monospace;
+      font-size: 11.5px;
+      letter-spacing: 0.2px;
     }
     .copy-code-btn {
-      background: none;
-      border: none;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-hairline);
       color: var(--text-sec);
-      font-size: 12px;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 11.5px;
       cursor: pointer;
-      padding: 2px 6px;
-      border-radius: 5px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      transition: background 0.14s, color 0.14s;
     }
-    .copy-code-btn:active { color: #fff; background: rgba(255,255,255,0.1); }
+    .copy-code-btn:active { color: #fff; background: rgba(255,255,255,0.14); }
     .code-card pre {
       margin: 0;
-      padding: 12px 14px;
+      padding: 13px 15px;
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
     .code-card pre code {
       background: none;
+      border: none;
       padding: 0;
       font-size: 13px;
-      line-height: 1.55;
-      color: #e5e7eb;
+      line-height: 1.58;
+      color: #e4e4e7;
     }
 
     .table-wrap {
       overflow-x: auto;
-      margin: 12px 0;
-      border-radius: 10px;
-      border: 1px solid var(--border-med);
+      margin: 14px 0;
+      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+      background: #121216;
       -webkit-overflow-scrolling: touch;
     }
     .asst-body table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 260px; }
     .asst-body th, .asst-body td {
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--border-subtle);
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border-hairline);
       text-align: left;
     }
-    .asst-body th { background: var(--bg-surface); font-weight: 600; white-space: nowrap; }
+    .asst-body th { background: rgba(255, 255, 255, 0.045); font-weight: 600; color: #fff; white-space: nowrap; }
     .asst-body tr:last-child td { border-bottom: none; }
 
     /* Inline Screenshots & Attachments */
@@ -529,16 +663,17 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
-      margin-top: 10px;
+      margin-top: 12px;
     }
     .chat-img {
       max-width: min(100%, 520px);
-      max-height: 380px;
-      border-radius: 14px;
+      max-height: 390px;
+      border-radius: 16px;
       border: 1px solid var(--border-med);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
       cursor: zoom-in;
       object-fit: contain;
-      background: #0d0d0d;
+      background: #070709;
       display: block;
     }
     .file-card {
@@ -548,75 +683,99 @@
       margin-top: 8px;
       padding: 10px 14px;
       background: var(--bg-surface);
-      border: 1px solid var(--border-med);
-      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+      box-shadow: var(--specular-top);
+      border-radius: 13px;
       color: var(--text-pri);
       text-decoration: none;
       font-size: 13.5px;
       font-weight: 500;
     }
 
-    /* Subtle ChatGPT Action Row under Assistant Turn */
+    /* Subtle Action Row + Model Origin Badge under Assistant Turn */
     .msg-actions {
       display: flex;
       align-items: center;
-      gap: 12px;
-      margin-top: 6px;
+      gap: 10px;
+      margin-top: 8px;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: 11.5px;
     }
     .msg-act-btn {
       background: none;
       border: none;
       color: var(--text-muted);
       font-size: 12px;
-      padding: 4px 6px;
-      border-radius: 6px;
+      padding: 4px 7px;
+      border-radius: 7px;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
+      transition: color 0.14s, background 0.14s;
     }
     .msg-act-btn:hover, .msg-act-btn:active {
       color: var(--text-pri);
       background: rgba(255, 255, 255, 0.06);
     }
+    .msg-origin-tag {
+      font-size: 11px;
+      color: var(--text-muted);
+      opacity: 0.72;
+    }
 
-    /* ChatGPT Pulsing Dot Cursor */
+    /* Live Shimmer Thinking Status + Pulsing Dot */
+    .status-shimmer {
+      display: inline-block;
+      font-size: 14px;
+      font-weight: 500;
+      background: linear-gradient(90deg, #72727e 0%, #e4e4eb 50%, #72727e 100%);
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: textShimmer 1.8s linear infinite;
+    }
+    @keyframes textShimmer {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+
     .gpt-dot {
       display: inline-block;
-      width: 11px;
-      height: 11px;
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
       background: var(--text-pri);
-      margin-left: 4px;
+      margin-left: 5px;
       vertical-align: middle;
       animation: pulseDot 1s infinite ease-in-out;
     }
     @keyframes pulseDot {
-      0%, 100% { transform: scale(0.75); opacity: 0.45; }
-      50% { transform: scale(1.05); opacity: 1; }
+      0%, 100% { transform: scale(0.72); opacity: 0.4; }
+      50% { transform: scale(1.06); opacity: 1; }
     }
 
-    /* Floating Down Arrow Pill (ChatGPT Mobile Exact Style) */
+    /* Floating Frosted Down Arrow Pill */
     .jump-bottom-btn {
       position: absolute;
       left: 50%;
       transform: translateX(-50%);
-      bottom: 12px;
+      bottom: 14px;
       z-index: 15;
-      width: 34px;
-      height: 34px;
+      width: 36px;
+      height: 36px;
       border-radius: 50%;
-      background: var(--bg-surface);
+      background: rgba(28, 28, 34, 0.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       border: 1px solid var(--border-med);
+      box-shadow: var(--specular-top), 0 8px 22px rgba(0, 0, 0, 0.55);
       color: var(--text-pri);
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
       cursor: pointer;
       display: none;
       align-items: center;
       justify-content: center;
-      font-size: 16px;
     }
     .jump-bottom-btn.show { display: inline-flex; }
 
@@ -634,9 +793,10 @@
     .att-badge {
       background: var(--bg-surface);
       border: 1px solid var(--border-med);
+      box-shadow: var(--specular-top);
       color: var(--text-pri);
       padding: 5px 11px;
-      border-radius: 10px;
+      border-radius: 11px;
       font-size: 12.5px;
       display: inline-flex;
       align-items: center;
@@ -647,56 +807,68 @@
       background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 0;
     }
 
-    /* ── Authentic ChatGPT Mobile Bottom Composer ── */
+    /* ── Precision Floating Glass Bottom Composer ── */
     .composer-outer {
       padding: 6px 12px calc((1 - var(--kb-open, 0)) * var(--safe-bot) + 10px);
       background: var(--bg-main);
       flex-shrink: 0;
       position: relative;
+      z-index: 10;
     }
     .composer-row {
       max-width: 768px;
       margin: 0 auto;
       display: flex;
       align-items: flex-end;
-      gap: 8px;
+      gap: 9px;
     }
 
     .plus-btn {
-      width: 40px;
-      height: 40px;
+      width: 42px;
+      height: 42px;
       border-radius: 50%;
-      border: none;
+      border: 1px solid var(--border-subtle);
       background: var(--bg-surface);
+      box-shadow: var(--specular-top), 0 4px 14px rgba(0, 0, 0, 0.35);
       color: var(--text-pri);
-      font-size: 22px;
-      font-weight: 400;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
       flex-shrink: 0;
       margin-bottom: 2px;
-      transition: background 0.15s, transform 0.14s;
+      transition: background 0.16s, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.16s;
     }
-    .plus-btn:active { transform: scale(0.94); background: var(--bg-surface-hover); }
+    .plus-btn.open {
+      background: var(--bg-surface-2);
+      border-color: var(--border-med);
+      transform: rotate(45deg);
+    }
+    .plus-btn:active { transform: scale(0.92); }
 
     .composer-pill {
       flex: 1;
       min-width: 0;
       background: var(--bg-surface);
-      border-radius: 24px;
+      border: 1px solid rgba(255, 255, 255, 0.095);
+      box-shadow: var(--specular-top), 0 8px 26px rgba(0, 0, 0, 0.45);
+      border-radius: 25px;
       padding: 5px 6px 5px 16px;
       display: flex;
       align-items: flex-end;
       gap: 6px;
+      transition: border-color 0.18s, background 0.18s;
+    }
+    .composer-pill:focus-within {
+      background: #1e1e24;
+      border-color: rgba(255, 255, 255, 0.2);
     }
 
     .input-box {
       flex: 1;
       background: transparent;
       border: none;
-      padding: 7px 0;
+      padding: 7.5px 0;
       color: var(--text-pri);
       font-size: 16px; /* Prevents iOS auto-zoom */
       line-height: 1.42;
@@ -731,34 +903,46 @@
       border-radius: 50%;
       border: none;
       background: #ffffff;
-      color: #0d0d0d;
+      color: #09090b;
+      box-shadow: 0 2px 10px rgba(255, 255, 255, 0.16);
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
       flex-shrink: 0;
-      transition: opacity 0.15s, transform 0.12s;
+      margin-bottom: 1px;
+      transition: opacity 0.16s, transform 0.12s, background 0.16s;
     }
     .send-btn.empty:not(.stop) {
-      opacity: 0.32;
+      background: rgba(255, 255, 255, 0.14);
+      color: rgba(255, 255, 255, 0.42);
+      box-shadow: none;
     }
-    .send-btn:active { transform: scale(0.92); }
+    .send-btn:active { transform: scale(0.9); }
 
-    /* Plus Action Popover Menu */
+    /* Frosted Glass Plus Action Popover */
     .plus-popover {
       position: fixed;
       left: 12px;
-      bottom: calc((1 - var(--kb-open, 0)) * var(--safe-bot) + 62px);
-      width: 230px;
-      background: #2a2a2a;
+      bottom: calc((1 - var(--kb-open, 0)) * var(--safe-bot) + 64px);
+      width: 238px;
+      background: rgba(26, 26, 32, 0.92);
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
       border: 1px solid var(--border-med);
-      border-radius: 18px;
+      box-shadow: var(--specular-top), 0 18px 48px rgba(0, 0, 0, 0.68);
+      border-radius: 20px;
       padding: 6px;
-      box-shadow: 0 14px 38px rgba(0, 0, 0, 0.55);
       z-index: 42;
       display: none;
       flex-direction: column;
       gap: 2px;
+      animation: popScaleIn 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+      transform-origin: bottom left;
+    }
+    @keyframes popScaleIn {
+      from { opacity: 0; transform: scale(0.92) translateY(6px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
     }
     .plus-popover.show { display: flex; }
     .pop-item {
@@ -766,120 +950,151 @@
       border: none;
       background: transparent;
       color: var(--text-pri);
-      padding: 11px 12px;
-      border-radius: 12px;
-      font-size: 14.5px;
+      padding: 10px 12px;
+      border-radius: 13px;
+      font-size: 14px;
+      font-weight: 500;
       text-align: left;
       display: flex;
       align-items: center;
       gap: 11px;
       cursor: pointer;
+      transition: background 0.12s;
     }
-    .pop-item:hover, .pop-item:active { background: rgba(255, 255, 255, 0.08); }
+    .pop-item:hover, .pop-item:active { background: rgba(255, 255, 255, 0.085); }
+    .pop-ico {
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-sec);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
 
-    /* ── Clean Modals & Bottom Sheets ── */
+    /* ── Frosted Obsidian Modals & Bottom Sheets ── */
     .overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.65);
+      background: rgba(0, 0, 0, 0.68);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
       z-index: 60;
       display: none;
       align-items: flex-end;
       justify-content: center;
     }
-    .overlay.center { align-items: center; padding: 14px; }
+    .overlay.center { align-items: center; padding: 16px; }
     .overlay.show { display: flex; }
 
     .sheet {
       width: 100%;
       max-width: 640px;
       max-height: 86dvh;
-      background: #262626;
+      background: rgba(22, 22, 27, 0.96);
+      backdrop-filter: blur(32px) saturate(160%);
+      -webkit-backdrop-filter: blur(32px) saturate(160%);
       border-top: 1px solid var(--border-med);
-      border-radius: 22px 22px 0 0;
-      padding: 16px 16px calc(var(--safe-bot) + 18px);
+      box-shadow: var(--specular-top), 0 -16px 52px rgba(0, 0, 0, 0.72);
+      border-radius: 26px 26px 0 0;
+      padding: 14px 16px calc(var(--safe-bot) + 20px);
       display: flex;
       flex-direction: column;
-      box-shadow: 0 -12px 42px rgba(0, 0, 0, 0.55);
+      animation: sheetSlideUp 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    @keyframes sheetSlideUp {
+      from { transform: translateY(24px); opacity: 0.6; }
+      to { transform: translateY(0); opacity: 1; }
     }
     .overlay.center .sheet {
-      border-radius: 20px;
+      border-radius: 22px;
       border: 1px solid var(--border-med);
-      padding: 18px;
+      padding: 20px;
     }
     @media (min-width: 700px) {
       .overlay { align-items: center; padding: 16px; }
-      .sheet { border-radius: 20px; border: 1px solid var(--border-med); padding: 18px; }
+      .sheet { border-radius: 22px; border: 1px solid var(--border-med); padding: 20px; }
     }
 
     .sheet-handle {
-      width: 36px;
+      width: 38px;
       height: 4px;
       border-radius: 999px;
       background: rgba(255, 255, 255, 0.2);
-      margin: 0 auto 12px;
+      margin: 0 auto 14px;
     }
     .sheet-hdr {
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 8px;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
       flex-shrink: 0;
     }
-    .sheet-hdr h3 { margin: 0; font-size: 16px; font-weight: 600; }
+    .sheet-hdr h3 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.2px; }
 
     .pill-btn {
-      background: var(--bg-surface-hover);
+      background: rgba(255, 255, 255, 0.065);
       border: 1px solid var(--border-subtle);
+      box-shadow: var(--specular-top);
       color: var(--text-pri);
-      padding: 6px 12px;
+      padding: 6.5px 13px;
       border-radius: 999px;
       font-size: 12.5px;
       font-weight: 500;
       cursor: pointer;
+      transition: background 0.14s, transform 0.12s;
     }
-    .pill-btn:active { opacity: 0.8; }
+    .pill-btn:active { opacity: 0.85; transform: scale(0.96); }
 
     .model-opt {
       width: 100%;
       text-align: left;
-      padding: 13px 14px;
-      margin-bottom: 6px;
-      border-radius: 14px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid transparent;
+      padding: 13px 15px;
+      margin-bottom: 8px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.038);
+      border: 1px solid var(--border-hairline);
+      box-shadow: var(--specular-top);
       color: var(--text-pri);
       cursor: pointer;
+      transition: background 0.14s, border-color 0.14s;
     }
-    .model-opt:hover, .model-opt:active { background: rgba(255, 255, 255, 0.08); }
+    .model-opt:hover, .model-opt:active {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: var(--border-med);
+    }
 
     .screen-frame {
       width: 100%;
-      border-radius: 12px;
+      border-radius: 14px;
       border: 1px solid var(--border-subtle);
-      background: #0d0d0d;
+      background: #070709;
       max-height: 62dvh;
       object-fit: contain;
     }
 
     .token-input {
       width: 100%;
-      padding: 11px 13px;
-      border-radius: 12px;
-      border: 1px solid var(--border-med);
-      background: #171717;
+      padding: 11.5px 14px;
+      border-radius: 13px;
+      border: 1px solid var(--border-subtle);
+      background: #101014;
       color: #fff;
       font-size: 14px;
       outline: none;
     }
+    .token-input:focus { border-color: rgba(255, 255, 255, 0.26); }
+
     .primary-btn {
       width: 100%;
-      padding: 12px;
+      padding: 12.5px;
       border-radius: 999px;
       border: none;
       background: #ffffff;
-      color: #0d0d0d;
+      color: #09090b;
       font-size: 15px;
       font-weight: 600;
       cursor: pointer;
@@ -898,10 +1113,10 @@
     .file-row {
       width: 100%;
       text-align: left;
-      padding: 10px 12px;
-      border-radius: 11px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid var(--border-subtle);
+      padding: 10.5px 13px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid var(--border-hairline);
       color: var(--text-pri);
       display: flex;
       align-items: center;
@@ -910,20 +1125,20 @@
       cursor: pointer;
       font-size: 13.5px;
     }
-    .file-row:hover { background: rgba(255, 255, 255, 0.08); }
-    .git-st { font-family: Consolas, monospace; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 5px; }
-    .git-st.m { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
-    .git-st.a { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; }
-    .git-st.d { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+    .file-row:hover { background: rgba(255, 255, 255, 0.075); }
+    .git-st { font-family: "SF Mono", Consolas, monospace; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 5px; }
+    .git-st.m { background: rgba(245, 158, 11, 0.18); color: #fcd34d; }
+    .git-st.a { background: rgba(16, 185, 129, 0.18); color: #6ee7b7; }
+    .git-st.d { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
 
     .diff-viewer {
-      background: #0d0d0d;
+      background: #08080a;
       border: 1px solid var(--border-subtle);
-      border-radius: 12px;
-      padding: 10px 12px;
+      border-radius: 13px;
+      padding: 11px 13px;
       font-family: "SF Mono", Consolas, monospace;
       font-size: 12px;
-      line-height: 1.52;
+      line-height: 1.54;
       overflow-x: auto;
       white-space: pre;
       color: #d4d4d8;
@@ -937,8 +1152,11 @@
       top: calc(var(--safe-top) + 58px);
       left: 50%;
       transform: translateX(-50%);
-      background: #2f2f2f;
+      background: rgba(28, 28, 35, 0.92);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
       border: 1px solid var(--border-med);
+      box-shadow: var(--specular-top), 0 10px 30px rgba(0, 0, 0, 0.55);
       color: var(--text-pri);
       padding: 8px 16px;
       border-radius: 999px;
@@ -946,7 +1164,6 @@
       font-weight: 500;
       z-index: 90;
       display: none;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
       white-space: nowrap;
       max-width: 90vw;
       overflow: hidden;
@@ -991,8 +1208,8 @@
     </div>
   </header>
 
-  <div id="iosInstallBanner" style="display:none;background:#2a2a2a;border-bottom:1px solid var(--border-med);padding:9px 14px;font-size:12.5px;color:var(--text-pri);align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;z-index:19">
-    <span style="line-height:1.45">📲 点底部 <b>分享 ⬆️ → 添加到主屏幕</b>，即可生成永久全屏 iPhone App（电脑重启也免扫码）</span>
+  <div id="iosInstallBanner" style="display:none;background:rgba(24,24,30,0.92);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid var(--border-subtle);padding:9px 14px;font-size:12.5px;color:var(--text-pri);align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;z-index:19">
+    <span style="line-height:1.45">点底部 <b>分享 → 添加到主屏幕</b>，即可生成永久全屏 iPhone App</span>
     <button id="closeIosBannerBtn" type="button" style="background:transparent;border:none;color:var(--text-muted);font-size:16px;padding:2px 6px;cursor:pointer">✕</button>
   </div>
 
@@ -1002,24 +1219,35 @@
   <div id="drawerBackdrop" class="drawer-backdrop"></div>
   <aside id="sidebarDrawer" class="sidebar-drawer">
     <div class="drawer-search-row">
-      <input id="convSearchInput" class="drawer-search" type="search" placeholder="搜索聊天记录..." />
+      <span class="drawer-search-ico">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.2" y2="16.2"></line></svg>
+      </span>
+      <input id="convSearchInput" class="drawer-search" type="search" placeholder="搜索全部电脑与手机会话..." />
     </div>
 
     <div class="drawer-menu-list">
       <button id="drawerNewChatBtn" class="drawer-menu-item">
-        <span class="drawer-menu-icon">✦</span>
+        <span class="drawer-menu-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </span>
         <span>发起新对话</span>
       </button>
       <button id="drawerWsPickerBtn" class="drawer-menu-item">
-        <span class="drawer-menu-icon">📁</span>
+        <span class="drawer-menu-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+        </span>
         <span>切换项目工作目录</span>
       </button>
       <button id="drawerDeskBtn" class="drawer-menu-item">
-        <span class="drawer-menu-icon">🖥</span>
+        <span class="drawer-menu-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2.5"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+        </span>
         <span>电脑实时桌面画面</span>
       </button>
       <button id="drawerGitBtn" class="drawer-menu-item">
-        <span class="drawer-menu-icon">⎇</span>
+        <span class="drawer-menu-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7"></path><line x1="6" y1="9" x2="6" y2="21"></line></svg>
+        </span>
         <span>工作区文件与 Git Diff</span>
       </button>
     </div>
@@ -1040,17 +1268,42 @@
   <div class="chat-wrap">
     <main id="chatScroll" class="chat-scroll">
       <div id="emptyHero" class="empty-hero">
-        <div class="hero-logo">✦</div>
+        <div class="hero-logo">
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+            <ellipse cx="16" cy="16" rx="13" ry="7.2" transform="rotate(-28 16 16)" stroke="rgba(255,255,255,0.34)" stroke-width="1.3"/>
+            <path d="M16 5.5C16.8 11.6 20.4 15.2 26.5 16C20.4 16.8 16.8 20.4 16 26.5C15.2 20.4 11.6 16.8 5.5 16C11.6 15.2 15.2 11.6 16 5.5Z" fill="#FFFFFF"/>
+            <circle cx="23.5" cy="9.2" r="1.6" fill="#FFFFFF"/>
+          </svg>
+        </div>
         <h2>有什么可以帮你的？</h2>
+        <p class="hero-sub">Antigravity 与 Codex 电脑会话实时直连</p>
         <div class="suggestion-pills">
-          <button class="suggest-pill" data-act="chats">💬 接力电脑会话</button>
-          <button class="suggest-pill" data-cmd="/screen">📸 截取电脑画面</button>
-          <button class="suggest-pill" data-act="files">📂 查看代码改动</button>
-          <button class="suggest-pill" data-act="desktop">🖥 实时远程桌面</button>
+          <button class="suggest-pill" data-act="chats">
+            <span class="sug-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
+            <span class="sug-title">接力电脑会话</span>
+            <span class="sug-desc">同步并驱动桌面聊天窗口</span>
+          </button>
+          <button class="suggest-pill" data-cmd="/screen">
+            <span class="sug-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span>
+            <span class="sug-title">截取电脑画面</span>
+            <span class="sug-desc">秒级查看当前屏幕工作流</span>
+          </button>
+          <button class="suggest-pill" data-act="files">
+            <span class="sug-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg></span>
+            <span class="sug-title">查看代码改动</span>
+            <span class="sug-desc">浏览工作区与 Git Diff</span>
+          </button>
+          <button class="suggest-pill" data-act="desktop">
+            <span class="sug-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2.5"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></span>
+            <span class="sug-title">实时远程桌面</span>
+            <span class="sug-desc">连续预览电脑实时状态</span>
+          </button>
         </div>
       </div>
     </main>
-    <button id="jumpBottomBtn" type="button" class="jump-bottom-btn" title="回到底部">↓</button>
+    <button id="jumpBottomBtn" type="button" class="jump-bottom-btn" title="回到底部">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+    </button>
   </div>
 
   <!-- Pending Attachments -->
@@ -1058,18 +1311,35 @@
 
   <!-- Plus Action Popover -->
   <div id="plusPopover" class="plus-popover">
-    <button id="popUploadBtn" class="pop-item"><span>📎</span><span>上传照片或文件</span></button>
-    <button id="popShotBtn" class="pop-item"><span>📸</span><span>立即截取电脑画面</span></button>
-    <button id="popLiveDeskBtn" class="pop-item"><span>🖥</span><span>打开实时远程桌面</span></button>
-    <button id="popDiffBtn" class="pop-item"><span>📂</span><span>浏览工作区与 Diff</span></button>
-    <button id="popWsSwitchBtn" class="pop-item"><span>📁</span><span>切换项目目录</span></button>
+    <button id="popUploadBtn" class="pop-item">
+      <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg></span>
+      <span>上传照片或文件</span>
+    </button>
+    <button id="popShotBtn" class="pop-item">
+      <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span>
+      <span>立即截取电脑画面</span>
+    </button>
+    <button id="popLiveDeskBtn" class="pop-item">
+      <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2.5"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></span>
+      <span>打开实时远程桌面</span>
+    </button>
+    <button id="popDiffBtn" class="pop-item">
+      <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg></span>
+      <span>浏览工作区与 Diff</span>
+    </button>
+    <button id="popWsSwitchBtn" class="pop-item">
+      <span class="pop-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></span>
+      <span>切换项目目录</span>
+    </button>
   </div>
 
-  <!-- Authentic ChatGPT Mobile Bottom Composer -->
+  <!-- Precision Glass Bottom Composer -->
   <footer class="composer-outer">
     <input id="filePicker" type="file" multiple hidden />
     <div class="composer-row">
-      <button id="plusBtn" class="plus-btn" title="更多工具与附件">＋</button>
+      <button id="plusBtn" class="plus-btn" title="更多工具与附件">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      </button>
       <div class="composer-pill">
         <textarea id="msgInput" class="input-box" rows="1" placeholder="发消息给反重力助手"></textarea>
         <button id="voiceBtn" class="mic-btn" title="语音输入">
@@ -1599,13 +1869,36 @@
   function buildHeroHtml() {
     return `
       <div id="emptyHero" class="empty-hero">
-        <div class="hero-logo">✦</div>
+        <div class="hero-logo">
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+            <ellipse cx="16" cy="16" rx="13" ry="7.2" transform="rotate(-28 16 16)" stroke="rgba(255,255,255,0.34)" stroke-width="1.3"/>
+            <path d="M16 5.5C16.8 11.6 20.4 15.2 26.5 16C20.4 16.8 16.8 20.4 16 26.5C15.2 20.4 11.6 16.8 5.5 16C11.6 15.2 15.2 11.6 16 5.5Z" fill="#FFFFFF"/>
+            <circle cx="23.5" cy="9.2" r="1.6" fill="#FFFFFF"/>
+          </svg>
+        </div>
         <h2>有什么可以帮你的？</h2>
+        <p class="hero-sub">Antigravity 与 Codex 电脑会话实时直连</p>
         <div class="suggestion-pills">
-          <button class="suggest-pill" data-act="chats">💬 接力电脑会话</button>
-          <button class="suggest-pill" data-cmd="/screen">📸 截取电脑画面</button>
-          <button class="suggest-pill" data-act="files">📂 查看代码改动</button>
-          <button class="suggest-pill" data-act="desktop">🖥 实时远程桌面</button>
+          <button class="suggest-pill" data-act="chats">
+            <span class="sug-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
+            <span class="sug-title">接力电脑会话</span>
+            <span class="sug-desc">同步并驱动桌面聊天窗口</span>
+          </button>
+          <button class="suggest-pill" data-cmd="/screen">
+            <span class="sug-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span>
+            <span class="sug-title">截取电脑画面</span>
+            <span class="sug-desc">秒级查看当前屏幕工作流</span>
+          </button>
+          <button class="suggest-pill" data-act="files">
+            <span class="sug-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg></span>
+            <span class="sug-title">查看代码改动</span>
+            <span class="sug-desc">浏览工作区与 Git Diff</span>
+          </button>
+          <button class="suggest-pill" data-act="desktop">
+            <span class="sug-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2.5"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></span>
+            <span class="sug-title">实时远程桌面</span>
+            <span class="sug-desc">连续预览电脑实时状态</span>
+          </button>
         </div>
       </div>`;
   }
@@ -1673,7 +1966,7 @@
       row = document.createElement('div');
       row.className = 'msg-row assistant';
       row.id = 'row-' + id;
-      row.innerHTML = `<div class="asst-body" id="bub-${id}"><span class="gpt-dot"></span></div><div class="msg-actions" id="act-${id}" style="display:none"><button type="button" class="msg-act-btn copy-msg-btn" data-mid="${escapeHtml(id)}">复制</button></div>`;
+      row.innerHTML = `<div class="asst-body" id="bub-${id}"><span class="gpt-dot"></span></div><div class="msg-actions" id="act-${id}" style="display:none"><button type="button" class="msg-act-btn copy-msg-btn" data-mid="${escapeHtml(id)}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span>复制</span></button><span class="msg-origin-tag" id="orig-${id}"></span></div>`;
       chatScroll.appendChild(row);
     }
     return row;
@@ -1685,7 +1978,11 @@
     ensureAssistantRow(item.id);
     const bub = document.getElementById('bub-' + item.id);
     const act = document.getElementById('act-' + item.id);
+    const orig = document.getElementById('orig-' + item.id);
     bub.innerHTML = renderRichText(item.text || '');
+    if (orig && item.model) {
+      orig.textContent = shortModelName(item.model);
+    }
 
     if (item.images && item.images.length) {
       const grid = document.createElement('div');
@@ -1773,7 +2070,7 @@
       if (curText) {
         bub.innerHTML = renderRichText(curText) + '<span class="gpt-dot"></span>';
       } else if (inf.status) {
-        bub.innerHTML = `<span style="color:var(--text-muted);font-size:14px">${escapeHtml(inf.status)}</span><span class="gpt-dot"></span>`;
+        bub.innerHTML = `<span class="status-shimmer">${escapeHtml(inf.status)}</span><span class="gpt-dot"></span>`;
       }
     }
     scrollToBottom(true);
@@ -2113,7 +2410,7 @@
         const cur = streamBuffers.get(data.msg_id) || '';
         if (!cur) {
           const bub = document.getElementById('bub-' + data.msg_id);
-          if (bub) bub.innerHTML = `<span style="color:var(--text-muted);font-size:14px">${escapeHtml(data.status)}</span><span class="gpt-dot"></span>`;
+          if (bub) bub.innerHTML = `<span class="status-shimmer">${escapeHtml(data.status)}</span><span class="gpt-dot"></span>`;
         }
       } else if (data.type === 'stream_reset') {
         if (data.slot && activeSlot && data.slot !== activeSlot) return;
@@ -2372,23 +2669,27 @@
     }
   });
 
-  // Plus Button Popover
+  // Plus Button Popover with 45deg smooth rotation
+  function setPlusOpen(open) {
+    plusPopover.classList.toggle('show', open);
+    $('plusBtn').classList.toggle('open', open);
+  }
   $('plusBtn').onclick = (e) => {
     e.stopPropagation();
-    plusPopover.classList.toggle('show');
+    setPlusOpen(!plusPopover.classList.contains('show'));
   };
   document.addEventListener('click', (e) => {
-    if (!plusPopover.contains(e.target) && e.target !== $('plusBtn')) {
-      plusPopover.classList.remove('show');
+    if (!plusPopover.contains(e.target) && !e.target.closest('#plusBtn')) {
+      setPlusOpen(false);
     }
   });
 
-  $('popUploadBtn').onclick = () => { plusPopover.classList.remove('show'); $('filePicker').click(); };
-  $('popShotBtn').onclick = () => { plusPopover.classList.remove('show'); sendChat('/screen'); };
-  $('popLiveDeskBtn').onclick = () => { plusPopover.classList.remove('show'); openDesktopModal(); };
-  $('popDiffBtn').onclick = () => { plusPopover.classList.remove('show'); openWsModal(); };
+  $('popUploadBtn').onclick = () => { setPlusOpen(false); $('filePicker').click(); };
+  $('popShotBtn').onclick = () => { setPlusOpen(false); sendChat('/screen'); };
+  $('popLiveDeskBtn').onclick = () => { setPlusOpen(false); openDesktopModal(); };
+  $('popDiffBtn').onclick = () => { setPlusOpen(false); openWsModal(); };
   $('popWsSwitchBtn').onclick = () => {
-    plusPopover.classList.remove('show');
+    setPlusOpen(false);
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'list_conversations' }));
     $('wsPickerModal').classList.add('show');
   };
@@ -2450,8 +2751,11 @@
       const name = w.split(/[\\/]/).pop() || w;
       const b = document.createElement('button');
       b.className = 'pill-btn';
-      if (w === currentWs) b.style.borderColor = '#fff';
-      b.textContent = '📁 ' + name;
+      if (w === currentWs) {
+        b.style.borderColor = 'rgba(255,255,255,0.45)';
+        b.style.background = 'rgba(255,255,255,0.13)';
+      }
+      b.textContent = name;
       b.title = w;
       b.onclick = () => startNewConversation(w);
       box.appendChild(b);

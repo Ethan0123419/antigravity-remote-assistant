@@ -675,8 +675,8 @@ class WebPwaServer:
                 "description": "专属远程电脑操控与全会话 AI 编程中枢",
                 "start_url": start_url,
                 "display": "standalone",
-                "background_color": "#212121",
-                "theme_color": "#212121",
+                "background_color": "#0D0D0F",
+                "theme_color": "#0D0D0F",
                 "orientation": "portrait-primary",
                 "icons": [
                     {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
