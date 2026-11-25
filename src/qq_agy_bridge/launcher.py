@@ -36,6 +36,7 @@ from typing import Callable
 
 from dotenv import dotenv_values
 
+from .beacon import detect_github_pages_info, publish_ios_pwa_and_beacon
 from .conversations import list_local_conversations
 from .maintenance import discover_default_cache_targets, run_safe_cache_cleanup
 from .web_pwa import ensure_web_access_token, get_lan_ipv4
@@ -577,7 +578,10 @@ class LauncherApp:
         self._busy = False
         self._closing = False
 
-        self._qr_mode = tk.StringVar(value="lan")
+        gh_info = detect_github_pages_info(settings.project_dir)
+        self._ios_pages_url: str = gh_info[3] if gh_info else ""
+        self._beacon_synced: bool = False
+        self._qr_mode = tk.StringVar(value="ios" if self._ios_pages_url else "lan")
         self._qr_photo_ref: list[tk.PhotoImage] = []
         self._conv_stats_str = "正在扫描电脑端会话..."
 
@@ -935,36 +939,49 @@ class LauncherApp:
         qr_hdr.pack(fill=tk.X)
         tk.Label(
             qr_hdr,
-            text="手机扫码直连",
+            text="扫码直连",
             bg=self.QR_SURFACE,
             fg=self.TEXT_PRIMARY,
             font=("Microsoft YaHei UI", 10, "bold"),
         ).pack(side=tk.LEFT)
 
-        self.qr_tab_lan = self._make_button(
+        self.qr_tab_ios = self._make_button(
             qr_hdr,
-            text="Wi-Fi 1ms",
-            command=lambda: self._switch_qr_mode("lan"),
+            text="📲 永久App",
+            command=lambda: self._switch_qr_mode("ios"),
             bg="#ECECEC",
             hover="#FFFFFF",
             fg="#0D0D0D",
-            padx=8,
+            padx=7,
+            pady=2,
+            font_size=8,
+        )
+        self.qr_tab_lan = self._make_button(
+            qr_hdr,
+            text="Wi-Fi",
+            command=lambda: self._switch_qr_mode("lan"),
+            bg="#2F2F2F",
+            hover="#3D3D3D",
+            fg="#B4B4B4",
+            padx=7,
             pady=2,
             font_size=8,
         )
         self.qr_tab_tunnel = self._make_button(
             qr_hdr,
-            text="4G/5G 外网",
+            text="外网",
             command=lambda: self._switch_qr_mode("tunnel"),
             bg="#2F2F2F",
             hover="#3D3D3D",
             fg="#B4B4B4",
-            padx=8,
+            padx=7,
             pady=2,
             font_size=8,
         )
-        self.qr_tab_tunnel.pack(side=tk.RIGHT, padx=(4, 0))
-        self.qr_tab_lan.pack(side=tk.RIGHT)
+        self.qr_tab_tunnel.pack(side=tk.RIGHT, padx=(3, 0))
+        self.qr_tab_lan.pack(side=tk.RIGHT, padx=(3, 0))
+        if self._ios_pages_url:
+            self.qr_tab_ios.pack(side=tk.RIGHT)
 
         self.qr_img_lbl = tk.Label(
             qr_card,
@@ -1232,7 +1249,10 @@ class LauncherApp:
 
     def _current_qr_url(self) -> str:
         tok = self.settings.web_access_token
-        if self._qr_mode.get() == "tunnel":
+        mode = self._qr_mode.get()
+        if mode == "ios" and self._ios_pages_url:
+            return f"{self._ios_pages_url}#key={tok}"
+        if mode == "tunnel":
             return f"{self._tunnel_url}/?token={tok}" if self._tunnel_url else ""
         lan_ip = get_lan_ipv4()
         return f"http://{lan_ip}:{self.settings.web_pwa_port}/?token={tok}"
@@ -1245,7 +1265,11 @@ class LauncherApp:
         if self._closing:
             return
         m = self._qr_mode.get()
-        for btn, active in ((self.qr_tab_lan, m == "lan"), (self.qr_tab_tunnel, m == "tunnel")):
+        for btn, active in (
+            (self.qr_tab_ios, m == "ios"),
+            (self.qr_tab_lan, m == "lan"),
+            (self.qr_tab_tunnel, m == "tunnel"),
+        ):
             bg = "#ECECEC" if active else "#2F2F2F"
             fg = "#0D0D0D" if active else "#B4B4B4"
             btn._base_bg = bg  # type: ignore[attr-defined]
@@ -1255,7 +1279,7 @@ class LauncherApp:
         if not target_u:
             self.qr_img_lbl.configure(
                 image="",
-                text="\n正在建立全球加密隧道...\n约 3~6 秒自动生成外网二维码\n（同 Wi-Fi 可点 Wi-Fi 1ms 秒扫）\n",
+                text="\n正在建立全球加密隧道...\n约 3~6 秒自动生成外网二维码\n（同 Wi-Fi 可点 Wi-Fi 秒扫）\n",
             )
             self.qr_url_lbl.configure(text="等待分配 https://*.trycloudflare.com")
             return
@@ -1271,8 +1295,14 @@ class LauncherApp:
             self._qr_photo_ref.clear()
             self._qr_photo_ref.append(photo)
             self.qr_img_lbl.configure(image=photo, text="")
-            masked = target_u.split("?token=")[0]
-            self.qr_url_lbl.configure(text=masked)
+            if m == "ios":
+                note = "iPhone 扫码 → 分享 → 添加到主屏幕 (永久有效)"
+                if not self._beacon_synced:
+                    note = "正在同步加密信标，稍候即可永久免重扫..."
+                self.qr_url_lbl.configure(text=note)
+            else:
+                masked = target_u.split("?token=")[0]
+                self.qr_url_lbl.configure(text=masked)
         except Exception as exc:
             self.qr_img_lbl.configure(image="", text=f"二维码渲染失败：{exc}")
 
@@ -1652,11 +1682,16 @@ class LauncherApp:
                         self._tunnel_url = m_cf.group(0)
                         self._enqueue_log(
                             "Tunnel",
-                            f"全球 4G/5G 加密隧道已就绪：{self._tunnel_url} （点右侧『4G/5G 外网』即可扫码）",
+                            f"全球 4G/5G 加密隧道已就绪：{self._tunnel_url}",
                             "tunnel",
                         )
                         self._post_ui(self._render_inline_qr)
                         threading.Thread(target=self._health_poll_worker, daemon=True).start()
+                        threading.Thread(
+                            target=self._sync_ios_beacon_worker,
+                            args=(self._tunnel_url,),
+                            daemon=True,
+                        ).start()
                     if not self._show_debug:
                         continue
 
@@ -1683,6 +1718,27 @@ class LauncherApp:
             code = proc.poll()
             if not self._closing and code is not None:
                 self._enqueue_log("系统", f"{source} 进程已退出（退出码 {code}）。", "warn")
+
+    def _sync_ios_beacon_worker(self, tunnel_url: str) -> None:
+        if not self._ios_pages_url or not tunnel_url:
+            return
+        lan_url = f"http://{get_lan_ipv4()}:{self.settings.web_pwa_port}"
+        ok, info = publish_ios_pwa_and_beacon(
+            self.settings.project_dir,
+            access_token=self.settings.web_access_token,
+            tunnel_url=tunnel_url,
+            lan_url=lan_url,
+        )
+        if ok:
+            self._beacon_synced = True
+            self._enqueue_log(
+                "Tunnel",
+                f"✓ 已自动同步 iPhone 永久 App 加密信标 -> {info} （添加到主屏幕后重启电脑也永久直连）",
+                "tunnel",
+            )
+            self._post_ui(self._render_inline_qr)
+        else:
+            self._enqueue_log("Tunnel", f"提示：永久 App 信标同步跳过 ({info})", "warn")
 
     def _stop_all_worker(self, include_external: bool) -> None:
         self._desired_running = False

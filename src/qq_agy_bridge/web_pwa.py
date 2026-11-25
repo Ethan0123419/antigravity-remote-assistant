@@ -701,11 +701,32 @@ class WebPwaServer:
                 {"Cache-Control": "no-cache"},
             )
 
-        if path in {"/icon-192.png", "/icon-512.png"}:
+        if path == "/ping":
+            body = json.dumps({"ok": True, "ts": int(time.time() * 1000)}).encode("utf-8")
+            return self._http_response(
+                200,
+                "OK",
+                body,
+                "application/json; charset=utf-8",
+                {
+                    "Cache-Control": "no-store",
+                    "Access-Control-Allow-Origin": "*",
+                },
+            )
+
+        if path in {"/apple-touch-icon.png", "/icon-192.png", "/icon-512.png"}:
             icon_file = ASSETS_DIR / path.lstrip("/")
+            if not icon_file.is_file() and path == "/apple-touch-icon.png":
+                icon_file = ASSETS_DIR / "icon-192.png"
             if icon_file.is_file():
                 body = await asyncio.to_thread(icon_file.read_bytes)
-                return self._http_response(200, "OK", body, "image/png", {"Cache-Control": "max-age=86400"})
+                return self._http_response(
+                    200,
+                    "OK",
+                    body,
+                    "image/png",
+                    {"Cache-Control": "max-age=86400", "Access-Control-Allow-Origin": "*"},
+                )
 
         if path == "/favicon.ico":
             ico_file = ASSETS_DIR / "app.ico"
@@ -717,12 +738,24 @@ class WebPwaServer:
             ip = self._client_ip(connection, request.headers)
             tok = self._extract_token(parsed.query, request.headers)
             if not self._verify_token(tok, ip):
-                return self._http_response(401, "Unauthorized", b"Unauthorized", "text/plain")
+                return self._http_response(
+                    401,
+                    "Unauthorized",
+                    b"Unauthorized",
+                    "text/plain",
+                    {"Access-Control-Allow-Origin": "*"},
+                )
 
             media_id = path.removeprefix("/dl/").strip("/")
             target = self._media_registry.get(media_id)
             if target is None or not is_safe_outbound_file(target, image_only=False):
-                return self._http_response(404, "Not Found", b"File Not Found", "text/plain")
+                return self._http_response(
+                    404,
+                    "Not Found",
+                    b"File Not Found",
+                    "text/plain",
+                    {"Access-Control-Allow-Origin": "*"},
+                )
 
             body = await asyncio.to_thread(target.read_bytes)
             mime, _ = mimetypes.guess_type(str(target))
@@ -737,6 +770,7 @@ class WebPwaServer:
                 {
                     "Content-Disposition": f"{disp_type}; filename*=UTF-8''{encoded_name}",
                     "Cache-Control": "private, max-age=3600",
+                    "Access-Control-Allow-Origin": "*",
                 },
             )
 

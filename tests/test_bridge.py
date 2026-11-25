@@ -769,3 +769,52 @@ async def test_live_pc_ide_window_delivery_and_transcript_streaming(tmp_path: Pa
         stop_event.set()
         await asyncio.wait_for(pwa_task, timeout=5.0)
         await sessions.shutdown_all()
+
+
+def test_encrypted_ios_pwa_beacon_roundtrip_and_tamper_rejection(tmp_path: Path) -> None:
+    from qq_agy_bridge.beacon import (
+        build_static_pwa_bundle,
+        decrypt_beacon_payload,
+        encrypt_beacon_payload,
+    )
+
+    secret = "my-secret-ios-pwa-token-2026"
+    orig = {
+        "tunnel_url": "https://fast-nebula-orbit.trycloudflare.com",
+        "lan_url": "http://192.168.1.88:8765",
+        "ts": 1795580000000,
+    }
+    env = encrypt_beacon_payload(orig, secret)
+    assert "fast-nebula-orbit" not in json.dumps(env)
+    assert "192.168.1.88" not in json.dumps(env)
+
+    dec = decrypt_beacon_payload(env, secret)
+    assert dec == orig
+
+    # Wrong token or tampered ciphertext MUST fail MAC check before decryption!
+    with pytest.raises(ValueError, match="MAC"):
+        decrypt_beacon_payload(env, "wrong-token-000000")
+
+    tampered = dict(env)
+    tampered["ct"] = ("A" if env["ct"][0] != "A" else "B") + env["ct"][1:]
+    with pytest.raises(ValueError, match="MAC"):
+        decrypt_beacon_payload(tampered, secret)
+
+    # Verify static iOS PWA bundle builder injects repo metadata & omits manifest start_url override
+    proj_root = Path(__file__).resolve().parents[1]
+    stage = tmp_path / "gh_pages_out"
+    build_static_pwa_bundle(
+        proj_root,
+        stage,
+        owner="wwd177",
+        repo="antigravity-remote-assistant",
+        access_token=secret,
+        tunnel_url=orig["tunnel_url"],
+        lan_url=orig["lan_url"],
+    )
+    assert (stage / "index.html").is_file()
+    assert 'data-beacon-repo="wwd177/antigravity-remote-assistant"' in (stage / "index.html").read_text(encoding="utf-8")
+    assert (stage / "apple-touch-icon.png").is_file()
+    assert (stage / "beacon.json").is_file()
+    manifest_obj = json.loads((stage / "manifest.json").read_text(encoding="utf-8"))
+    assert "start_url" not in manifest_obj
