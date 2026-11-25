@@ -20,10 +20,13 @@ import mimetypes
 import re
 import secrets
 import socket
+import sqlite3
+import subprocess
 import sys
 import time
 import uuid
 from collections import OrderedDict
+from collections.abc import Callable
 from http.cookies import SimpleCookie
 from pathlib import Path
 from typing import Any
@@ -34,11 +37,14 @@ from websockets.asyncio.server import ServerConnection
 from websockets.datastructures import Headers
 from websockets.http11 import Request, Response
 
-from .agy_session import AgySession, SessionManager
+from .agy_session import AgySession, SessionManager, TurnResult
 from .config import BridgeConfig
 from .conversations import (
+    SAVED_PATH_RE,
     ConversationDetail,
     _default_cli_dir,
+    _default_ide_dir,
+    _uri_to_local_path,
     build_ide_handoff_context,
     get_transcript_signature,
     list_local_conversations,
@@ -47,13 +53,16 @@ from .conversations import (
 )
 from .desktop_tools import (
     ALLOWED_IMAGE_EXTS,
+    CREATE_NO_WINDOW,
     MODEL_ALIASES,
     PROJECT_INBOX_DIR,
     SEND_FILE_RE,
     SEND_IMAGE_RE,
     THOUGHT_TAG_RE,
     _resolve_inside_workspace,
+    cancel_antigravity_ide_window_turn,
     capture_desktop_fast_jpeg_sync,
+    find_codex_cli_executable,
     get_workspace_file_diff,
     inspect_workspace_git,
     is_safe_outbound_file,
@@ -61,6 +70,7 @@ from .desktop_tools import (
     prune_inbox,
     read_workspace_file_preview,
     sanitize_filename,
+    send_prompt_to_antigravity_ide_window,
 )
 from .maintenance import discover_default_cache_targets, run_safe_cache_cleanup
 
@@ -227,6 +237,175 @@ def harvest_recent_cli_turn_images(
     return [p for _, p in found[-4:]]
 
 
+def read_ide_live_turn_snapshot(
+    ide_store_root: Path,
+    conversation_id: str,
+    baseline_lines: int,
+) -> dict[str, Any]:
+    """Read live progress of an active PC Antigravity IDE turn starting at `baseline_lines`."""
+    cid = (conversation_id or "").strip()
+    db_path = ide_store_root / "conversation_summaries.db"
+    has_db_row = False
+    db_running = False
+    if db_path.is_file():
+        try:
+            con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=1.5)
+            try:
+                row = con.execute(
+                    "SELECT status FROM conversation_summaries WHERE conversation_id = ?",
+                    (cid,),
+                ).fetchone()
+            finally:
+                con.close()
+            if row is not None:
+                has_db_row = True
+                db_running = "RUNNING" in str(row[0] or "").upper()
+        except Exception:
+            pass
+
+    tfile = ide_store_root / "brain" / cid / ".system_generated" / "logs" / "transcript.jsonl"
+    if not tfile.is_file():
+        return {
+            "total_lines": 0,
+            "mtime_ns": 0,
+            "size": 0,
+            "has_db_row": has_db_row,
+            "db_running": db_running,
+            "saw_user_input": False,
+            "saw_activity_after_user": False,
+            "last_planner_had_tools": False,
+            "latest_tool_name": "",
+            "text": "",
+            "images": [],
+        }
+
+    try:
+        st = tfile.stat()
+        mtime_ns, size = st.st_mtime_ns, st.st_size
+    except OSError:
+        mtime_ns, size = 0, 0
+
+    tail_entries: list[tuple[int, dict[str, Any]]] = []
+    trunc_lines: set[int] = set()
+    total_lines = 0
+    try:
+        with tfile.open("r", encoding="utf-8", errors="replace") as fh:
+            for ln_no, raw in enumerate(fh):
+                total_lines = ln_no + 1
+                if ln_no < baseline_lines:
+                    continue
+                s = raw.strip()
+                if not s:
+                    continue
+                try:
+                    obj = json.loads(s)
+                except json.JSONDecodeError:
+                    continue
+                tail_entries.append((ln_no, obj))
+                trunc = obj.get("truncated_fields") or []
+                if isinstance(trunc, list) and "content" in trunc and obj.get("type") == "PLANNER_RESPONSE":
+                    trunc_lines.add(ln_no)
+    except OSError:
+        pass
+
+    full_tfile = tfile.with_name("transcript_full.jsonl")
+    if trunc_lines and full_tfile.is_file():
+        max_ln = max(trunc_lines)
+        full_map: dict[int, dict[str, Any]] = {}
+        try:
+            with full_tfile.open("r", encoding="utf-8", errors="replace") as ffull:
+                for ln_no, raw in enumerate(ffull):
+                    if ln_no in trunc_lines:
+                        try:
+                            full_map[ln_no] = json.loads(raw)
+                        except json.JSONDecodeError:
+                            pass
+                    if ln_no >= max_ln:
+                        break
+        except OSError:
+            pass
+        if full_map:
+            tail_entries = [(ln_no, full_map.get(ln_no, obj)) for ln_no, obj in tail_entries]
+
+    last_user_pos = -1
+    for idx, (_, obj) in enumerate(tail_entries):
+        if obj.get("type") == "USER_INPUT" and obj.get("source") in {"USER_EXPLICIT", None, ""}:
+            last_user_pos = idx
+
+    saw_user_input = last_user_pos >= 0
+    saw_activity_after_user = False
+    last_planner_had_tools = False
+    latest_tool_name = ""
+    planner_blocks: list[str] = []
+    turn_images: list[Path] = []
+
+    def _add_img(p: Path) -> None:
+        try:
+            rp = p.resolve()
+            if rp.is_file() and rp not in turn_images:
+                turn_images.append(rp)
+        except OSError:
+            pass
+
+    if saw_user_input:
+        for _, obj in tail_entries[last_user_pos + 1 :]:
+            etype = obj.get("type")
+            if etype in {"PLANNER_RESPONSE", "GENERIC"}:
+                saw_activity_after_user = True
+
+            for m_item in obj.get("media") or []:
+                if isinstance(m_item, dict):
+                    uri = str(m_item.get("uri") or "").strip()
+                    mime = str(m_item.get("mime_type") or "").lower()
+                    if uri and (mime.startswith("image/") or Path(uri).suffix.lower() in ALLOWED_IMAGE_EXTS):
+                        _add_img(_uri_to_local_path(uri))
+
+            if etype == "GENERIC":
+                for sm in SAVED_PATH_RE.finditer(str(obj.get("content") or "")):
+                    _add_img(_uri_to_local_path(sm.group(1)))
+            elif etype == "PLANNER_RESPONSE":
+                tcalls = [tc for tc in (obj.get("tool_calls") or []) if isinstance(tc, dict)]
+                last_planner_had_tools = len(tcalls) > 0
+                if tcalls:
+                    latest_tool_name = str(tcalls[-1].get("name") or "")
+                content = str(obj.get("content") or "").strip()
+                if content:
+                    if not planner_blocks or planner_blocks[-1] != content:
+                        planner_blocks.append(content)
+                    if not tcalls:
+                        latest_tool_name = ""
+
+    return {
+        "total_lines": total_lines,
+        "mtime_ns": mtime_ns,
+        "size": size,
+        "has_db_row": has_db_row,
+        "db_running": db_running,
+        "saw_user_input": saw_user_input,
+        "saw_activity_after_user": saw_activity_after_user,
+        "last_planner_had_tools": last_planner_had_tools,
+        "latest_tool_name": latest_tool_name,
+        "text": "\n\n".join(planner_blocks).strip(),
+        "images": turn_images[-4:],
+    }
+
+
+def _extend_deduplicated_turns(base_hist: list[dict[str, Any]], extra_turns: list[dict[str, Any]]) -> None:
+    """Append `extra_turns` that are not already present in the recent tail of `base_hist`."""
+    recent_keys = {
+        (str(m.get("role") or ""), str(m.get("text") or "").strip())
+        for m in base_hist[-40:]
+        if isinstance(m, dict)
+    }
+    for item in extra_turns:
+        key = (str(item.get("role") or ""), str(item.get("text") or "").strip())
+        if key[1] and key in recent_keys:
+            continue
+        base_hist.append(item)
+        if key[1]:
+            recent_keys.add(key)
+
+
 class _UploadState:
     def __init__(self, path: Path, name: str, expected_size: int) -> None:
         self.path = path
@@ -261,6 +440,9 @@ class WebPwaServer:
         cli_store_dir: Path | None = None,
         codex_store_dir: Path | None = None,
         continuation_map_path: Path | None = None,
+        pc_window_sender: Callable[[str, str, str], tuple[bool, str]] | None = None,
+        pc_window_canceller: Callable[[str], bool] | None = None,
+        codex_cli_path: Path | None = None,
     ) -> None:
         self.config = config
         self.sessions = session_manager
@@ -268,6 +450,17 @@ class WebPwaServer:
         self.ide_store_dir = ide_store_dir
         self.cli_store_dir = cli_store_dir
         self.codex_store_dir = codex_store_dir
+        self._pc_window_sender: Callable[[str, str, str], tuple[bool, str]] | None = (
+            pc_window_sender
+            if pc_window_sender is not None
+            else (send_prompt_to_antigravity_ide_window if ide_store_dir is None else None)
+        )
+        self._pc_window_canceller: Callable[[str], bool] | None = (
+            pc_window_canceller
+            if pc_window_canceller is not None
+            else (cancel_antigravity_ide_window_turn if ide_store_dir is None else None)
+        )
+        self._codex_cli_override = codex_cli_path
         self._cont_map_path = continuation_map_path or (
             (cli_store_dir / "continuation_map.json") if cli_store_dir is not None else CONTINUATION_MAP_FILE
         )
@@ -288,6 +481,8 @@ class WebPwaServer:
         }
         self._cancelled_reply_ids: set[str] = set()
         self._ide_watch_sig: tuple[str, str, int, int] = ("", "", 0, 0)
+        self.pc_ide_poll_interval: float = 0.55
+        self.pc_ide_accept_timeout: float = 10.0
 
     def _load_continuation_map(self) -> dict[str, str]:
         if self._cont_map_path.is_file():
@@ -318,15 +513,23 @@ class WebPwaServer:
     def _history(self) -> list[dict[str, Any]]:
         return self._slot_history.setdefault(self._active_slot, [])
 
-    def _append_slot_history(self, slot_key: str, item: dict[str, Any]) -> None:
+    def _append_slot_history(
+        self, slot_key: str, item: dict[str, Any], *, persist_local: bool = True
+    ) -> None:
         arr = self._slot_history.setdefault(slot_key, [])
         arr.append(item)
         if len(arr) > 300:
             self._slot_history[slot_key] = arr[-300:]
-        loc = self._slot_local_turns.setdefault(slot_key, [])
-        loc.append(item)
-        if len(loc) > 100:
-            self._slot_local_turns[slot_key] = loc[-100:]
+        if persist_local:
+            loc = self._slot_local_turns.setdefault(slot_key, [])
+            loc.append(item)
+            if len(loc) > 100:
+                self._slot_local_turns[slot_key] = loc[-100:]
+
+    def _remove_slot_local_turn(self, slot_key: str, item_id: str) -> None:
+        loc = self._slot_local_turns.get(slot_key)
+        if loc:
+            self._slot_local_turns[slot_key] = [x for x in loc if x.get("id") != item_id]
 
     def _client_ip(self, connection: ServerConnection, headers: Headers | None = None) -> str:
         if headers is not None:
@@ -708,9 +911,19 @@ class WebPwaServer:
                 elif mtype == "cancel":
                     cur_slot = self._active_slot
                     inf = self._slot_inflight.get(cur_slot)
+                    killed = False
                     if inf and inf.get("msg_id"):
                         self._cancelled_reply_ids.add(str(inf["msg_id"]))
-                    killed = await self._session_for_slot(cur_slot).cancel_current()
+                    if inf and inf.get("pc_ide_cid") and self._pc_window_canceller is not None:
+                        killed = await asyncio.to_thread(self._pc_window_canceller, str(inf["pc_ide_cid"])) or True
+                    if inf and inf.get("codex_proc") is not None:
+                        proc_cdx = inf.get("codex_proc")
+                        try:
+                            proc_cdx.terminate()
+                            killed = True
+                        except Exception:
+                            pass
+                    killed = (await self._session_for_slot(cur_slot).cancel_current()) or killed
                     note = "已停止当前生成。" if killed else "当前没有运行中的任务。"
                     await ws.send(json.dumps({"type": "toast", "level": "info", "text": note}, ensure_ascii=False))
 
@@ -990,15 +1203,23 @@ class WebPwaServer:
                         self.codex_store_dir,
                     )
                     if cont_detail and cont_detail.messages:
-                        loaded_history.extend(
-                            self._convert_detail_to_pwa_history(cont_detail, session.model or "default")
-                        )
-                    elif self._slot_local_turns.get(slot_key):
-                        loaded_history.extend(self._slot_local_turns[slot_key])
+                        cont_hist = self._convert_detail_to_pwa_history(cont_detail, session.model or "default")
+                        _extend_deduplicated_turns(loaded_history, cont_hist)
+                        # Keep chronological order when newer PC turns occurred after an earlier fallback CLI turn
+                        if all(int(x.get("ts") or 0) > 0 for x in loaded_history) and len(loaded_history) > 1:
+                            loaded_history = [
+                                item
+                                for _, item in sorted(
+                                    enumerate(loaded_history),
+                                    key=lambda pair: (int(pair[1].get("ts") or 0), pair[0]),
+                                )
+                            ]
+                    if self._slot_local_turns.get(slot_key):
+                        _extend_deduplicated_turns(loaded_history, self._slot_local_turns[slot_key])
                 elif self._slot_local_turns.get(slot_key):
-                    loaded_history.extend(self._slot_local_turns[slot_key])
+                    _extend_deduplicated_turns(loaded_history, self._slot_local_turns[slot_key])
             elif self._slot_local_turns.get(slot_key) and not loaded_history:
-                loaded_history.extend(self._slot_local_turns[slot_key])
+                _extend_deduplicated_turns(loaded_history, self._slot_local_turns[slot_key])
             self._slot_history[slot_key] = loaded_history
 
         await self._broadcast(
@@ -1047,6 +1268,279 @@ class WebPwaServer:
             }
         )
 
+    async def _try_run_pc_ide_window_turn(
+        self,
+        *,
+        chat_slot: str,
+        ide_cid: str,
+        title: str,
+        prompt_text: str,
+        reply_id: str,
+        inflight_state: dict[str, Any],
+        turn_start_sec: float,
+        on_delta: Callable[[str], Any],
+        on_reset: Callable[[], Any],
+        on_tool: Callable[[str], Any],
+        on_status: Callable[[str], Any],
+    ) -> tuple[TurnResult, list[Path]] | None:
+        """Deliver `prompt_text` directly into the open PC Antigravity IDE window and stream its live transcript."""
+        if self._pc_window_sender is None or not ide_cid:
+            return None
+
+        ide_root = self.ide_store_dir if self.ide_store_dir is not None else _default_ide_dir()
+        base_snap = await asyncio.to_thread(read_ide_live_turn_snapshot, ide_root, ide_cid, 10**9)
+        baseline_lines = int(base_snap.get("total_lines") or 0)
+
+        await on_status("正在向电脑端窗口发送指令...")
+        delivered, note = await asyncio.to_thread(self._pc_window_sender, ide_cid, title, prompt_text)
+        if not delivered:
+            logger.info("PC IDE window delivery unavailable (%s), falling back to CLI: %s", ide_cid[:8], note)
+            return None
+
+        inflight_state["pc_ide_cid"] = ide_cid
+        await on_status("电脑端窗口已接收，正在执行...")
+
+        poll_sec = max(0.08, float(self.pc_ide_poll_interval))
+        accept_deadline = time.monotonic() + max(0.5, float(self.pc_ide_accept_timeout))
+        overall_deadline = time.monotonic() + max(30.0, float(self.config.agy_timeout_seconds))
+        last_sig: tuple[int, int, int, bool] = (
+            baseline_lines,
+            int(base_snap.get("mtime_ns") or 0),
+            int(base_snap.get("size") or 0),
+            bool(base_snap.get("db_running")),
+        )
+        last_change_mono = time.monotonic()
+        emitted_text = ""
+        last_tool = ""
+        final_snap = base_snap
+
+        while time.monotonic() < overall_deadline:
+            if reply_id in self._cancelled_reply_ids:
+                final_snap = await asyncio.to_thread(
+                    read_ide_live_turn_snapshot, ide_root, ide_cid, baseline_lines
+                )
+                return (
+                    TurnResult(
+                        status="CANCELLED",
+                        response=str(final_snap.get("text") or emitted_text),
+                        conversation_id=ide_cid,
+                        active_model="Antigravity 电脑端",
+                    ),
+                    list(final_snap.get("images") or []),
+                )
+
+            await asyncio.sleep(poll_sec)
+            snap = await asyncio.to_thread(read_ide_live_turn_snapshot, ide_root, ide_cid, baseline_lines)
+            final_snap = snap
+
+            cur_sig = (
+                int(snap.get("total_lines") or 0),
+                int(snap.get("mtime_ns") or 0),
+                int(snap.get("size") or 0),
+                bool(snap.get("db_running")),
+            )
+            if cur_sig != last_sig:
+                last_sig = cur_sig
+                last_change_mono = time.monotonic()
+
+            saw_u = bool(snap.get("saw_user_input"))
+            db_run = bool(snap.get("db_running"))
+
+            if not saw_u and not db_run and time.monotonic() >= accept_deadline:
+                logger.warning("PC IDE window did not record USER_INPUT within %.1fs, falling back to CLI", self.pc_ide_accept_timeout)
+                return None
+
+            if saw_u:
+                raw_txt = str(snap.get("text") or "")
+                clean_so_far = THOUGHT_TAG_RE.sub("", raw_txt).strip()
+                if clean_so_far != emitted_text:
+                    if clean_so_far.startswith(emitted_text):
+                        await on_delta(clean_so_far[len(emitted_text) :])
+                    else:
+                        await on_reset()
+                        if clean_so_far:
+                            await on_delta(clean_so_far)
+                    emitted_text = clean_so_far
+
+                tname = str(snap.get("latest_tool_name") or "")
+                if tname and tname != last_tool:
+                    last_tool = tname
+                    await on_tool(tname)
+
+                saw_act = bool(snap.get("saw_activity_after_user"))
+                has_db = bool(snap.get("has_db_row"))
+                quiet_elapsed = time.monotonic() - last_change_mono
+
+                if has_db:
+                    if saw_act and not db_run and quiet_elapsed >= min(1.0, poll_sec * 1.8):
+                        break
+                else:
+                    if saw_act and not bool(snap.get("last_planner_had_tools")) and quiet_elapsed >= min(1.4, poll_sec * 2.4):
+                        break
+
+        else:
+            return (
+                TurnResult(
+                    status="TIMEOUT",
+                    response=str(final_snap.get("text") or emitted_text),
+                    conversation_id=ide_cid,
+                    active_model="Antigravity 电脑端",
+                    error="电脑端会话执行超时，请查看电脑屏幕确认状态。",
+                ),
+                list(final_snap.get("images") or []),
+            )
+
+        # Final snapshot read + media folder harvest inside `ide_root`
+        final_snap = await asyncio.to_thread(read_ide_live_turn_snapshot, ide_root, ide_cid, baseline_lines)
+        ide_media = await asyncio.to_thread(harvest_recent_cli_turn_images, ide_root, ide_cid, turn_start_sec)
+        merged_imgs: list[Path] = list(final_snap.get("images") or [])
+        for mp in ide_media:
+            if mp not in merged_imgs:
+                merged_imgs.append(mp)
+
+        self._ide_watch_sig = (
+            "ide",
+            ide_cid,
+            int(final_snap.get("mtime_ns") or 0),
+            int(final_snap.get("size") or 0),
+        )
+        return (
+            TurnResult(
+                status="SUCCESS",
+                response=str(final_snap.get("text") or emitted_text),
+                conversation_id=ide_cid,
+                active_model="Antigravity 电脑端",
+            ),
+            merged_imgs,
+        )
+
+    async def _try_run_codex_cli_turn(
+        self,
+        *,
+        codex_cid: str,
+        workspace: Path,
+        prompt_text: str,
+        reply_id: str,
+        inflight_state: dict[str, Any],
+        on_delta: Callable[[str], Any],
+        on_tool: Callable[[str], Any],
+        on_status: Callable[[str], Any],
+    ) -> TurnResult | None:
+        """Resume an OpenAI Codex Desktop thread natively via `codex.exe exec resume <id>` when available."""
+        codex_exe = self._codex_cli_override
+        if codex_exe is None and self.codex_store_dir is None:
+            codex_exe = await asyncio.to_thread(find_codex_cli_executable)
+        if codex_exe is None or not codex_exe.is_file():
+            return None
+
+        PROJECT_INBOX_DIR.mkdir(parents=True, exist_ok=True)
+        last_msg_file = PROJECT_INBOX_DIR / f"codex_last_{uuid.uuid4().hex[:8]}.txt"
+        extra_kwargs: dict[str, Any] = {"creationflags": CREATE_NO_WINDOW} if sys.platform == "win32" else {}
+
+        await on_status("正在唤醒电脑端 Codex 会话...")
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                str(codex_exe),
+                "exec",
+                "resume",
+                "--all",
+                "--skip-git-repo-check",
+                "--json",
+                "-o",
+                str(last_msg_file),
+                codex_cid,
+                "-",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=str(workspace) if workspace.is_dir() else None,
+                **extra_kwargs,
+            )
+        except Exception as exc:
+            logger.info("Failed starting codex.exe resume (%s): %s", codex_cid[:8], exc)
+            return None
+
+        inflight_state["codex_proc"] = proc
+        emitted_blocks: list[str] = []
+
+        try:
+            if proc.stdin is not None:
+                proc.stdin.write(prompt_text.encode("utf-8"))
+                await proc.stdin.drain()
+                proc.stdin.close()
+
+            assert proc.stdout is not None
+            while True:
+                raw_line = await asyncio.wait_for(proc.stdout.readline(), timeout=self.config.agy_timeout_seconds)
+                if not raw_line:
+                    break
+                line = raw_line.decode("utf-8", errors="replace").strip()
+                if not line:
+                    continue
+                try:
+                    ev = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                ev_type = str(ev.get("type") or "")
+                item = ev.get("item") if isinstance(ev.get("item"), dict) else {}
+                itype = str(item.get("type") or "")
+                if ev_type in {"item.started", "item.updated"} and itype in {"command_execution", "mcp_tool_call"}:
+                    await on_tool(itype)
+                elif ev_type == "item.completed" and itype == "agent_message":
+                    txt = str(item.get("text") or "").strip()
+                    if txt:
+                        prefix = "\n\n" if emitted_blocks else ""
+                        emitted_blocks.append(txt)
+                        await on_delta(prefix + txt)
+
+            rc = await asyncio.wait_for(proc.wait(), timeout=15.0)
+            if reply_id in self._cancelled_reply_ids:
+                return TurnResult(
+                    status="CANCELLED",
+                    response="\n\n".join(emitted_blocks),
+                    conversation_id=codex_cid,
+                    active_model="Codex 电脑端",
+                )
+
+            final_txt = "\n\n".join(emitted_blocks).strip()
+            if last_msg_file.is_file():
+                file_txt = (await asyncio.to_thread(last_msg_file.read_text, "utf-8", "replace")).strip()
+                if file_txt:
+                    final_txt = file_txt
+
+            if rc != 0 and not final_txt:
+                return None
+
+            sig = await asyncio.to_thread(
+                get_transcript_signature,
+                codex_cid,
+                "codex",
+                self.ide_store_dir,
+                self.cli_store_dir,
+                self.codex_store_dir,
+            )
+            self._ide_watch_sig = ("codex", codex_cid, sig[0], sig[1])
+            return TurnResult(
+                status="SUCCESS",
+                response=final_txt,
+                conversation_id=codex_cid,
+                active_model="Codex 电脑端",
+            )
+        except Exception as exc:
+            logger.info("Codex CLI turn fallback (%s): %s", codex_cid[:8], exc)
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            return None
+        finally:
+            inflight_state.pop("codex_proc", None)
+            try:
+                if last_msg_file.is_file():
+                    last_msg_file.unlink()
+            except OSError:
+                pass
+
     async def _handle_chat(self, msg: dict[str, Any]) -> None:
         raw_text = str(msg.get("text") or "").strip()
         client_id = str(msg.get("client_id") or f"u-{uuid.uuid4().hex[:10]}")
@@ -1056,6 +1550,10 @@ class WebPwaServer:
 
         chat_slot = self._active_slot
         session = self._session_for_slot(chat_slot)
+        slot_meta = self._slot_meta.get(chat_slot, {})
+        slot_store = str(slot_meta.get("store") or (session.linked_store if session.linked_ide_id else ""))
+        slot_cid = str(slot_meta.get("conversation_id") or session.linked_ide_id or "")
+        slot_title = str(slot_meta.get("title") or session.active_title or "")
 
         user_entry = {
             "role": "user",
@@ -1097,10 +1595,15 @@ class WebPwaServer:
             return
 
         reply_id = f"a-{uuid.uuid4().hex[:10]}"
+        initial_model_label = (
+            "Antigravity 电脑端"
+            if slot_store == "ide"
+            else ("Codex 电脑端" if slot_store == "codex" else (session.model or "default"))
+        )
         inflight_state: dict[str, Any] = {
             "msg_id": reply_id,
             "slot": chat_slot,
-            "model": session.model or "default",
+            "model": initial_model_label,
             "text": "",
             "status": "正在思考...",
         }
@@ -1111,7 +1614,7 @@ class WebPwaServer:
                     "type": "stream_start",
                     "slot": chat_slot,
                     "msg_id": reply_id,
-                    "model": session.model or "default",
+                    "model": initial_model_label,
                 }
             )
 
@@ -1128,35 +1631,83 @@ class WebPwaServer:
             if self._active_slot == chat_slot:
                 await self._broadcast({"type": "stream_reset", "slot": chat_slot, "msg_id": reply_id})
 
+        async def _on_status(status_txt: str) -> None:
+            inflight_state["status"] = status_txt
+            if self._active_slot == chat_slot:
+                await self._broadcast(
+                    {"type": "stream_status", "slot": chat_slot, "msg_id": reply_id, "status": status_txt}
+                )
+
         async def _on_tool(tool_name: str) -> None:
             tlow = tool_name.lower()
             if "screenshot" in tlow or "snapshot" in tlow:
-                hint = "正在截取电脑画面..."
+                hint = "电脑端正在截取画面..."
+            elif "edit" in tlow or "write" in tlow:
+                hint = "电脑端正在修改代码..."
             elif "mcp" in tlow or "command" in tlow:
-                hint = "正在操作电脑..."
+                hint = "电脑端正在执行命令..."
             else:
-                hint = "正在检索与处理..."
-            inflight_state["status"] = hint
-            if self._active_slot == chat_slot:
-                await self._broadcast(
-                    {"type": "stream_status", "slot": chat_slot, "msg_id": reply_id, "status": hint}
-                )
+                hint = "电脑端正在检索与处理..."
+            await _on_status(hint)
 
         turn_start_sec = time.time()
         partial_before_finish = ""
+        pc_direct_persisted = False
+        extra_pc_images: list[Path] = []
+        result: TurnResult | None = None
+
         try:
-            result = await session.ask(
-                prompt_text,
-                on_delay_notice=None,
-                on_stream_delta=_on_delta,
-                on_stream_reset=_on_reset,
-                on_tool_start=_on_tool,
-            )
+            # 1. If viewing a PC Antigravity IDE conversation, deliver directly into the live PC IDE window first!
+            if slot_store == "ide" and slot_cid:
+                pc_ide_out = await self._try_run_pc_ide_window_turn(
+                    chat_slot=chat_slot,
+                    ide_cid=slot_cid,
+                    title=slot_title,
+                    prompt_text=prompt_text,
+                    reply_id=reply_id,
+                    inflight_state=inflight_state,
+                    turn_start_sec=turn_start_sec,
+                    on_delta=_on_delta,
+                    on_reset=_on_reset,
+                    on_tool=_on_tool,
+                    on_status=_on_status,
+                )
+                if pc_ide_out is not None:
+                    result, extra_pc_images = pc_ide_out
+                    pc_direct_persisted = True
+
+            # 2. If viewing a PC OpenAI Codex conversation, resume natively via `codex.exe exec resume` first!
+            elif slot_store == "codex" and slot_cid:
+                cdx_out = await self._try_run_codex_cli_turn(
+                    codex_cid=slot_cid,
+                    workspace=session.workspace,
+                    prompt_text=prompt_text,
+                    reply_id=reply_id,
+                    inflight_state=inflight_state,
+                    on_delta=_on_delta,
+                    on_tool=_on_tool,
+                    on_status=_on_status,
+                )
+                if cdx_out is not None:
+                    result = cdx_out
+                    pc_direct_persisted = True
+
+            # 3. Fallback to standalone `agy.exe` session when in a mobile/CLI chat or when PC desktop app is closed
+            if result is None:
+                if slot_store in {"ide", "codex"} and (self._pc_window_sender is not None or slot_store == "codex"):
+                    await _on_status("桌面窗口未就绪，已切换后台引擎接力处理...")
+                result = await session.ask(
+                    prompt_text,
+                    on_delay_notice=None,
+                    on_stream_delta=_on_delta,
+                    on_stream_reset=_on_reset,
+                    on_tool_start=_on_tool,
+                )
         finally:
             partial_before_finish = str(inflight_state.get("text") or "")
             if self._slot_inflight.get(chat_slot) is inflight_state:
                 self._slot_inflight.pop(chat_slot, None)
-            if session.linked_ide_id and session.conversation_id:
+            if not pc_direct_persisted and session.linked_ide_id and session.conversation_id:
                 map_key = f"{session.linked_store}:{session.linked_ide_id}" if session.linked_store else session.linked_ide_id
                 self._continuation_map[map_key] = session.conversation_id
                 self._continuation_map[session.linked_ide_id] = session.conversation_id
@@ -1170,7 +1721,7 @@ class WebPwaServer:
             if result.switched_from_model and result.active_model:
                 note = f"（注：{result.switched_from_model} 额度已满，已自动切到 {result.active_model}）"
                 clean_text = f"{clean_text}\n\n{note}" if clean_text else note
-        elif was_user_cancelled:
+        elif was_user_cancelled or result.status == "CANCELLED":
             clean_resp, img_paths, file_paths = extract_pwa_media_and_text(result.response or partial_before_finish)
             clean_text = f"{clean_resp}\n\n⏹ 已停止生成。".strip() if clean_resp else "⏹ 已停止生成。"
         else:
@@ -1178,17 +1729,24 @@ class WebPwaServer:
             err = result.error or f"执行未成功 ({result.status})"
             clean_text = f"{clean_resp}\n\n刚才这步出了点状况：\n{err}".strip()
 
-        # Also harvest any screenshots captured by MCP / browser tools during this turn
-        cli_root = self.cli_store_dir if self.cli_store_dir is not None else _default_cli_dir()
-        harvested = await asyncio.to_thread(
-            harvest_recent_cli_turn_images,
-            cli_root,
-            result.conversation_id or session.conversation_id,
-            turn_start_sec,
-        )
-        for hp in harvested:
-            if hp not in img_paths:
-                img_paths.append(hp)
+        for ep in extra_pc_images:
+            if ep not in img_paths and is_safe_outbound_file(ep, image_only=True):
+                img_paths.append(ep)
+
+        if not pc_direct_persisted:
+            cli_root = self.cli_store_dir if self.cli_store_dir is not None else _default_cli_dir()
+            harvested = await asyncio.to_thread(
+                harvest_recent_cli_turn_images,
+                cli_root,
+                result.conversation_id or session.conversation_id,
+                turn_start_sec,
+            )
+            for hp in harvested:
+                if hp not in img_paths:
+                    img_paths.append(hp)
+        else:
+            # Turn was written directly into the PC IDE / Codex transcript — avoid duplicating in `_slot_local_turns`!
+            self._remove_slot_local_turn(chat_slot, client_id)
 
         if result.status == "SUCCESS" and not clean_text and not img_paths and not file_paths:
             clean_text = "已完成。"
@@ -1217,7 +1775,7 @@ class WebPwaServer:
             "model": result.active_model or session.model or "default",
             "ts": int(time.time() * 1000),
         }
-        self._append_slot_history(chat_slot, assistant_entry)
+        self._append_slot_history(chat_slot, assistant_entry, persist_local=not pc_direct_persisted)
         if self._active_slot == chat_slot:
             await self._broadcast({"type": "stream_end", "slot": chat_slot, "item": assistant_entry})
         else:
@@ -1405,9 +1963,18 @@ class WebPwaServer:
                         self.codex_store_dir,
                     )
                     if cont_detail and cont_detail.messages:
-                        loaded_history.extend(
-                            self._convert_detail_to_pwa_history(cont_detail, session.model or "default")
-                        )
+                        cont_hist = self._convert_detail_to_pwa_history(cont_detail, session.model or "default")
+                        _extend_deduplicated_turns(loaded_history, cont_hist)
+                        if all(int(x.get("ts") or 0) > 0 for x in loaded_history) and len(loaded_history) > 1:
+                            loaded_history = [
+                                item
+                                for _, item in sorted(
+                                    enumerate(loaded_history),
+                                    key=lambda pair: (int(pair[1].get("ts") or 0), pair[0]),
+                                )
+                            ]
+                if self._slot_local_turns.get(cur_slot):
+                    _extend_deduplicated_turns(loaded_history, self._slot_local_turns[cur_slot])
 
                 self._slot_history[cur_slot] = loaded_history
                 await self._broadcast(

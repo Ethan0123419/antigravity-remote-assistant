@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import logging
+import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -356,3 +359,490 @@ def read_workspace_file_preview(workspace: Path, rel_path: str, max_chars: int =
         }
     except OSError as exc:
         return {"ok": False, "path": rel_clean, "error": str(exc)}
+
+
+_CACHED_CODEX_CLI: Path | None = None
+_CODEX_CLI_CHECKED: bool = False
+
+
+def find_codex_cli_executable() -> Path | None:
+    """Locate official OpenAI `codex.exe` CLI (PATH or WindowsApps `OpenAI.Codex` bundle)."""
+    global _CACHED_CODEX_CLI, _CODEX_CLI_CHECKED
+    if _CODEX_CLI_CHECKED:
+        return _CACHED_CODEX_CLI
+    _CODEX_CLI_CHECKED = True
+
+    direct = shutil.which("codex")
+    if direct:
+        p = Path(direct)
+        if p.is_file():
+            _CACHED_CODEX_CLI = p
+            return p
+
+    if sys.platform == "win32":
+        try:
+            res = subprocess.run(
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-WindowStyle",
+                    "Hidden",
+                    "-Command",
+                    "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; "
+                    "$pkg = Get-AppxPackage -Name 'OpenAI.Codex' -ErrorAction SilentlyContinue | "
+                    "Sort-Object Version -Descending | Select-Object -First 1; "
+                    "if ($pkg) { Join-Path $pkg.InstallLocation 'app\\resources\\codex.exe' }",
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+                creationflags=CREATE_NO_WINDOW,
+            )
+            cand_raw = (res.stdout or "").strip().splitlines()
+            if cand_raw:
+                cand = Path(cand_raw[-1].strip())
+                if cand.is_file():
+                    _CACHED_CODEX_CLI = cand
+                    return cand
+        except Exception as exc:
+            logger.debug("Codex CLI discovery skipped: %s", exc)
+
+    return None
+
+
+def send_prompt_to_antigravity_ide_window(
+    conversation_id: str,
+    title: str,
+    prompt: str,
+) -> tuple[bool, str]:
+    """Deliver a user prompt directly into the live PC Antigravity Desktop IDE window via Windows UIA.
+
+    Switches to `conversation_id` in the left Sidebar if another chat is currently shown, verifies the
+    active webview Document URL matches `/c/<conversation_id>`, pastes `prompt` via Clipboard (`Ctrl+V`,
+    immune to Chinese Pinyin IME composition), and presses `Enter`.
+    """
+    if sys.platform != "win32":
+        return (False, "仅支持 Windows 桌面窗口投递")
+
+    cid = (conversation_id or "").strip()
+    if not cid:
+        return (False, "会话 ID 为空")
+
+    ps_script = r"""
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms
+
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class AgyWin32 {
+    [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, UIntPtr dwExtraInfo);
+    [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+    public static void ClickAt(int x, int y) {
+        SetCursorPos(x, y);
+        System.Threading.Thread.Sleep(35);
+        mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(25);
+        mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+    }
+
+    public static void WheelDownAt(int x, int y) {
+        SetCursorPos(x, y);
+        System.Threading.Thread.Sleep(30);
+        mouse_event(0x0800, 0, 0, -480, UIntPtr.Zero);
+    }
+
+    public static void PasteAndEnter() {
+        keybd_event(0x11, 0, 0, UIntPtr.Zero);
+        keybd_event(0x56, 0, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(25);
+        keybd_event(0x56, 0, 0x0002, UIntPtr.Zero);
+        keybd_event(0x11, 0, 0x0002, UIntPtr.Zero);
+    }
+
+    public static void PressEnter() {
+        keybd_event(0x0D, 0, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(25);
+        keybd_event(0x0D, 0, 0x0002, UIntPtr.Zero);
+    }
+}
+"@
+
+[AgyWin32]::SetProcessDPIAware() | Out-Null
+
+$targetCid = $env:AGY_TARGET_CID
+$targetTitle = $env:AGY_TARGET_TITLE
+$promptBytes = [Convert]::FromBase64String($env:AGY_PROMPT_B64)
+$promptText = [System.Text.Encoding]::UTF8.GetString($promptBytes)
+
+$root = [System.Windows.Automation.AutomationElement]::RootElement
+$topChildren = $root.FindAll(
+    [System.Windows.Automation.TreeScope]::Children,
+    [System.Windows.Automation.Condition]::TrueCondition
+)
+
+$agyWin = $null
+foreach ($el in $topChildren) {
+    try {
+        $hwndVal = $el.Current.NativeWindowHandle
+        if ($hwndVal -eq 0) { continue }
+        $proc = Get-Process -Id $el.Current.ProcessId -ErrorAction SilentlyContinue
+        if ($null -eq $proc -or $proc.ProcessName -ne 'Antigravity') { continue }
+        $agyWin = $el
+        if ($el.Current.Name -match 'Antigravity') { break }
+    } catch {}
+}
+
+if ($null -eq $agyWin) {
+    Write-Output "ERR:未检测到打开的 Antigravity 桌面端窗口"
+    exit 0
+}
+
+$hwnd = [IntPtr]$agyWin.Current.NativeWindowHandle
+$winPid = $agyWin.Current.ProcessId
+if ([AgyWin32]::IsIconic($hwnd)) {
+    [AgyWin32]::ShowWindow($hwnd, 9) | Out-Null
+    Start-Sleep -Milliseconds 220
+}
+try {
+    $wshell = New-Object -ComObject WScript.Shell
+    $wshell.AppActivate($winPid) | Out-Null
+} catch {}
+[AgyWin32]::BringWindowToTop($hwnd) | Out-Null
+[AgyWin32]::SetForegroundWindow($hwnd) | Out-Null
+Start-Sleep -Milliseconds 140
+
+function Get-ActiveCid($winEl) {
+    $docCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Document
+    )
+    $docs = $winEl.FindAll([System.Windows.Automation.TreeScope]::Descendants, $docCond)
+    foreach ($d in $docs) {
+        try {
+            $vp = $d.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+            if ($null -ne $vp) {
+                $u = [string]$vp.Current.Value
+                if ($u -match '/c/([A-Za-z0-9_-]{6,80})') {
+                    return $Matches[1]
+                }
+            }
+        } catch {}
+    }
+    return ""
+}
+
+function Find-ConversationLink($scopeEl, $cidStr, $titleStr) {
+    $linkCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Hyperlink
+    )
+    $links = $scopeEl.FindAll([System.Windows.Automation.TreeScope]::Descendants, $linkCond)
+    $bestByTitle = $null
+    foreach ($lnk in $links) {
+        try {
+            $vp = $null
+            if ($lnk.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$vp)) {
+                $href = [string]$vp.Current.Value
+                if ($href -match ("/c/" + [regex]::Escape($cidStr) + "([/?#]|$)")) {
+                    return $lnk
+                }
+            }
+            if ($null -eq $bestByTitle -and $titleStr.Length -gt 0) {
+                $rawName = [string]$lnk.Current.Name
+                $cleanName = ($rawName -replace '\s+\d+\s*(秒|分钟|小时|天|周|个月|年).*$', '').Trim()
+                if ($cleanName -eq $titleStr) {
+                    $bestByTitle = $lnk
+                } elseif ($cleanName.Length -ge 4) {
+                    $stem = ($cleanName -replace '(\.\.\.|…)+$', '').Trim()
+                    if ($stem.Length -ge 4 -and $titleStr.StartsWith($stem, [System.StringComparison]::OrdinalIgnoreCase)) {
+                        $bestByTitle = $lnk
+                    } elseif ($cleanName.StartsWith($titleStr, [System.StringComparison]::OrdinalIgnoreCase)) {
+                        $bestByTitle = $lnk
+                    }
+                }
+            }
+        } catch {}
+    }
+    return $bestByTitle
+}
+
+function Activate-Element($el) {
+    $rect = $el.Current.BoundingRectangle
+    if (-not $rect.IsEmpty -and $rect.Width -gt 4 -and $rect.Height -gt 4) {
+        $x = [int]($rect.Left + [Math]::Min(90, $rect.Width / 2))
+        $y = [int]($rect.Top + ($rect.Height / 2))
+        [AgyWin32]::ClickAt($x, $y)
+        return $true
+    }
+    $inv = $null
+    if ($el.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$inv)) {
+        $inv.Invoke()
+        return $true
+    }
+    return $false
+}
+
+$activeCid = Get-ActiveCid $agyWin
+if ($activeCid -ne $targetCid) {
+    $navCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Custom
+    )
+    $sidebar = $null
+    $allDesc = $agyWin.FindAll(
+        [System.Windows.Automation.TreeScope]::Descendants,
+        (New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::NameProperty,
+            "Sidebar"
+        ))
+    )
+    if ($allDesc.Count -gt 0) {
+        $sidebar = $allDesc.Item(0)
+    } else {
+        $toggleBtns = $agyWin.FindAll(
+            [System.Windows.Automation.TreeScope]::Descendants,
+            (New-Object System.Windows.Automation.PropertyCondition(
+                [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+                [System.Windows.Automation.ControlType]::Button
+            ))
+        )
+        foreach ($b in $toggleBtns) {
+            if ($b.Current.Name -match '切换侧边栏|Toggle Sidebar') {
+                Activate-Element $b | Out-Null
+                Start-Sleep -Milliseconds 280
+                break
+            }
+        }
+        $allDesc2 = $agyWin.FindAll(
+            [System.Windows.Automation.TreeScope]::Descendants,
+            (New-Object System.Windows.Automation.PropertyCondition(
+                [System.Windows.Automation.AutomationElement]::NameProperty,
+                "Sidebar"
+            ))
+        )
+        if ($allDesc2.Count -gt 0) { $sidebar = $allDesc2.Item(0) }
+    }
+
+    $searchScope = if ($null -ne $sidebar) { $sidebar } else { $agyWin }
+    $targetLink = Find-ConversationLink $searchScope $targetCid $targetTitle
+
+    if ($null -eq $targetLink -and $null -ne $sidebar) {
+        $sRect = $sidebar.Current.BoundingRectangle
+        if (-not $sRect.IsEmpty -and $sRect.Width -gt 20 -and $sRect.Height -gt 60) {
+            $sx = [int]($sRect.Left + ($sRect.Width / 2))
+            $sy = [int]($sRect.Top + ($sRect.Height * 0.65))
+            for ($sc = 0; $sc -lt 4; $sc++) {
+                [AgyWin32]::WheelDownAt($sx, $sy)
+                Start-Sleep -Milliseconds 220
+                $targetLink = Find-ConversationLink $sidebar $targetCid $targetTitle
+                if ($null -ne $targetLink) { break }
+            }
+        }
+    }
+
+    if ($null -ne $targetLink) {
+        Activate-Element $targetLink | Out-Null
+        for ($w = 0; $w -lt 14; $w++) {
+            Start-Sleep -Milliseconds 180
+            $activeCid = Get-ActiveCid $agyWin
+            if ($activeCid -eq $targetCid) { break }
+        }
+    }
+
+    $activeCid = Get-ActiveCid $agyWin
+    if ($activeCid -ne "" -and $activeCid -ne $targetCid) {
+        Write-Output "ERR:桌面端当前未能切换到该会话窗口"
+        exit 0
+    }
+}
+
+$comboCond = New-Object System.Windows.Automation.PropertyCondition(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::ComboBox
+)
+$msgBox = $null
+$combos = $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, $comboCond)
+foreach ($cb in $combos) {
+    if ($cb.Current.Name -match 'Message input|输入任何问题') {
+        $msgBox = $cb
+        break
+    }
+}
+if ($null -eq $msgBox) {
+    $editCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Edit
+    )
+    $edits = $agyWin.FindAll([System.Windows.Automation.TreeScope]::Descendants, $editCond)
+    foreach ($ed in $edits) {
+        if ($ed.Current.Name -match 'Message input|输入任何问题') {
+            $msgBox = $ed
+            break
+        }
+    }
+}
+
+if ($null -eq $msgBox) {
+    Write-Output "ERR:未找到桌面端对话输入框 (Message input)"
+    exit 0
+}
+
+$boxRect = $msgBox.Current.BoundingRectangle
+if ($boxRect.IsEmpty -or $boxRect.Width -lt 30 -or $boxRect.Height -lt 10) {
+    Write-Output "ERR:桌面端对话输入框当前不可见"
+    exit 0
+}
+
+$hadText = $false
+$oldClip = ""
+try {
+    if ([System.Windows.Forms.Clipboard]::ContainsText()) {
+        $hadText = $true
+        $oldClip = [System.Windows.Forms.Clipboard]::GetText()
+    }
+} catch {}
+
+[AgyWin32]::SetForegroundWindow($hwnd) | Out-Null
+$cx = [int]($boxRect.Left + [Math]::Min(120, $boxRect.Width / 2))
+$cy = [int]($boxRect.Top + ($boxRect.Height / 2))
+[AgyWin32]::ClickAt($cx, $cy)
+Start-Sleep -Milliseconds 140
+
+[System.Windows.Forms.Clipboard]::SetText($promptText)
+Start-Sleep -Milliseconds 60
+[AgyWin32]::PasteAndEnter()
+Start-Sleep -Milliseconds 230
+[AgyWin32]::PressEnter()
+Start-Sleep -Milliseconds 200
+
+if ($hadText) {
+    try { [System.Windows.Forms.Clipboard]::SetText($oldClip) } catch {}
+}
+
+Write-Output "OK:已投递至电脑端 Antigravity 窗口"
+"""
+
+    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
+    env = os.environ.copy()
+    env["AGY_TARGET_CID"] = cid
+    env["AGY_TARGET_TITLE"] = (title or "").strip()
+    env["AGY_PROMPT_B64"] = base64.b64encode((prompt or "").encode("utf-8")).decode("ascii")
+
+    try:
+        res = subprocess.run(
+            [
+                "powershell.exe",
+                "-Sta",
+                "-NoProfile",
+                "-NonInteractive",
+                "-WindowStyle",
+                "Hidden",
+                "-EncodedCommand",
+                encoded,
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=16,
+            creationflags=CREATE_NO_WINDOW,
+        )
+        lines = [ln.strip() for ln in (res.stdout or "").splitlines() if ln.strip()]
+        for ln in reversed(lines):
+            if ln.startswith("OK:"):
+                return (True, ln.removeprefix("OK:").strip())
+            if ln.startswith("ERR:"):
+                return (False, ln.removeprefix("ERR:").strip())
+        err_tail = (res.stderr or "").strip()[:160]
+        return (False, f"桌面窗口投递未返回确认 {err_tail}".strip())
+    except Exception as exc:
+        return (False, f"桌面窗口投递异常：{exc}")
+
+
+def cancel_antigravity_ide_window_turn(conversation_id: str) -> bool:
+    """Click the Stop/Cancel button in the open PC Antigravity IDE window if matching `conversation_id`."""
+    if sys.platform != "win32" or not (conversation_id or "").strip():
+        return False
+
+    ps_script = r"""
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class AgyStopWin32 {
+    [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, UIntPtr dwExtraInfo);
+    public static void ClickAt(int x, int y) {
+        SetCursorPos(x, y);
+        System.Threading.Thread.Sleep(30);
+        mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(25);
+        mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+    }
+}
+"@
+[AgyStopWin32]::SetProcessDPIAware() | Out-Null
+$cid = $env:AGY_TARGET_CID
+$root = [System.Windows.Automation.AutomationElement]::RootElement
+foreach ($el in $root.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)) {
+    try {
+        if ($el.Current.NativeWindowHandle -eq 0) { continue }
+        $p = Get-Process -Id $el.Current.ProcessId -ErrorAction SilentlyContinue
+        if ($null -eq $p -or $p.ProcessName -ne 'Antigravity') { continue }
+        $docs = $el.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Document)))
+        $matched = $false
+        foreach ($d in $docs) {
+            try {
+                $vp = $d.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+                if ([string]$vp.Current.Value -match ("/c/" + [regex]::Escape($cid))) { $matched = $true; break }
+            } catch {}
+        }
+        if (-not $matched) { continue }
+        $btns = $el.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)))
+        foreach ($b in $btns) {
+            if ($b.Current.Name -match '取消|停止|Stop|Cancel') {
+                $r = $b.Current.BoundingRectangle
+                if (-not $r.IsEmpty -and $r.Width -gt 6) {
+                    [AgyStopWin32]::SetForegroundWindow([IntPtr]$el.Current.NativeWindowHandle) | Out-Null
+                    [AgyStopWin32]::ClickAt([int]($r.Left + $r.Width / 2), [int]($r.Top + $r.Height / 2))
+                    Write-Output "STOPPED"
+                    exit 0
+                }
+            }
+        }
+    } catch {}
+}
+"""
+    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
+    env = os.environ.copy()
+    env["AGY_TARGET_CID"] = conversation_id.strip()
+    try:
+        res = subprocess.run(
+            ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=8,
+            creationflags=CREATE_NO_WINDOW,
+        )
+        return "STOPPED" in (res.stdout or "")
+    except Exception:
+        return False

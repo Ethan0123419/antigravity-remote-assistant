@@ -639,3 +639,133 @@ async def test_switching_conversations_never_kills_running_command(tmp_path: Pat
         stop_event.set()
         await asyncio.wait_for(pwa_task, timeout=5.0)
         await sessions.shutdown_all()
+
+
+@pytest.mark.asyncio
+async def test_live_pc_ide_window_delivery_and_transcript_streaming(tmp_path: Path) -> None:
+    """Verify sending a prompt inside an open PC Antigravity IDE conversation drives the PC window directly,
+    streams live transcript deltas + screenshots back to mobile, and never duplicates turns on refresh.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    ide_store = tmp_path / "ide_pc_live"
+    ide_cid = "0318a60f-e198-4f1d-8d52-e88a0cae38cc"
+    tf = ide_store / "brain" / ide_cid / ".system_generated" / "logs" / "transcript.jsonl"
+    tf.parent.mkdir(parents=True)
+    tf.write_text(
+        json.dumps({"step_index": 0, "type": "USER_INPUT", "source": "USER_EXPLICIT", "content": "初始桌面消息"}, ensure_ascii=False)
+        + "\n"
+        + json.dumps({"step_index": 1, "type": "PLANNER_RESPONSE", "source": "MODEL", "content": "初始桌面回复"}, ensure_ascii=False)
+        + "\n",
+        encoding="utf-8",
+    )
+
+    db_path = ide_store / "conversation_summaries.db"
+    con = sqlite3.connect(db_path)
+    con.execute(
+        "CREATE TABLE conversation_summaries ("
+        "conversation_id TEXT, title TEXT, preview TEXT, step_count INT, "
+        "last_modified_time TEXT, workspace_uris TEXT, status TEXT, "
+        "source TEXT, app_data_dir TEXT, nesting_depth INT, killed INT)"
+    )
+    con.execute(
+        "INSERT INTO conversation_summaries VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (ide_cid, "ChatGPT UI Browser Extension", "初始桌面回复", 2, "2026-11-25 04:00:00+00:00", "", "CASCADE_RUN_STATUS_IDLE", "", str(ide_store), 0, 0),
+    )
+    con.commit()
+    con.close()
+
+    shot_file = tmp_path / "pc_live_shot.png"
+    shot_file.write_bytes(b"\x89PNG\r\n\x1a\n" + b"S" * 120)
+
+    delivered_calls: list[tuple[str, str, str]] = []
+
+    def _fake_pc_window_sender(cid: str, title: str, prompt: str) -> tuple[bool, str]:
+        delivered_calls.append((cid, title, prompt))
+
+        def _simulate_pc_ide_execution() -> None:
+            time.sleep(0.08)
+            c1 = sqlite3.connect(db_path)
+            c1.execute("UPDATE conversation_summaries SET status = 'CASCADE_RUN_STATUS_RUNNING' WHERE conversation_id = ?", (cid,))
+            c1.commit()
+            c1.close()
+            with tf.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"step_index": 2, "type": "USER_INPUT", "source": "USER_EXPLICIT", "content": f"<USER_REQUEST>{prompt}</USER_REQUEST>"}, ensure_ascii=False) + "\n")
+                fh.write(json.dumps({"step_index": 3, "type": "PLANNER_RESPONSE", "source": "MODEL", "content": "正在检查电脑端页面...", "tool_calls": [{"name": "mcp_windows-mcp_Screenshot"}]}, ensure_ascii=False) + "\n")
+
+            time.sleep(0.18)
+            with tf.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"step_index": 4, "type": "GENERIC", "media": [{"mime_type": "image/png", "uri": shot_file.as_uri()}], "content": "Captured"}, ensure_ascii=False) + "\n")
+                fh.write(json.dumps({"step_index": 5, "type": "PLANNER_RESPONSE", "source": "MODEL", "content": "电脑端同步修复已完成！"}, ensure_ascii=False) + "\n")
+
+            c2 = sqlite3.connect(db_path)
+            c2.execute("UPDATE conversation_summaries SET status = 'CASCADE_RUN_STATUS_IDLE' WHERE conversation_id = ?", (cid,))
+            c2.commit()
+            c2.close()
+
+        import threading
+        threading.Thread(target=_simulate_pc_ide_execution, daemon=True).start()
+        return (True, "已投递至电脑端 Antigravity 窗口")
+
+    tok = "pc-live-win-token-88888888"
+    cfg = _make_config(tmp_path, web_pwa_port=port, web_access_token=tok)
+    # Deliberately pass a non-existent CLI command so test FAILS if it ever falls back to headless agy.exe!
+    sessions = SessionManager(cfg, command_override=[sys.executable, "-c", "import sys; sys.exit(99)"])
+    pwa = WebPwaServer(
+        cfg,
+        session_manager=sessions,
+        access_token=tok,
+        ide_store_dir=ide_store,
+        cli_store_dir=tmp_path / "cli_unused",
+        codex_store_dir=tmp_path / "cdx_unused",
+        pc_window_sender=_fake_pc_window_sender,
+    )
+    pwa.pc_ide_poll_interval = 0.08
+    stop_event = asyncio.Event()
+    pwa_task = asyncio.create_task(pwa.run(stop_event=stop_event))
+
+    try:
+        await asyncio.sleep(0.2)
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws?token={tok}") as ws:
+            await asyncio.wait_for(ws.recv(), timeout=5.0)  # hello
+
+            await ws.send(json.dumps({"type": "select_conversation", "conversation_id": ide_cid, "store": "ide"}))
+            loaded = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+            assert loaded["type"] == "conversation_loaded"
+            assert len(loaded["history"]) == 2
+
+            await ws.send(json.dumps({"type": "chat", "text": "进行bug检查与优化"}))
+
+            saw_delta = False
+            end_item = None
+            for _ in range(30):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                if ev["type"] == "stream_delta":
+                    saw_delta = True
+                elif ev["type"] == "stream_end":
+                    end_item = ev["item"]
+                    break
+
+            assert len(delivered_calls) == 1
+            assert delivered_calls[0] == (ide_cid, "ChatGPT UI Browser Extension", "进行bug检查与优化")
+            assert saw_delta is True
+            assert end_item is not None
+            assert end_item["model"] == "Antigravity 电脑端"
+            assert "正在检查电脑端页面..." in end_item["text"]
+            assert "电脑端同步修复已完成！" in end_item["text"]
+            assert len(end_item["images"]) == 1
+            assert end_item["images"][0]["name"] == "pc_live_shot.png"
+
+            # Refresh conversation and ensure zero duplicate turns!
+            await ws.send(json.dumps({"type": "select_conversation", "conversation_id": ide_cid, "store": "ide"}))
+            reloaded = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+            assert reloaded["type"] == "conversation_loaded"
+            assert len(reloaded["history"]) == 4
+            assert reloaded["history"][-2]["text"] == "进行bug检查与优化"
+            assert "电脑端同步修复已完成！" in reloaded["history"][-1]["text"]
+    finally:
+        stop_event.set()
+        await asyncio.wait_for(pwa_task, timeout=5.0)
+        await sessions.shutdown_all()

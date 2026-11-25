@@ -1870,14 +1870,17 @@
       } else if (data.type === 'workspace_file') {
         renderFilePreview(data);
       } else if (data.type === 'user_msg') {
+        if (data.slot && activeSlot && data.slot !== activeSlot) return;
         appendUserBubble(data.item);
       } else if (data.type === 'stream_start') {
+        if (data.slot && activeSlot && data.slot !== activeSlot) return;
         clearOptimisticPlaceholder();
         setStreamingState(true);
         streamBuffers.set(data.msg_id, '');
         ensureAssistantRow(data.msg_id);
         scrollToBottom(true);
       } else if (data.type === 'stream_status') {
+        if (data.slot && activeSlot && data.slot !== activeSlot) return;
         ensureAssistantRow(data.msg_id);
         const cur = streamBuffers.get(data.msg_id) || '';
         if (!cur) {
@@ -1885,10 +1888,12 @@
           if (bub) bub.innerHTML = `<span style="color:var(--text-muted);font-size:14px">${escapeHtml(data.status)}</span><span class="gpt-dot"></span>`;
         }
       } else if (data.type === 'stream_reset') {
+        if (data.slot && activeSlot && data.slot !== activeSlot) return;
         streamBuffers.set(data.msg_id, '');
         const bub = document.getElementById('bub-' + data.msg_id);
         if (bub) bub.innerHTML = '<span class="gpt-dot"></span>';
       } else if (data.type === 'stream_delta') {
+        if (data.slot && activeSlot && data.slot !== activeSlot) return;
         clearOptimisticPlaceholder();
         const cur = (streamBuffers.get(data.msg_id) || '') + data.delta;
         streamBuffers.set(data.msg_id, cur);
@@ -1898,6 +1903,7 @@
         if (bub) bub.innerHTML = renderRichText(cur) + '<span class="gpt-dot"></span>';
         scrollToBottom();
       } else if (data.type === 'stream_end') {
+        if (data.slot && activeSlot && data.slot !== activeSlot) return;
         clearOptimisticPlaceholder();
         setStreamingState(false);
         streamBuffers.delete(data.item.id);
