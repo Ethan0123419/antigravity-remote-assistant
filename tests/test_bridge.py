@@ -1483,8 +1483,14 @@ async def test_chatgpt_ios_ui_steps_timeline_and_canvas_sandbox(tmp_path: Path):
     from qq_agy_bridge.conversations import _humanize_tool_step, load_conversation_detail
     from qq_agy_bridge.web_pwa import STATIC_DIR
 
-    assert "antigravity-ios-shell-v17" in STATIC_PWA_SW_JS
+    assert "CACHE_PREFIX = 'antigravity-ios-shell-' + SCOPE_SLUG + '-'" in STATIC_PWA_SW_JS
+    assert "CACHE_NAME = CACHE_PREFIX + 'v18'" in STATIC_PWA_SW_JS
+    assert "REQUIRED_SHELL = ['./', './index.html']" in STATIC_PWA_SW_JS
+    assert "Promise.allSettled(OPTIONAL_ASSETS" in STATIC_PWA_SW_JS
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    assert "connEpoch" in html
+    assert "inboundSeq" in html
+    assert "isForActiveSlot" in html
     assert 'content="#000000"' in html
     assert 'id="appStage"' in html
     assert 'id="tabGlider"' in html
@@ -2075,3 +2081,187 @@ async def test_live_midturn_steering_ide_pivot_and_cli_fifo_queue(tmp_path: Path
         stop_event.set()
         await asyncio.wait_for(pwa_task, timeout=5.0)
         await sessions.shutdown_all()
+
+
+@pytest.mark.asyncio
+async def test_nav_seq_prevents_stale_select_overwrite_and_slash_new_preserves_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verify Astra red-team P1-8 fixes:
+    1. If a slow `select_conversation` starts BEFORE `new_conversation` and finishes disk I/O AFTER,
+       `_nav_seq` drops the stale `select_conversation` so `_active_slot` stays on the newer `codex` chat.
+    2. `/new` inside a `codex` slot preserves `active_store == 'codex'` instead of wiping to `''`.
+    """
+    import qq_agy_bridge.web_pwa as web_pwa_mod
+
+    ide_dir = tmp_path / "ide_nav"
+    cid = "slow-conv-0001"
+    tf = ide_dir / "brain" / cid / ".system_generated" / "logs" / "transcript.jsonl"
+    tf.parent.mkdir(parents=True)
+    tf.write_text(
+        json.dumps({"step_index": 0, "type": "USER_INPUT", "content": "旧会话内容"}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    real_loader = web_pwa_mod.load_conversation_detail
+
+    def _slow_loader(conv_id: str, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if conv_id == cid:
+            time.sleep(0.28)
+        return real_loader(conv_id, *args, **kwargs)
+
+    monkeypatch.setattr(web_pwa_mod, "load_conversation_detail", _slow_loader)
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    tok = "nav-seq-guard-token-2026"
+    cfg = _make_config(tmp_path, web_pwa_port=port, web_access_token=tok)
+    sessions = SessionManager(cfg, command_override=[sys.executable, str(MOCK_AGY)])
+    pwa = WebPwaServer(
+        cfg,
+        session_manager=sessions,
+        access_token=tok,
+        ide_store_dir=ide_dir,
+        cli_store_dir=tmp_path / "cli_nav",
+        codex_store_dir=tmp_path / "cdx_nav",
+    )
+    stop_event = asyncio.Event()
+    pwa_task = asyncio.create_task(pwa.run(stop_event=stop_event))
+    try:
+        await asyncio.sleep(0.15)
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws?token={tok}") as ws:
+            await asyncio.wait_for(ws.recv(), timeout=4.0)  # hello
+
+            # Fire slow `select_conversation` immediately followed by fast `new_conversation` (`codex`)
+            await ws.send(json.dumps({"type": "select_conversation", "conversation_id": cid, "store": "ide"}))
+            await asyncio.sleep(0.03)
+            await ws.send(json.dumps({"type": "new_conversation", "workspace": "", "target": "codex"}))
+
+            await asyncio.sleep(0.42)
+            saw_stale_loaded = False
+            while True:
+                try:
+                    ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=0.12))
+                    if ev.get("type") == "conversation_loaded" and ev.get("conversation_id") == cid:
+                        saw_stale_loaded = True
+                except asyncio.TimeoutError:
+                    break
+
+            assert saw_stale_loaded is False
+            assert pwa._active_slot.startswith("new:")
+            assert pwa._slot_meta[pwa._active_slot]["store"] == "codex"
+
+            # `/new` inside `codex` slot must preserve `store == 'codex'`
+            await ws.send(json.dumps({"type": "chat", "text": "/new"}))
+            meta_after_new = None
+            for _ in range(10):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
+                if ev.get("type") == "meta_update":
+                    meta_after_new = ev
+                    break
+            assert meta_after_new is not None
+            assert meta_after_new["active_store"] == "codex"
+    finally:
+        stop_event.set()
+        await asyncio.wait_for(pwa_task, timeout=5.0)
+        await sessions.shutdown_all()
+
+
+@pytest.mark.asyncio
+async def test_precision_remote_desktop_loupe_trackpad_hotkey_and_type_text(tmp_path: Path) -> None:
+    """Verify Phase 2 Precision Remote Desktop upgrades:
+    1. `perform_desktop_remote_input` validates whitelisted `hotkey`, `type_text`, `move`, and rejects unsafe combos/lengths.
+    2. `capture_desktop_fast_jpeg_sync` writes into `inbox/previews` without pruning user uploads in `inbox/`.
+    3. `WebPwaServer` routes `hotkey`, `type_text`, `move`, `right_click`, and `double_click` with 5-arg handler support.
+    4. `index.html` ships the Optical Magnifier Loupe (`#deskLoupeCanvas`), Virtual Trackpad (`#deskModeTrackpad`),
+       Immersive toggle (`#toggleImmersiveBtn`), and Direct Unicode Input (`#deskTypeBar`).
+    """
+    from qq_agy_bridge.desktop_tools import (
+        capture_desktop_fast_jpeg_sync,
+        get_desktop_cursor_ratio,
+        perform_desktop_remote_input,
+    )
+    from qq_agy_bridge.web_pwa import STATIC_DIR
+
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    for required_id in (
+        'id="deskLoupeCanvas"',
+        'id="deskModeLoupe"',
+        'id="deskModeTrackpad"',
+        'id="deskVCursor"',
+        'id="toggleImmersiveBtn"',
+        'id="deskTypeBar"',
+    ):
+        assert required_id in html
+
+    # Security whitelist checks on new actions
+    ok_evil_hk, msg_hk = perform_desktop_remote_input("hotkey", key_name="ctrl+alt+del")
+    assert ok_evil_hk is False and "白名单" in msg_hk
+    ok_empty_txt, _ = perform_desktop_remote_input("type_text", text="")
+    assert ok_empty_txt is False
+    ok_long_txt, _ = perform_desktop_remote_input("type_text", text="a" * 2005)
+    assert ok_long_txt is False
+
+    cur_info = get_desktop_cursor_ratio()
+    assert 0.0 <= float(cur_info["x_ratio"]) <= 1.0
+    assert 0.0 <= float(cur_info["y_ratio"]) <= 1.0
+
+    # Ensure `capture_desktop_fast_jpeg_sync` isolates preview frames in `previews/` and NEVER deletes user uploads!
+    if sys.platform == "win32":
+        user_upload = tmp_path / "pwa_important_upload.png"
+        user_upload.write_bytes(b"\x89PNG\r\n\x1a\n" + b"U" * 64)
+        shot_p = capture_desktop_fast_jpeg_sync(tmp_path, max_width=800, quality=72)
+        assert shot_p.is_file() and shot_p.stat().st_size > 500
+        assert shot_p.parent.name == "previews"
+        assert user_upload.is_file()
+
+    # End-to-end WebSocket routing of `move`, `hotkey`, and `type_text`
+    recorded_desk_ops: list[tuple[str, float, float, str, str]] = []
+
+    def _mock_5arg_handler(act: str, xr: float, yr: float, kn: str, txt: str = "") -> tuple[bool, str]:
+        recorded_desk_ops.append((act, xr, yr, kn, txt))
+        return (True, f"OK:{act}")
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    tok = "precision-desk-token-2026"
+    cfg = _make_config(tmp_path, web_pwa_port=port, web_access_token=tok)
+    sessions = SessionManager(cfg, command_override=[sys.executable, str(MOCK_AGY)])
+    pwa = WebPwaServer(
+        cfg,
+        session_manager=sessions,
+        access_token=tok,
+        ide_store_dir=tmp_path / "ide_d",
+        cli_store_dir=tmp_path / "cli_d",
+        codex_store_dir=tmp_path / "cdx_d",
+        desktop_input_handler=_mock_5arg_handler,
+    )
+    stop_event = asyncio.Event()
+    pwa_task = asyncio.create_task(pwa.run(stop_event=stop_event))
+    try:
+        await asyncio.sleep(0.15)
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws?token={tok}") as ws:
+            await asyncio.wait_for(ws.recv(), timeout=4.0)  # hello
+            await ws.send(json.dumps({"type": "desktop_input", "action": "move", "x_ratio": 0.25, "y_ratio": 0.75, "quiet": True}))
+            await ws.send(json.dumps({"type": "desktop_input", "action": "hotkey", "key": "ctrl+c"}))
+            await ws.send(json.dumps({"type": "desktop_input", "action": "type_text", "key": "enter", "text": "你好 Antigravity"}))
+            saw_type_toast = False
+            for _ in range(12):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=4.0))
+                if ev.get("type") == "toast" and "OK:type_text" in ev.get("text", ""):
+                    saw_type_toast = True
+                    break
+            assert saw_type_toast is True
+            assert ("move", 0.25, 0.75, "", "") in recorded_desk_ops
+            assert ("hotkey", 0.5, 0.5, "ctrl+c", "") in recorded_desk_ops
+            assert ("type_text", 0.5, 0.5, "enter", "你好 Antigravity") in recorded_desk_ops
+    finally:
+        stop_event.set()
+        await asyncio.wait_for(pwa_task, timeout=5.0)
+        await sessions.shutdown_all()
+
+

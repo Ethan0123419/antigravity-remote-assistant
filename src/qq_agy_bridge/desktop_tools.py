@@ -99,11 +99,15 @@ def is_safe_outbound_file(path: Path, *, image_only: bool = False) -> bool:
         return False
 
 
-def prune_inbox(inbox_dir: Path, keep: int = 35) -> None:
+def prune_inbox(inbox_dir: Path, keep: int = 35, prefix_only: str = "") -> None:
     if not inbox_dir.is_dir():
         return
     files = sorted(
-        (p for p in inbox_dir.iterdir() if p.is_file()),
+        (
+            p
+            for p in inbox_dir.iterdir()
+            if p.is_file() and (not prefix_only or p.name.startswith(prefix_only))
+        ),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
@@ -114,12 +118,326 @@ def prune_inbox(inbox_dir: Path, keep: int = 35) -> None:
             pass
 
 
+_WIN32_DPI_READY = False
+_JPEG_ENCODER_CLSID_BYTES: bytes | None = None
+
+
+def _ensure_win32_dpi_aware() -> None:
+    global _WIN32_DPI_READY
+    if _WIN32_DPI_READY or sys.platform != "win32":
+        return
+    _WIN32_DPI_READY = True
+    try:
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        # Try Per-Monitor V2 DPI Awareness (-4) first, fallback to system DPI aware
+        try:
+            user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+        except Exception:
+            user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
+
+def get_desktop_cursor_ratio() -> dict[str, float | int]:
+    """Return current Windows physical cursor position normalized to VirtualScreen `[0.0, 1.0]`."""
+    if sys.platform != "win32":
+        return {"x_ratio": 0.5, "y_ratio": 0.5, "screen_w": 1920, "screen_h": 1080}
+    _ensure_win32_dpi_aware()
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        vx = int(user32.GetSystemMetrics(76))
+        vy = int(user32.GetSystemMetrics(77))
+        vw = max(1, int(user32.GetSystemMetrics(78)))
+        vh = max(1, int(user32.GetSystemMetrics(79)))
+        pt = wintypes.POINT()
+        if user32.GetCursorPos(ctypes.byref(pt)):
+            xr = max(0.0, min(1.0, (pt.x - vx) / max(1, vw - 1)))
+            yr = max(0.0, min(1.0, (pt.y - vy) / max(1, vh - 1)))
+            return {"x_ratio": round(xr, 5), "y_ratio": round(yr, 5), "screen_w": vw, "screen_h": vh}
+        return {"x_ratio": 0.5, "y_ratio": 0.5, "screen_w": vw, "screen_h": vh}
+    except Exception:
+        return {"x_ratio": 0.5, "y_ratio": 0.5, "screen_w": 1920, "screen_h": 1080}
+
+
+def _capture_desktop_gdiplus_fast(dest: Path, max_width: int, quality: int) -> bool:
+    """Fast ~35ms pure-ctypes Win32 GDI + GDI+ JPEG screen capture with hardware cursor stamped at exact hotspot."""
+    if sys.platform != "win32":
+        return False
+    _ensure_win32_dpi_aware()
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    gdi32 = ctypes.windll.gdi32
+    gdiplus = ctypes.windll.gdiplus
+
+    # Explicit 64-bit Win32 handle types so HBITMAP / HDC / GpBitmap pointers > 0x7FFFFFFF are NEVER truncated!
+    user32.GetDC.argtypes = [wintypes.HWND]
+    user32.GetDC.restype = wintypes.HDC
+    user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
+    user32.ReleaseDC.restype = ctypes.c_int
+    user32.DrawIconEx.argtypes = [
+        wintypes.HDC, ctypes.c_int, ctypes.c_int, wintypes.HANDLE,
+        ctypes.c_int, ctypes.c_int, wintypes.UINT, wintypes.HBRUSH, wintypes.UINT,
+    ]
+    user32.DrawIconEx.restype = wintypes.BOOL
+
+    gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
+    gdi32.CreateCompatibleDC.restype = wintypes.HDC
+    gdi32.CreateCompatibleBitmap.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
+    gdi32.CreateCompatibleBitmap.restype = wintypes.HBITMAP
+    gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
+    gdi32.SelectObject.restype = wintypes.HGDIOBJ
+    gdi32.BitBlt.argtypes = [
+        wintypes.HDC, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+        wintypes.HDC, ctypes.c_int, ctypes.c_int, wintypes.DWORD,
+    ]
+    gdi32.BitBlt.restype = wintypes.BOOL
+    gdi32.StretchBlt.argtypes = [
+        wintypes.HDC, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+        wintypes.HDC, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.DWORD,
+    ]
+    gdi32.StretchBlt.restype = wintypes.BOOL
+    gdi32.SetStretchBltMode.argtypes = [wintypes.HDC, ctypes.c_int]
+    gdi32.SetBrushOrgEx.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int, ctypes.c_void_p]
+    gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
+    gdi32.DeleteObject.restype = wintypes.BOOL
+    gdi32.DeleteDC.argtypes = [wintypes.HDC]
+    gdi32.DeleteDC.restype = wintypes.BOOL
+    gdi32.CreateDIBSection.argtypes = [
+        wintypes.HDC,
+        ctypes.c_void_p,
+        wintypes.UINT,
+        ctypes.POINTER(ctypes.c_void_p),
+        wintypes.HANDLE,
+        wintypes.DWORD,
+    ]
+    gdi32.CreateDIBSection.restype = wintypes.HBITMAP
+
+    gdiplus.GdiplusStartup.argtypes = [ctypes.POINTER(ctypes.c_size_t), ctypes.c_void_p, ctypes.c_void_p]
+    gdiplus.GdiplusShutdown.argtypes = [ctypes.c_size_t]
+    gdiplus.GdipCreateBitmapFromScan0.argtypes = [
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    gdiplus.GdipSaveImageToFile.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_void_p, ctypes.c_void_p]
+    gdiplus.GdipDisposeImage.argtypes = [ctypes.c_void_p]
+
+    class BITMAPINFOHEADER(ctypes.Structure):
+        _fields_ = [
+            ("biSize", wintypes.DWORD),
+            ("biWidth", wintypes.LONG),
+            ("biHeight", wintypes.LONG),
+            ("biPlanes", wintypes.WORD),
+            ("biBitCount", wintypes.WORD),
+            ("biCompression", wintypes.DWORD),
+            ("biSizeImage", wintypes.DWORD),
+            ("biXPelsPerMeter", wintypes.LONG),
+            ("biYPelsPerMeter", wintypes.LONG),
+            ("biClrUsed", wintypes.DWORD),
+            ("biClrImportant", wintypes.DWORD),
+        ]
+
+    class CURSORINFO(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", wintypes.DWORD),
+            ("flags", wintypes.DWORD),
+            ("hCursor", wintypes.HANDLE),
+            ("ptScreenPos", wintypes.POINT),
+        ]
+
+    class ICONINFO(ctypes.Structure):
+        _fields_ = [
+            ("fIcon", wintypes.BOOL),
+            ("xHotspot", wintypes.DWORD),
+            ("yHotspot", wintypes.DWORD),
+            ("hbmMask", wintypes.HBITMAP),
+            ("hbmColor", wintypes.HBITMAP),
+        ]
+
+    class GdiplusStartupInput(ctypes.Structure):
+        _fields_ = [
+            ("GdiplusVersion", ctypes.c_uint32),
+            ("DebugEventCallback", ctypes.c_void_p),
+            ("SuppressBackgroundThread", wintypes.BOOL),
+            ("SuppressExternalCodecs", wintypes.BOOL),
+        ]
+
+    class EncoderParameter(ctypes.Structure):
+        _fields_ = [
+            ("Guid", ctypes.c_byte * 16),
+            ("NumberOfValues", ctypes.c_ulong),
+            ("Type", ctypes.c_ulong),
+            ("Value", ctypes.c_void_p),
+        ]
+
+    class EncoderParameters(ctypes.Structure):
+        _fields_ = [
+            ("Count", ctypes.c_uint),
+            ("Parameter", EncoderParameter * 1),
+        ]
+
+    vx = int(user32.GetSystemMetrics(76))
+    vy = int(user32.GetSystemMetrics(77))
+    vw = int(user32.GetSystemMetrics(78))
+    vh = int(user32.GetSystemMetrics(79))
+    if vw <= 0 or vh <= 0:
+        return False
+
+    target_w = min(vw, max(320, int(max_width)))
+    target_h = max(180, int(round(vh * (target_w / float(vw)))))
+
+    hdc_screen = user32.GetDC(0)
+    if not hdc_screen:
+        return False
+    hdc_src = 0
+    hbmp_src = 0
+    old_src = 0
+    hdc_dst = 0
+    hbmp_dst = 0
+    old_dst = 0
+    gdip_token = ctypes.c_size_t(0)
+    gp_bitmap = ctypes.c_void_p(0)
+
+    try:
+        hdc_src = gdi32.CreateCompatibleDC(hdc_screen)
+        hbmp_src = gdi32.CreateCompatibleBitmap(hdc_screen, vw, vh)
+        if not hdc_src or not hbmp_src:
+            return False
+        old_src = gdi32.SelectObject(hdc_src, hbmp_src)
+        # SRCCOPY (0x00CC0020) | CAPTUREBLT (0x40000000)
+        if not gdi32.BitBlt(hdc_src, 0, 0, vw, vh, hdc_screen, vx, vy, 0x40CC0020):
+            return False
+
+        # Stamp hardware mouse cursor onto `hdc_src` with hotspot compensation so mobile user sees real PC pointer!
+        ci = CURSORINFO()
+        ci.cbSize = ctypes.sizeof(CURSORINFO)
+        if user32.GetCursorInfo(ctypes.byref(ci)) and (ci.flags & 0x00000001) and ci.hCursor:
+            hx, hy = 0, 0
+            ii = ICONINFO()
+            if user32.GetIconInfo(ci.hCursor, ctypes.byref(ii)):
+                hx = int(ii.xHotspot)
+                hy = int(ii.yHotspot)
+                if ii.hbmMask:
+                    gdi32.DeleteObject(ii.hbmMask)
+                if ii.hbmColor:
+                    gdi32.DeleteObject(ii.hbmColor)
+            user32.DrawIconEx(
+                hdc_src,
+                int(ci.ptScreenPos.x - vx - hx),
+                int(ci.ptScreenPos.y - vy - hy),
+                ci.hCursor,
+                0,
+                0,
+                0,
+                0,
+                0x0003,  # DI_NORMAL
+            )
+
+        # Render into a top-down 32-bit RGB DIB section and wrap its raw pixel buffer via `GdipCreateBitmapFromScan0`
+        # (PixelFormat32bppRGB = 0x0022009, completely compliant with GDI+ memory contract!)
+        hdc_dst = gdi32.CreateCompatibleDC(hdc_screen)
+        if not hdc_dst:
+            return False
+        bmi = BITMAPINFOHEADER()
+        bmi.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+        bmi.biWidth = target_w
+        bmi.biHeight = -target_h  # Top-down scanlines
+        bmi.biPlanes = 1
+        bmi.biBitCount = 32
+        bmi.biCompression = 0  # BI_RGB
+        bits_ptr = ctypes.c_void_p(0)
+        hbmp_dst = gdi32.CreateDIBSection(hdc_screen, ctypes.byref(bmi), 0, ctypes.byref(bits_ptr), None, 0)
+        if not hbmp_dst or not bits_ptr.value:
+            return False
+        old_dst = gdi32.SelectObject(hdc_dst, hbmp_dst)
+        if target_w < vw:
+            gdi32.SetStretchBltMode(hdc_dst, 4)  # HALFTONE crisp downscale
+            gdi32.SetBrushOrgEx(hdc_dst, 0, 0, None)
+            if not gdi32.StretchBlt(hdc_dst, 0, 0, target_w, target_h, hdc_src, 0, 0, vw, vh, 0x00CC0020):
+                return False
+        else:
+            if not gdi32.BitBlt(hdc_dst, 0, 0, target_w, target_h, hdc_src, 0, 0, 0x00CC0020):
+                return False
+        gdi32.GdiFlush()
+
+        startup_in = GdiplusStartupInput(1, None, False, False)
+        if gdiplus.GdiplusStartup(ctypes.byref(gdip_token), ctypes.byref(startup_in), None) != 0:
+            return False
+
+        stride = target_w * 4
+        # PixelFormat32bppRGB = 0x00022009 (ignores GDI's zeroed alpha byte!)
+        if gdiplus.GdipCreateBitmapFromScan0(
+            target_w, target_h, stride, 0x00022009, bits_ptr, ctypes.byref(gp_bitmap)
+        ) != 0 or not gp_bitmap:
+            return False
+
+        # Standard Windows GDI+ Built-in JPEG Encoder CLSID: {557CF401-1A04-11D3-9A73-0000F81EF32E}
+        jpeg_clsid = uuid.UUID("{557cf401-1a04-11d3-9a73-0000f81ef32e}").bytes_le
+        # EncoderQuality GUID: {1D5BE4B5-FA4A-452D-9CDD-5DB35105E7EB}
+        qual_guid = uuid.UUID("{1d5be4b5-fa4a-452d-9cdd-5db35105e7eb}").bytes_le
+
+        q_val = ctypes.c_ulong(max(30, min(95, int(quality))))
+        enc_params = EncoderParameters()
+        enc_params.Count = 1
+        enc_params.Parameter[0].Guid = (ctypes.c_byte * 16).from_buffer_copy(qual_guid)
+        enc_params.Parameter[0].NumberOfValues = 1
+        enc_params.Parameter[0].Type = 4  # EncoderParameterValueTypeLong
+        enc_params.Parameter[0].Value = ctypes.cast(ctypes.pointer(q_val), ctypes.c_void_p)
+
+        clsid_buf = (ctypes.c_byte * 16).from_buffer_copy(jpeg_clsid)
+        status = gdiplus.GdipSaveImageToFile(
+            gp_bitmap,
+            ctypes.c_wchar_p(str(dest)),
+            ctypes.byref(clsid_buf),
+            ctypes.byref(enc_params),
+        )
+        return status == 0 and dest.is_file() and dest.stat().st_size > 0
+    except Exception as exc:
+        logger.debug("Fast GDI+ capture fallback triggered: %s", exc)
+        return False
+    finally:
+        if gp_bitmap:
+            gdiplus.GdipDisposeImage(gp_bitmap)
+        if gdip_token.value:
+            gdiplus.GdiplusShutdown(gdip_token)
+        if old_dst and hdc_dst:
+            gdi32.SelectObject(hdc_dst, old_dst)
+        if hbmp_dst:
+            gdi32.DeleteObject(hbmp_dst)
+        if hdc_dst:
+            gdi32.DeleteDC(hdc_dst)
+        if old_src and hdc_src:
+            gdi32.SelectObject(hdc_src, old_src)
+        if hbmp_src:
+            gdi32.DeleteObject(hbmp_src)
+        if hdc_src:
+            gdi32.DeleteDC(hdc_src)
+        if hdc_screen:
+            user32.ReleaseDC(0, hdc_screen)
+
+
 def capture_desktop_fast_jpeg_sync(
     inbox_dir: Path, max_width: int = 1600, quality: int = 80
 ) -> Path:
-    """Capture a scaled, crisp JPEG desktop frame (~100-180 KB) for fast mobile preview."""
-    inbox_dir.mkdir(parents=True, exist_ok=True)
-    dest = inbox_dir / f"preview_{int(time.time() * 1000)}_{uuid.uuid4().hex[:5]}.jpg"
+    """Capture a scaled, crisp JPEG desktop frame (~100-180 KB) with live cursor in ~35ms."""
+    preview_dir = inbox_dir / "previews"
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    dest = preview_dir / f"preview_{int(time.time() * 1000)}_{uuid.uuid4().hex[:5]}.jpg"
+
+    if _capture_desktop_gdiplus_fast(dest, max_width=max_width, quality=quality):
+        prune_inbox(preview_dir, keep=28, prefix_only="preview_")
+        return dest
+
     ps_script = f"""
 Add-Type -TypeDefinition @"
 using System;
@@ -173,7 +491,7 @@ $outBmp.Dispose()
         timeout=15,
         creationflags=CREATE_NO_WINDOW if sys.platform == "win32" else 0,
     )
-    prune_inbox(inbox_dir, keep=35)
+    prune_inbox(preview_dir, keep=28, prefix_only="preview_")
     return dest
 
 
@@ -1617,10 +1935,110 @@ ALLOWED_REMOTE_KEYS: dict[str, int] = {
     "esc": 0x1B,
     "space": 0x20,
     "tab": 0x09,
+    "backspace": 0x08,
+    "delete": 0x2E,
     "up": 0x26,
     "down": 0x28,
-    "backspace": 0x08,
+    "left": 0x25,
+    "right": 0x27,
+    "home": 0x24,
+    "end": 0x23,
+    "pgup": 0x21,
+    "pgdn": 0x22,
 }
+
+ALLOWED_REMOTE_HOTKEYS: dict[str, tuple[list[int], int]] = {
+    "ctrl+c": ([0x11], 0x43),
+    "ctrl+v": ([0x11], 0x56),
+    "ctrl+x": ([0x11], 0x58),
+    "ctrl+z": ([0x11], 0x5A),
+    "ctrl+y": ([0x11], 0x59),
+    "ctrl+a": ([0x11], 0x41),
+    "ctrl+s": ([0x11], 0x53),
+    "ctrl+w": ([0x11], 0x57),
+    "ctrl+r": ([0x11], 0x52),
+    "alt+tab": ([0x12], 0x09),
+    "win+d": ([0x5B], 0x44),
+}
+
+
+def _send_unicode_text_win32(text: str, press_enter: bool = False) -> int:
+    """Inject single-line Unicode UTF-16LE code units in atomic chunks via Win32 `SendInput(KEYEVENTF_UNICODE)`.
+
+    Embedded CR/LF characters are converted to spaces so `press_enter=False` can NEVER accidentally execute
+    commands or submit chat forms; `VK_RETURN` is sent strictly at the end only when `press_enter=True`.
+    Returns the number of characters successfully delivered.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    ULONG_PTR = ctypes.c_uint64 if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_uint32
+
+    class KEYBDINPUT(ctypes.Structure):
+        _fields_ = [
+            ("wVk", wintypes.WORD),
+            ("wScan", wintypes.WORD),
+            ("dwFlags", wintypes.DWORD),
+            ("time", wintypes.DWORD),
+            ("dwExtraInfo", ULONG_PTR),
+        ]
+
+    class MOUSEINPUT(ctypes.Structure):
+        _fields_ = [
+            ("dx", wintypes.LONG),
+            ("dy", wintypes.LONG),
+            ("mouseData", wintypes.DWORD),
+            ("dwFlags", wintypes.DWORD),
+            ("time", wintypes.DWORD),
+            ("dwExtraInfo", ULONG_PTR),
+        ]
+
+    class _INPUT_UNION(ctypes.Union):
+        _fields_ = [("mi", MOUSEINPUT), ("ki", KEYBDINPUT)]
+
+    class INPUT(ctypes.Structure):
+        _fields_ = [("type", wintypes.DWORD), ("u", _INPUT_UNION)]
+
+    safe_single_line = text.replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
+    send_input_fn = ctypes.windll.user32.SendInput
+    send_input_fn.argtypes = [wintypes.UINT, ctypes.c_void_p, ctypes.c_int]
+    send_input_fn.restype = wintypes.UINT
+
+    delivered_chars = 0
+    chunk_size = 64
+    for start_idx in range(0, len(safe_single_line), chunk_size):
+        sub = safe_single_line[start_idx : start_idx + chunk_size]
+        batch: list[INPUT] = []
+        for ch in sub:
+            utf16_bytes = ch.encode("utf-16-le")
+            for offset in range(0, len(utf16_bytes), 2):
+                unit = int.from_bytes(utf16_bytes[offset : offset + 2], "little")
+                for flg in (0x0004, 0x0004 | 0x0002):
+                    inp = INPUT(type=1)
+                    inp.u.ki = KEYBDINPUT(0, unit, flg, 0, 0)
+                    batch.append(inp)
+        if not batch:
+            continue
+        arr = (INPUT * len(batch))(*batch)
+        sent = int(send_input_fn(len(batch), ctypes.byref(arr), ctypes.sizeof(INPUT)))
+        if sent != len(batch):
+            if delivered_chars == 0 and sent == 0:
+                raise RuntimeError("Win32 SendInput 被系统安全策略拦截（如当前前台为管理员权限窗口）")
+            raise RuntimeError(f"输入仅部分送达（已完成约 {delivered_chars} 字，后续被目标窗口中断，未重复重发）")
+        delivered_chars += len(sub)
+
+    if press_enter:
+        ent_batch: list[INPUT] = []
+        for flg in (0, 0x0002):
+            inp = INPUT(type=1)
+            inp.u.ki = KEYBDINPUT(0x0D, 0, flg, 0, 0)
+            ent_batch.append(inp)
+        ent_arr = (INPUT * 2)(*ent_batch)
+        sent_ent = int(send_input_fn(2, ctypes.byref(ent_arr), ctypes.sizeof(INPUT)))
+        if sent_ent != 2:
+            raise RuntimeError(f"已输入 {delivered_chars} 字，但末尾回车键未能完整送达")
+
+    return delivered_chars
 
 
 def perform_desktop_remote_input(
@@ -1628,23 +2046,49 @@ def perform_desktop_remote_input(
     x_ratio: float = 0.5,
     y_ratio: float = 0.5,
     key_name: str = "",
+    text: str = "",
 ) -> tuple[bool, str]:
-    """Perform safe, DPI-accurate remote click/scroll or whitelisted key press on the Windows desktop."""
+    """Perform sub-2ms DPI-accurate remote mouse/scroll, whitelisted key/hotkey, or Unicode text input on Windows."""
     if sys.platform != "win32":
         return (False, "仅支持 Windows 远程桌面控制")
 
     act = (action or "").strip().lower()
-    if act not in {"click", "double_click", "right_click", "scroll_up", "scroll_down", "key"}:
+    allowed_actions = {
+        "click",
+        "double_click",
+        "right_click",
+        "move",
+        "scroll_up",
+        "scroll_down",
+        "key",
+        "hotkey",
+        "type_text",
+    }
+    if act not in allowed_actions:
         return (False, f"不支持的远程动作：{act}")
 
     xr = 0.5
     yr = 0.5
     vk = 0
+    hotkey_spec: tuple[list[int], int] | None = None
+    clean_text = ""
+
     if act == "key":
         k_clean = (key_name or "").strip().lower()
         if k_clean not in ALLOWED_REMOTE_KEYS:
             return (False, f"按键不在安全白名单中：{k_clean}")
         vk = ALLOWED_REMOTE_KEYS[k_clean]
+    elif act == "hotkey":
+        hk_clean = (key_name or "").strip().lower()
+        if hk_clean not in ALLOWED_REMOTE_HOTKEYS:
+            return (False, f"组合键不在安全白名单中：{hk_clean}")
+        hotkey_spec = ALLOWED_REMOTE_HOTKEYS[hk_clean]
+    elif act == "type_text":
+        clean_text = str(text or "").replace("\x00", "")
+        if not clean_text:
+            return (False, "输入文本不能为空")
+        if len(clean_text) > 2000:
+            return (False, "单次直输文本上限为 2000 字")
     else:
         try:
             xr_val = float(x_ratio)
@@ -1658,80 +2102,95 @@ def perform_desktop_remote_input(
         xr = xr_val
         yr = yr_val
 
-    ps_script = f"""
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public static class AgyRemoteInput {{
-    [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
-    [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
-    [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, UIntPtr dwExtraInfo);
-    [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
-}}
-"@
-[AgyRemoteInput]::SetProcessDPIAware() | Out-Null
-$b = [System.Windows.Forms.SystemInformation]::VirtualScreen
-$px = [int]([Math]::Round($b.Left + ($b.Width - 1) * {xr:.6f}))
-$py = [int]([Math]::Round($b.Top + ($b.Height - 1) * {yr:.6f}))
-$act = "{act}"
-if ($act -eq "click") {{
-    [AgyRemoteInput]::SetCursorPos($px, $py) | Out-Null
-    Start-Sleep -Milliseconds 25
-    [AgyRemoteInput]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
-    Start-Sleep -Milliseconds 25
-    [AgyRemoteInput]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
-    Write-Output "OK:已点击桌面 ($px, $py)"
-}} elseif ($act -eq "double_click") {{
-    [AgyRemoteInput]::SetCursorPos($px, $py) | Out-Null
-    Start-Sleep -Milliseconds 25
-    for ($i = 0; $i -lt 2; $i++) {{
-        [AgyRemoteInput]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
-        Start-Sleep -Milliseconds 20
-        [AgyRemoteInput]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
-        Start-Sleep -Milliseconds 45
-    }}
-    Write-Output "OK:已双击桌面 ($px, $py)"
-}} elseif ($act -eq "right_click") {{
-    [AgyRemoteInput]::SetCursorPos($px, $py) | Out-Null
-    Start-Sleep -Milliseconds 25
-    [AgyRemoteInput]::mouse_event(0x0008, 0, 0, 0, [UIntPtr]::Zero)
-    Start-Sleep -Milliseconds 25
-    [AgyRemoteInput]::mouse_event(0x0010, 0, 0, 0, [UIntPtr]::Zero)
-    Write-Output "OK:已右键点击 ($px, $py)"
-}} elseif ($act -eq "scroll_up" -or $act -eq "scroll_down") {{
-    [AgyRemoteInput]::SetCursorPos($px, $py) | Out-Null
-    Start-Sleep -Milliseconds 20
-    $delta = if ($act -eq "scroll_up") {{ 360 }} else {{ -360 }}
-    [AgyRemoteInput]::mouse_event(0x0800, 0, 0, $delta, [UIntPtr]::Zero)
-    Write-Output "OK:已滚动画面"
-}} elseif ($act -eq "key") {{
-    [AgyRemoteInput]::keybd_event([byte]{vk}, 0, 0, [UIntPtr]::Zero)
-    Start-Sleep -Milliseconds 25
-    [AgyRemoteInput]::keybd_event([byte]{vk}, 0, 0x0002, [UIntPtr]::Zero)
-    Write-Output "OK:已发送按键 {key_name.upper()}"
-}}
-"""
-    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
+    _ensure_win32_dpi_aware()
     with _DESKTOP_UIA_LOCK:
         try:
-            res = subprocess.run(
-                ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=6,
-                creationflags=CREATE_NO_WINDOW,
-            )
-            for ln in reversed([x.strip() for x in (res.stdout or "").splitlines() if x.strip()]):
-                if ln.startswith("OK:"):
-                    return (True, ln.removeprefix("OK:").strip())
-            return (False, "远程桌面输入未返回确认")
+            import ctypes
+            from ctypes import wintypes
+
+            user32 = ctypes.windll.user32
+            user32.mouse_event.argtypes = [
+                wintypes.DWORD,
+                wintypes.DWORD,
+                wintypes.DWORD,
+                wintypes.DWORD,
+                ctypes.c_size_t,
+            ]
+            user32.keybd_event.argtypes = [
+                wintypes.BYTE,
+                wintypes.BYTE,
+                wintypes.DWORD,
+                ctypes.c_size_t,
+            ]
+
+            vx = int(user32.GetSystemMetrics(76))
+            vy = int(user32.GetSystemMetrics(77))
+            vw = max(1, int(user32.GetSystemMetrics(78)))
+            vh = max(1, int(user32.GetSystemMetrics(79)))
+            px = int(round(vx + (vw - 1) * xr))
+            py = int(round(vy + (vh - 1) * yr))
+
+            if act == "move":
+                user32.SetCursorPos(px, py)
+                return (True, f"已移动光标至 ({px}, {py})")
+            if act == "click":
+                user32.SetCursorPos(px, py)
+                time.sleep(0.012)
+                user32.mouse_event(0x0002, 0, 0, 0, 0)
+                time.sleep(0.015)
+                user32.mouse_event(0x0004, 0, 0, 0, 0)
+                return (True, f"已点击桌面 ({px}, {py})")
+            if act == "double_click":
+                user32.SetCursorPos(px, py)
+                time.sleep(0.012)
+                for i in range(2):
+                    user32.mouse_event(0x0002, 0, 0, 0, 0)
+                    time.sleep(0.012)
+                    user32.mouse_event(0x0004, 0, 0, 0, 0)
+                    if i == 0:
+                        time.sleep(0.035)
+                return (True, f"已双击桌面 ({px}, {py})")
+            if act == "right_click":
+                user32.SetCursorPos(px, py)
+                time.sleep(0.012)
+                user32.mouse_event(0x0008, 0, 0, 0, 0)
+                time.sleep(0.015)
+                user32.mouse_event(0x0010, 0, 0, 0, 0)
+                return (True, f"已右键点击 ({px}, {py})")
+            if act in {"scroll_up", "scroll_down"}:
+                user32.SetCursorPos(px, py)
+                time.sleep(0.008)
+                delta = 360 if act == "scroll_up" else (-360 & 0xFFFFFFFF)
+                user32.mouse_event(0x0800, 0, 0, delta, 0)
+                return (True, "已滚动画面")
+            if act == "key":
+                user32.keybd_event(vk, 0, 0, 0)
+                time.sleep(0.015)
+                user32.keybd_event(vk, 0, 0x0002, 0)
+                return (True, f"已发送按键 {key_name.upper()}")
+            if act == "hotkey" and hotkey_spec is not None:
+                mods, main_vk = hotkey_spec
+                pressed_mods: list[int] = []
+                try:
+                    for mv in mods:
+                        user32.keybd_event(mv, 0, 0, 0)
+                        pressed_mods.append(mv)
+                    time.sleep(0.012)
+                    user32.keybd_event(main_vk, 0, 0, 0)
+                    time.sleep(0.018)
+                    user32.keybd_event(main_vk, 0, 0x0002, 0)
+                finally:
+                    for mv in reversed(pressed_mods):
+                        user32.keybd_event(mv, 0, 0x0002, 0)
+                return (True, f"已发送快捷键 {key_name.upper()}")
+            if act == "type_text":
+                press_ent = (key_name or "").strip().lower() == "enter"
+                n_sent = _send_unicode_text_win32(clean_text, press_enter=press_ent)
+                suffix = " 并回车" if press_ent else ""
+                return (True, f"已输入 {n_sent} 字到电脑焦点{suffix}")
+            return (False, "未知动作")
         except Exception as exc:
             return (False, f"远程桌面输入异常：{exc}")
-
 
 def get_pc_clipboard_text(max_chars: int = 12000) -> dict[str, Any]:
     """Read plain text from the PC clipboard safely without persisting sensitive content."""

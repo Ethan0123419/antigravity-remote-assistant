@@ -64,6 +64,7 @@ from .desktop_tools import (
     capture_desktop_fast_jpeg_sync,
     create_and_send_antigravity_ide_new_chat,
     find_codex_cli_executable,
+    get_desktop_cursor_ratio,
     get_pc_clipboard_text,
     get_workspace_file_diff,
     inspect_antigravity_ide_actions,
@@ -108,7 +109,11 @@ self.addEventListener('install', (e) => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+  const u = new URL(e.request.url);
+  if (u.origin !== self.location.origin || u.pathname === '/ping' || u.pathname.startsWith('/dl/')) return;
+  e.respondWith(
+    fetch(e.request, { cache: 'no-store' }).catch(() => caches.match(e.request))
+  );
 });
 """
 
@@ -532,13 +537,13 @@ class WebPwaServer:
             if ide_action_invoker is not None
             else (invoke_antigravity_ide_action if ide_store_dir is None else (lambda _tok: (False, "测试环境未启用桌面按钮点击")))
         )
-        self._desktop_input_handler: Callable[[str, float, float, str], tuple[bool, str]] = (
+        self._desktop_input_handler: Callable[..., tuple[bool, str]] = (
             desktop_input_handler
             if desktop_input_handler is not None
             else (
                 perform_desktop_remote_input
                 if ide_store_dir is None
-                else (lambda act, xr, yr, kn: (False, "测试环境未启用远程桌面输入"))
+                else (lambda act, xr, yr, kn, _txt="": (False, "测试环境未启用远程桌面输入"))
             )
         )
         self._pc_clipboard_getter: Callable[[], dict[str, Any]] = (
@@ -578,6 +583,7 @@ class WebPwaServer:
         self._unread_slots: dict[str, dict[str, Any]] = {}
         self._processed_client_ids: OrderedDict[str, float] = OrderedDict()
         self._cancelled_reply_ids: set[str] = set()
+        self._nav_seq: int = 0
         self._ide_watch_sig: tuple[str, str, int, int] = ("", "", 0, 0)
         self.pc_ide_poll_interval: float = 0.55
         self.pc_ide_accept_timeout: float = 10.0
@@ -1063,39 +1069,50 @@ class WebPwaServer:
 
                 elif mtype == "desktop_frame":
                     try:
-                        shot = await asyncio.to_thread(capture_desktop_fast_jpeg_sync, PROJECT_INBOX_DIR)
+                        shot, cur_info = await asyncio.gather(
+                            asyncio.to_thread(capture_desktop_fast_jpeg_sync, PROJECT_INBOX_DIR),
+                            asyncio.to_thread(get_desktop_cursor_ratio),
+                        )
                         mid = self.register_media(shot)
-                        await ws.send(
-                            json.dumps(
-                                {"type": "desktop_frame", "media_id": mid, "ts": int(time.time() * 1000)},
-                                ensure_ascii=False,
-                            )
+                        await self._safe_send(
+                            ws,
+                            {
+                                "type": "desktop_frame",
+                                "media_id": mid,
+                                "ts": int(time.time() * 1000),
+                                "cursor": cur_info,
+                            },
                         )
                     except Exception as exc:
-                        await ws.send(json.dumps({"type": "toast", "level": "err", "text": f"截屏失败：{exc}"}))
+                        await self._safe_send(ws, {"type": "toast", "level": "err", "text": f"截屏失败：{exc}"})
 
                 elif mtype == "live_screen":
                     enable = bool(msg.get("enable"))
                     _stop_live_screen()
                     if enable:
-                        interval = max(1.0, min(5.0, float(msg.get("interval_ms") or 1500) / 1000.0))
+                        interval = max(0.6, min(5.0, float(msg.get("interval_ms") or 750) / 1000.0))
 
                         async def _stream_screen() -> None:
                             while True:
                                 try:
-                                    shot = await asyncio.to_thread(
-                                        capture_desktop_fast_jpeg_sync, PROJECT_INBOX_DIR, 1366, 74
+                                    shot, cur_info = await asyncio.gather(
+                                        asyncio.to_thread(
+                                            capture_desktop_fast_jpeg_sync, PROJECT_INBOX_DIR, 1440, 76
+                                        ),
+                                        asyncio.to_thread(get_desktop_cursor_ratio),
                                     )
                                     mid = self.register_media(shot)
-                                    await ws.send(
-                                        json.dumps(
-                                            {
-                                                "type": "desktop_frame",
-                                                "media_id": mid,
-                                                "ts": int(time.time() * 1000),
-                                            }
-                                        )
+                                    ok_sent = await self._safe_send(
+                                        ws,
+                                        {
+                                            "type": "desktop_frame",
+                                            "media_id": mid,
+                                            "ts": int(time.time() * 1000),
+                                            "cursor": cur_info,
+                                        },
                                     )
+                                    if not ok_sent:
+                                        break
                                 except asyncio.CancelledError:
                                     raise
                                 except Exception:
@@ -1275,29 +1292,43 @@ class WebPwaServer:
                 elif mtype == "desktop_input":
                     act_kind = str(msg.get("action") or "")
                     kname = str(msg.get("key") or "")
+                    txt_payload = str(msg.get("text") or "")
                     try:
-                        xr = 0.5 if act_kind == "key" else float(msg.get("x_ratio") if msg.get("x_ratio") is not None else 0.5)
-                        yr = 0.5 if act_kind == "key" else float(msg.get("y_ratio") if msg.get("y_ratio") is not None else 0.5)
+                        xr = 0.5 if act_kind in {"key", "hotkey", "type_text"} else float(msg.get("x_ratio") if msg.get("x_ratio") is not None else 0.5)
+                        yr = 0.5 if act_kind in {"key", "hotkey", "type_text"} else float(msg.get("y_ratio") if msg.get("y_ratio") is not None else 0.5)
                     except (TypeError, ValueError):
-                        await ws.send(json.dumps({"type": "toast", "level": "err", "text": "触控坐标参数无效"}, ensure_ascii=False))
+                        await self._safe_send(ws, {"type": "toast", "level": "err", "text": "触控坐标参数无效"})
                         continue
-                    ok, note = await asyncio.to_thread(self._desktop_input_handler, act_kind, xr, yr, kname)
-                    await ws.send(
-                        json.dumps(
-                            {"type": "toast", "level": "info" if ok else "err", "text": note},
-                            ensure_ascii=False,
-                        )
-                    )
-                    if ok:
-                        await asyncio.sleep(0.28)
+
+                    def _invoke_desk_handler() -> tuple[bool, str]:
                         try:
-                            shot = await asyncio.to_thread(capture_desktop_fast_jpeg_sync, PROJECT_INBOX_DIR)
+                            return self._desktop_input_handler(act_kind, xr, yr, kname, txt_payload)
+                        except TypeError:
+                            return self._desktop_input_handler(act_kind, xr, yr, kname)
+
+                    ok, note = await asyncio.to_thread(_invoke_desk_handler)
+                    quiet_act = bool(msg.get("quiet")) or act_kind in {"move", "scroll_up", "scroll_down"}
+                    if not ok or (not quiet_act and act_kind in {"hotkey", "type_text", "right_click", "double_click"}):
+                        await self._safe_send(
+                            ws,
+                            {"type": "toast", "level": "info" if ok else "err", "text": note},
+                        )
+                    if ok and live_screen_task is None:
+                        await asyncio.sleep(0.06 if act_kind == "move" else 0.16)
+                        try:
+                            shot, cur_info = await asyncio.gather(
+                                asyncio.to_thread(capture_desktop_fast_jpeg_sync, PROJECT_INBOX_DIR),
+                                asyncio.to_thread(get_desktop_cursor_ratio),
+                            )
                             mid = self.register_media(shot)
-                            await ws.send(
-                                json.dumps(
-                                    {"type": "desktop_frame", "media_id": mid, "ts": int(time.time() * 1000)},
-                                    ensure_ascii=False,
-                                )
+                            await self._safe_send(
+                                ws,
+                                {
+                                    "type": "desktop_frame",
+                                    "media_id": mid,
+                                    "ts": int(time.time() * 1000),
+                                    "cursor": cur_info,
+                                },
                             )
                         except Exception:
                             pass
@@ -1460,17 +1491,15 @@ class WebPwaServer:
             self.codex_store_dir,
         )
         active_cid_for_list, _ = self._effective_slot_identity(self._active_slot, session)
-        await ws.send(
-            json.dumps(
-                {
-                    "type": "conversations_list",
-                    "active_id": active_cid_for_list,
-                    "current_workspace": str(session.workspace),
-                    "items": visible_items,
-                    "workspaces": workspaces,
-                },
-                ensure_ascii=False,
-            )
+        await self._safe_send(
+            ws,
+            {
+                "type": "conversations_list",
+                "active_id": active_cid_for_list,
+                "current_workspace": str(session.workspace),
+                "items": visible_items,
+                "workspaces": workspaces,
+            },
         )
 
     async def _handle_select_conversation(
@@ -1482,6 +1511,11 @@ class WebPwaServer:
         only_refresh: bool = False,
         max_messages: int = 200,
     ) -> None:
+        nav_token = 0
+        if not only_refresh:
+            self._nav_seq += 1
+            nav_token = self._nav_seq
+
         detail = await asyncio.to_thread(
             load_conversation_detail,
             conversation_id,
@@ -1491,11 +1525,15 @@ class WebPwaServer:
             self.cli_store_dir,
             self.codex_store_dir,
         )
+        if not only_refresh and nav_token != self._nav_seq:
+            return
         if detail is None:
-            await ws.send(json.dumps({"type": "toast", "level": "err", "text": "未找到该对话记录"}, ensure_ascii=False))
+            await self._safe_send(ws, {"type": "toast", "level": "err", "text": "未找到该对话记录"})
             return
 
         slot_key = f"{detail.store}:{detail.conversation_id}"
+        if only_refresh and self._active_slot != slot_key:
+            return
         session = self._session_for_slot(slot_key)
         slot_is_running = slot_key in self._slot_inflight
 
@@ -1535,6 +1573,8 @@ class WebPwaServer:
                         self.cli_store_dir,
                         self.codex_store_dir,
                     )
+                    if nav_token != self._nav_seq:
+                        return
                     self._ide_watch_sig = (detail.store, detail.conversation_id, sig[0], sig[1])
 
         # If this slot already has an in-memory turn running, keep its live history intact!
@@ -1561,6 +1601,8 @@ class WebPwaServer:
                         self.cli_store_dir,
                         self.codex_store_dir,
                     )
+                    if not only_refresh and nav_token != self._nav_seq:
+                        return
                     if cont_detail and cont_detail.messages:
                         cont_hist = self._convert_detail_to_pwa_history(cont_detail, session.model or "default")
                         _extend_deduplicated_turns(loaded_history, cont_hist)
@@ -1581,6 +1623,9 @@ class WebPwaServer:
             elif self._slot_local_turns.get(slot_key) and detail.store != "ide":
                 _extend_deduplicated_turns(loaded_history, self._slot_local_turns[slot_key])
             self._slot_history[slot_key] = loaded_history
+
+        if (not only_refresh and nav_token != self._nav_seq) or (only_refresh and self._active_slot != slot_key):
+            return
 
         await self._broadcast(
             {
@@ -1611,14 +1656,17 @@ class WebPwaServer:
         open_pc_window: bool = True,
         silent_keep_view: bool = False,
     ) -> None:
+        self._nav_seq += 1
+        nav_token = self._nav_seq
         new_slot = f"new:{uuid.uuid4().hex[:8]}"
         session = self._session_for_slot(new_slot)
         try:
             await session.start_new_conversation(workspace=workspace)
         except FileNotFoundError as exc:
-            await ws.send(
-                json.dumps({"type": "toast", "level": "err", "text": str(exc), "req_id": req_id}, ensure_ascii=False)
-            )
+            await self._safe_send(ws, {"type": "toast", "level": "err", "text": str(exc), "req_id": req_id})
+            return
+
+        if nav_token != self._nav_seq:
             return
 
         req_target = (target or "ide").strip().lower()
@@ -1631,6 +1679,8 @@ class WebPwaServer:
             title_label = "反重力助手"
         elif req_target == "ide" and self._pc_window_new_opener is not None:
             opened, open_note = await asyncio.to_thread(self._pc_window_new_opener)
+            if nav_token != self._nav_seq:
+                return
             if opened:
                 store_mode = "ide"
                 title_label = "新建电脑对话"
@@ -1672,7 +1722,7 @@ class WebPwaServer:
             }
         )
         if toast_note and not silent_keep_view:
-            await ws.send(json.dumps({"type": "toast", "level": "info", "text": toast_note}, ensure_ascii=False))
+            await self._safe_send(ws, {"type": "toast", "level": "info", "text": toast_note})
 
     async def _stream_pc_ide_transcript_until_idle(
         self,
@@ -2957,23 +3007,32 @@ class WebPwaServer:
             return True
 
         if cmd in {"/new", "/reset"}:
+            prev_store = str(self._slot_meta.get(slot_key, {}).get("store") or "")
+            if not prev_store and self._pc_window_new_sender is not None:
+                prev_store = "ide"
+            self._nav_seq += 1
             new_slot = f"new:{uuid.uuid4().hex[:8]}"
             new_sess = self._session_for_slot(new_slot)
             await new_sess.start_new_conversation(workspace=str(session.workspace))
             self._active_slot = new_slot
             self._slot_history[new_slot] = []
-            self._slot_meta[new_slot] = {"conversation_id": "", "title": "新对话", "store": ""}
+            self._slot_meta[new_slot] = {"conversation_id": "", "title": "反重力助手", "store": prev_store}
             self._ide_watch_sig = ("", "", 0, 0)
             await self._broadcast({"type": "clear_history", "slot": new_slot})
+            await self._broadcast_slots_overview()
             await self._broadcast(
                 {
                     "type": "meta_update",
                     "slot": new_slot,
-                    "model": new_sess.model or "default",
+                    "model": (
+                        "Antigravity 电脑端"
+                        if prev_store == "ide"
+                        else ("Codex 电脑端" if prev_store == "codex" else (new_sess.model or "default"))
+                    ),
                     "workspace": str(new_sess.workspace),
                     "active_conversation_id": "",
                     "active_title": "反重力助手",
-                    "active_store": "",
+                    "active_store": prev_store,
                     "busy": False,
                 }
             )
