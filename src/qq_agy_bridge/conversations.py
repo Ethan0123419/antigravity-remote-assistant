@@ -1015,7 +1015,7 @@ def load_conversation_detail(
                     if row:
                         return ConversationDetail(
                             conversation_id=cid,
-                            title=str(row[0] or f"对话 {cid[:8]}"),
+                            title=_clean_display_title(str(row[0] or ""), 60) or f"对话 {cid[:8]}",
                             store=sk,
                             workspace=_parse_workspace_uris(str(row[1] or "")),
                             running="RUNNING" in str(row[2] or "").upper(),
@@ -1040,7 +1040,7 @@ def load_conversation_detail(
             ).fetchone()
             con.close()
             if row:
-                title = str(row[0] or "").strip()
+                title = _clean_display_title(str(row[0] or ""), 60)
                 workspace = _parse_workspace_uris(str(row[1] or ""))
                 running = "RUNNING" in str(row[2] or "").upper()
         except Exception:
@@ -1237,6 +1237,9 @@ def load_conversation_detail(
     final_msgs = parsed_msgs[-max_messages:] if max_messages > 0 else parsed_msgs
     has_more = approx_older or (len(parsed_msgs) > len(final_msgs))
     total_count = max(total_est, len(parsed_msgs))
+
+    if not title:
+        title = next((_clean_display_title(m.text, 60) for m in parsed_msgs if m.role == "user" and m.text), "")
 
     return ConversationDetail(
         conversation_id=cid,

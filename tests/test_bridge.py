@@ -1822,6 +1822,8 @@ async def test_mobile_sidebar_dual_entries_noise_filtering_and_gentle_home_switc
     listed_ids = {x.conversation_id: x for x in listed}
     assert good_ide_cid in listed_ids
     assert listed_ids[good_ide_cid].title == "排查 Antigravity 登录后无法进入"
+    det_good = load_conversation_detail(good_ide_cid, store="ide", ide_dir=ide_dir, cli_dir=cli_dir, codex_dir=cdx_dir)
+    assert det_good is not None and det_good.title == "排查 Antigravity 登录后无法进入"
     assert ping_ide_cid not in listed_ids
     assert real_cdx_cid in listed_ids
     assert astra_cdx_cid not in listed_ids
