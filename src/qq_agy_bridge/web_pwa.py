@@ -280,6 +280,7 @@ def read_ide_live_turn_snapshot(
             "has_db_row": has_db_row,
             "db_running": db_running,
             "saw_user_input": False,
+            "user_input_line_nos": [],
             "saw_activity_after_user": False,
             "last_planner_had_tools": False,
             "latest_tool_name": "",
@@ -335,12 +336,13 @@ def read_ide_live_turn_snapshot(
         if full_map:
             tail_entries = [(ln_no, full_map.get(ln_no, obj)) for ln_no, obj in tail_entries]
 
-    last_user_pos = -1
-    for idx, (_, obj) in enumerate(tail_entries):
+    user_positions: list[tuple[int, int]] = []
+    for idx, (ln_no, obj) in enumerate(tail_entries):
         if obj.get("type") == "USER_INPUT" and obj.get("source") in {"USER_EXPLICIT", None, ""}:
-            last_user_pos = idx
+            user_positions.append((idx, ln_no))
 
-    saw_user_input = last_user_pos >= 0
+    saw_user_input = len(user_positions) > 0
+    user_input_line_nos = [ln_no for _, ln_no in user_positions]
     saw_activity_after_user = False
     last_planner_had_tools = False
     latest_tool_name = ""
@@ -356,7 +358,9 @@ def read_ide_live_turn_snapshot(
             pass
 
     if saw_user_input:
-        for _, obj in tail_entries[last_user_pos + 1 :]:
+        first_u_idx = user_positions[0][0]
+        second_u_idx = user_positions[1][0] if len(user_positions) > 1 else len(tail_entries)
+        for _, obj in tail_entries[first_u_idx + 1 : second_u_idx]:
             etype = obj.get("type")
             if etype in {"PLANNER_RESPONSE", "GENERIC"}:
                 saw_activity_after_user = True
@@ -390,6 +394,7 @@ def read_ide_live_turn_snapshot(
         "has_db_row": has_db_row,
         "db_running": db_running,
         "saw_user_input": saw_user_input,
+        "user_input_line_nos": user_input_line_nos,
         "saw_activity_after_user": saw_activity_after_user,
         "last_planner_had_tools": last_planner_had_tools,
         "latest_tool_name": latest_tool_name,
@@ -561,6 +566,7 @@ class WebPwaServer:
         self._slot_history: dict[str, list[dict[str, Any]]] = {DEFAULT_SLOT_KEY: []}
         self._slot_local_turns: dict[str, list[dict[str, Any]]] = {}
         self._slot_inflight: dict[str, dict[str, Any]] = {}
+        self._slot_followup_queue: dict[str, list[dict[str, Any]]] = {}
         self._slot_codex_procs: dict[str, asyncio.subprocess.Process] = {}
         self._slot_meta: dict[str, dict[str, Any]] = {
             DEFAULT_SLOT_KEY: {"conversation_id": "", "title": "", "store": ""}
@@ -608,6 +614,27 @@ class WebPwaServer:
     ) -> None:
         arr = self._slot_history.setdefault(slot_key, [])
         arr.append(item)
+        if len(arr) > 300:
+            self._slot_history[slot_key] = arr[-300:]
+        if persist_local:
+            loc = self._slot_local_turns.setdefault(slot_key, [])
+            loc.append(item)
+            if len(loc) > 100:
+                self._slot_local_turns[slot_key] = loc[-100:]
+
+    def _insert_slot_history_before(
+        self, slot_key: str, item: dict[str, Any], before_id: str, *, persist_local: bool = True
+    ) -> None:
+        arr = self._slot_history.setdefault(slot_key, [])
+        if before_id:
+            for idx, existing in enumerate(arr):
+                if existing.get("id") == before_id:
+                    arr.insert(idx, item)
+                    break
+            else:
+                arr.append(item)
+        else:
+            arr.append(item)
         if len(arr) > 300:
             self._slot_history[slot_key] = arr[-300:]
         if persist_local:
@@ -1584,6 +1611,7 @@ class WebPwaServer:
         self._ide_watch_sig = ("", "", 0, 0)
 
         await self._broadcast({"type": "clear_history", "slot": new_slot, "req_id": req_id})
+        await self._broadcast_slots_overview()
         await self._broadcast(
             {
                 "type": "meta_update",
@@ -1606,6 +1634,7 @@ class WebPwaServer:
     async def _stream_pc_ide_transcript_until_idle(
         self,
         *,
+        chat_slot: str = "",
         ide_root: Path,
         ide_cid: str,
         baseline_lines: int,
@@ -1633,7 +1662,8 @@ class WebPwaServer:
         final_snap = base_snap
 
         while time.monotonic() < overall_deadline:
-            if reply_id in self._cancelled_reply_ids:
+            cur_reply_id = str(inflight_state.get("msg_id") or reply_id)
+            if cur_reply_id in self._cancelled_reply_ids:
                 final_snap = await asyncio.to_thread(
                     read_ide_live_turn_snapshot, ide_root, ide_cid, baseline_lines
                 )
@@ -1662,9 +1692,18 @@ class WebPwaServer:
                 last_change_mono = time.monotonic()
 
             saw_u = bool(snap.get("saw_user_input"))
+            u_line_nos = list(snap.get("user_input_line_nos") or [])
             db_run = bool(snap.get("db_running"))
+            pending_steers = int(inflight_state.get("pending_steers") or 0)
+            steered_q: list[dict[str, Any]] = inflight_state.setdefault("steered_ack_queue", [])
+            last_steer_mono = float(inflight_state.get("last_steer_mono") or 0.0)
+            if last_steer_mono > 0:
+                overall_deadline = max(
+                    overall_deadline,
+                    last_steer_mono + max(30.0, float(self.config.agy_timeout_seconds)),
+                )
 
-            if not saw_u and not db_run and time.monotonic() >= accept_deadline:
+            if not saw_u and not db_run and pending_steers == 0 and time.monotonic() >= accept_deadline:
                 logger.warning("PC IDE window did not record USER_INPUT within %.1fs after Enter", self.pc_ide_accept_timeout)
                 return (
                     TurnResult(
@@ -1693,6 +1732,103 @@ class WebPwaServer:
                 if tname and tname != last_tool:
                     last_tool = tname
                     await on_tool(tname)
+
+                # Exact transcript-anchored pivot when a mid-turn steering USER_INPUT line (`u_line_nos[1]`) lands!
+                if len(u_line_nos) >= 2 and chat_slot:
+                    steer_cid = ""
+                    if steered_q:
+                        st_item = steered_q.pop(0)
+                        steer_cid = str(st_item.get("client_id") or "")
+
+                    seg_imgs = [p for p in (snap.get("images") or []) if is_safe_outbound_file(p, image_only=True)]
+                    prev_steps = list(inflight_state.get("steps") or [])
+                    if emitted_text or seg_imgs:
+                        seg_clean, md_imgs, md_files = extract_pwa_media_and_text(emitted_text)
+                        for p_im in seg_imgs:
+                            if p_im not in md_imgs:
+                                md_imgs.append(p_im)
+                        seg_entry = {
+                            "role": "assistant",
+                            "id": cur_reply_id,
+                            "text": seg_clean,
+                            "images": [{"media_id": self.register_media(p), "name": p.name} for p in md_imgs],
+                            "files": [
+                                {"media_id": self.register_media(p), "name": p.name, "size": self._safe_file_size(p)}
+                                for p in md_files
+                            ],
+                            "steps": prev_steps,
+                            "duration_sec": max(1, int(round(time.time() - turn_start_sec))),
+                            "model": "Antigravity 电脑端",
+                            "ts": int(time.time() * 1000),
+                        }
+                        self._insert_slot_history_before(chat_slot, seg_entry, steer_cid, persist_local=False)
+                        if self._active_slot == chat_slot:
+                            await self._broadcast(
+                                {
+                                    "type": "stream_end",
+                                    "slot": chat_slot,
+                                    "item": seg_entry,
+                                    "keep_busy": True,
+                                    "slots_overview": self._build_slots_overview(),
+                                }
+                            )
+                        carried_steps: list[str] = []
+                    else:
+                        if self._active_slot == chat_slot:
+                            await self._broadcast(
+                                {"type": "stream_abandon", "slot": chat_slot, "msg_id": cur_reply_id}
+                            )
+                        carried_steps = prev_steps
+
+                    if steer_cid:
+                        await self._broadcast(
+                            {
+                                "type": "chat_ack",
+                                "client_id": steer_cid,
+                                "slot": chat_slot,
+                                "stage": "processing_pc",
+                                "label": "⚡ 电脑端正在处理此引导指令",
+                            }
+                        )
+
+                    next_reply_id = f"a-{uuid.uuid4().hex[:10]}"
+                    inflight_state["msg_id"] = next_reply_id
+                    inflight_state["text"] = ""
+                    inflight_state["status"] = "正在结合引导指令继续执行..."
+                    inflight_state["steps"] = carried_steps
+                    baseline_lines = int(u_line_nos[1])
+                    emitted_text = ""
+                    last_tool = ""
+                    turn_start_sec = time.time()
+                    accept_deadline = time.monotonic() + max(0.5, float(self.pc_ide_accept_timeout))
+                    last_change_mono = time.monotonic()
+                    if self._active_slot == chat_slot:
+                        await self._broadcast(
+                            {
+                                "type": "stream_start",
+                                "slot": chat_slot,
+                                "msg_id": next_reply_id,
+                                "model": "Antigravity 电脑端",
+                                "slots_overview": self._build_slots_overview(),
+                            }
+                        )
+                        if carried_steps:
+                            await self._broadcast(
+                                {
+                                    "type": "stream_status",
+                                    "slot": chat_slot,
+                                    "msg_id": next_reply_id,
+                                    "status": "正在结合引导指令继续执行...",
+                                    "steps": carried_steps,
+                                }
+                            )
+                    continue
+
+                # Wait while a mid-turn steering delivery is in flight or queued waiting for IDE pickup
+                if pending_steers > 0 or (
+                    steered_q and (db_run or (time.monotonic() - last_steer_mono) < max(0.8, float(self.pc_ide_accept_timeout)))
+                ):
+                    continue
 
                 saw_act = bool(snap.get("saw_activity_after_user"))
                 has_db = bool(snap.get("has_db_row"))
@@ -1753,49 +1889,45 @@ class WebPwaServer:
         on_reset: Callable[[], Any],
         on_tool: Callable[[str], Any],
         on_status: Callable[[str], Any],
+        already_delivered: bool = False,
+        preset_baseline_lines: int | None = None,
     ) -> tuple[TurnResult, list[Path]] | None:
-        """Deliver `prompt_text` directly into the open PC Antigravity IDE window and stream its live transcript."""
+        """Deliver `prompt_text` directly into the open PC Antigravity IDE window (including mid-turn steering!) and stream its live transcript."""
         if self._pc_window_sender is None or not ide_cid:
             return None
 
         ide_root = self.ide_store_dir if self.ide_store_dir is not None else _default_ide_dir()
         base_snap = await asyncio.to_thread(read_ide_live_turn_snapshot, ide_root, ide_cid, 10**9)
-        if bool(base_snap.get("db_running")):
-            for _ in range(5):
-                await asyncio.sleep(0.45)
-                base_snap = await asyncio.to_thread(read_ide_live_turn_snapshot, ide_root, ide_cid, 10**9)
-                if not bool(base_snap.get("db_running")):
-                    break
-        if bool(base_snap.get("db_running")):
-            return (
-                TurnResult(
-                    status="ERROR",
-                    response="",
-                    conversation_id=ide_cid,
-                    active_model="Antigravity 电脑端",
-                    error="电脑端该 Antigravity 对话正在运行上一条任务，请等待其执行完毕（或点击停止）后再点击消息下方「重填」发送。",
-                ),
-                [],
-            )
-        baseline_lines = int(base_snap.get("total_lines") or 0)
+        was_pc_running = bool(base_snap.get("db_running"))
+        baseline_lines = (
+            int(preset_baseline_lines)
+            if preset_baseline_lines is not None
+            else int(base_snap.get("total_lines") or 0)
+        )
 
-        await on_status("正在向电脑端窗口发送指令...")
-        delivered, note = await asyncio.to_thread(self._pc_window_sender, ide_cid, title, prompt_text)
-        if not delivered:
-            logger.warning("PC IDE window delivery rejected (%s): %s", ide_cid[:8], note)
-            return (
-                TurnResult(
-                    status="ERROR",
-                    response="",
-                    conversation_id=ide_cid,
-                    active_model="Antigravity 电脑端",
-                    error=f"未能投递到电脑端 Antigravity 聊天窗口：{note}\n（已阻止切换后台独立模型分叉双写，请确认电脑屏幕未锁屏且 Antigravity 窗口已打开后，点气泡下方「重填」重试。）",
-                ),
-                [],
+        if not already_delivered:
+            await on_status(
+                "正在向运行中的电脑窗口注入引导指令..." if was_pc_running else "正在向电脑端窗口发送指令..."
             )
+            delivered, note = await asyncio.to_thread(self._pc_window_sender, ide_cid, title, prompt_text)
+            if not delivered:
+                logger.warning("PC IDE window delivery rejected (%s): %s", ide_cid[:8], note)
+                return (
+                    TurnResult(
+                        status="ERROR",
+                        response="",
+                        conversation_id=ide_cid,
+                        active_model="Antigravity 电脑端",
+                        error=f"未能投递到电脑端 Antigravity 聊天窗口：{note}\n（已阻止切换后台独立模型分叉双写，请确认电脑屏幕未锁屏且 Antigravity 窗口已打开后，点气泡下方「重填」重试。）",
+                    ),
+                    [],
+                )
 
-        await on_status("电脑端窗口已接收，正在执行...")
+        await on_status(
+            "⚡ 已送达引导指令，等待当前步骤衔接..." if was_pc_running else "电脑端窗口已接收，正在执行..."
+        )
         return await self._stream_pc_ide_transcript_until_idle(
+            chat_slot=chat_slot,
             ide_root=ide_root,
             ide_cid=ide_cid,
             baseline_lines=baseline_lines,
@@ -1877,6 +2009,7 @@ class WebPwaServer:
             "db_running": True,
         }
         return await self._stream_pc_ide_transcript_until_idle(
+            chat_slot=chat_slot,
             ide_root=ide_root,
             ide_cid=new_cid,
             baseline_lines=0,
@@ -2141,32 +2274,6 @@ class WebPwaServer:
             return
 
         session = self._session_for_slot(chat_slot)
-
-        is_quick_slash = raw_text.startswith("/") and not attachments and raw_text.split()[0].lower() in {
-            "/screen",
-            "/shot",
-            "/status",
-            "/clean",
-        }
-        if chat_slot in self._slot_inflight and not is_quick_slash:
-            try:
-                await ws.send(
-                    json.dumps(
-                        {
-                            "type": "toast",
-                            "level": "info",
-                            "text": "当前对话正在执行中，请等待完成或先点击停止",
-                        },
-                        ensure_ascii=False,
-                    )
-                )
-            except Exception:
-                pass
-            return
-
-        if explicit_client_id:
-            self._processed_client_ids[explicit_client_id] = now_mono
-
         slot_meta = self._slot_meta.get(chat_slot, {})
         slot_store = str(slot_meta.get("store") or (session.linked_store if session.linked_ide_id else ""))
         slot_cid = str(slot_meta.get("conversation_id") or session.linked_ide_id or "")
@@ -2197,7 +2304,15 @@ class WebPwaServer:
             "ts": int(time.time() * 1000),
         }
 
-        if raw_text.startswith("/") and not attachments:
+        is_quick_slash = raw_text.startswith("/") and not attachments and raw_text.split()[0].lower() in {
+            "/screen",
+            "/shot",
+            "/status",
+            "/clean",
+        }
+        if is_quick_slash:
+            if explicit_client_id:
+                self._processed_client_ids[explicit_client_id] = now_mono
             self._append_slot_history(chat_slot, user_entry)
             if self._active_slot == chat_slot:
                 await self._broadcast({"type": "user_msg", "slot": chat_slot, "item": user_entry})
@@ -2220,339 +2335,546 @@ class WebPwaServer:
         if not prompt_text:
             return
 
-        # Atomically claim `self._slot_inflight[chat_slot]` BEFORE the first `await` so concurrent sends cannot slip in!
-        reply_id = f"a-{uuid.uuid4().hex[:10]}"
-        initial_model_label = (
-            "Antigravity 电脑端"
-            if slot_store == "ide"
-            else ("Codex 电脑端" if slot_store == "codex" else (session.model or "default"))
-        )
-        inflight_state: dict[str, Any] = {
-            "msg_id": reply_id,
-            "slot": chat_slot,
-            "model": initial_model_label,
-            "text": "",
-            "status": "正在思考...",
-            "steps": [],
-            "started_ms": int(time.time() * 1000),
-        }
-        self._slot_inflight[chat_slot] = inflight_state
-        if not (raw_text.startswith("/") and not attachments):
-            self._append_slot_history(chat_slot, user_entry)
+        already_delivered_pc = False
+        preset_baseline: int | None = None
+        already_persisted_user = False
 
-        turn_start_sec = time.time()
-        partial_before_finish = ""
-        pc_direct_persisted = False
-        extra_pc_images: list[Path] = []
-        result: TurnResult | None = None
-        was_brand_new = not bool(slot_cid)
+        # Mid-turn Steering & Follow-Up Queueing when `chat_slot` already has an active turn!
+        active_inf = self._slot_inflight.get(chat_slot)
+        if active_inf is not None:
+            fq = self._slot_followup_queue.setdefault(chat_slot, [])
+            cur_steers = int(active_inf.get("pending_steers") or 0) + len(active_inf.get("steered_ack_queue") or [])
+            if len(fq) + cur_steers >= 5:
+                try:
+                    await ws.send(
+                        json.dumps(
+                            {
+                                "type": "chat_ack",
+                                "client_id": client_id,
+                                "slot": chat_slot,
+                                "stage": "rejected_full",
+                                "label": "⚠ 引导排队已满（最多 5 条），请稍候再发",
+                            },
+                            ensure_ascii=False,
+                        )
+                    )
+                    await ws.send(
+                        json.dumps(
+                            {"type": "toast", "level": "err", "text": "当前引导指令排队已满，请等上一步消化后再发"},
+                            ensure_ascii=False,
+                        )
+                    )
+                except Exception:
+                    pass
+                return
 
-        async def _on_delta(delta: str) -> None:
-            inflight_state["text"] = str(inflight_state.get("text") or "") + delta
-            inflight_state["status"] = ""
-            if self._active_slot == chat_slot:
-                await self._broadcast(
-                    {"type": "stream_delta", "slot": chat_slot, "msg_id": reply_id, "delta": delta}
-                )
+            if explicit_client_id:
+                self._processed_client_ids[explicit_client_id] = now_mono
 
-        async def _on_reset() -> None:
-            inflight_state["text"] = ""
-            if self._active_slot == chat_slot:
-                await self._broadcast({"type": "stream_reset", "slot": chat_slot, "msg_id": reply_id})
-
-        async def _on_status(status_txt: str) -> None:
-            inflight_state["status"] = status_txt
-            clean_st = status_txt.strip().rstrip(".")
-            if clean_st and clean_st != "正在思考":
-                steps_arr: list[str] = inflight_state.setdefault("steps", [])
-                if not steps_arr or steps_arr[-1] != clean_st:
-                    if len(steps_arr) < 16:
-                        steps_arr.append(clean_st)
-            if self._active_slot == chat_slot:
-                await self._broadcast(
-                    {
-                        "type": "stream_status",
-                        "slot": chat_slot,
-                        "msg_id": reply_id,
-                        "status": status_txt,
-                        "steps": list(inflight_state.get("steps") or []),
-                    }
-                )
-
-        async def _on_tool(tool_name: str) -> None:
-            tlow = tool_name.lower()
-            if "screenshot" in tlow or "snapshot" in tlow:
-                hint = "电脑端正在截取画面..."
-            elif "edit" in tlow or "write" in tlow:
-                hint = "电脑端正在修改代码..."
-            elif "mcp" in tlow or "command" in tlow:
-                hint = "电脑端正在执行命令..."
-            else:
-                hint = "电脑端正在检索与处理..."
-            await _on_status(hint)
-
-        try:
-            await self._broadcast(
-                {
-                    "type": "chat_ack",
-                    "client_id": client_id,
-                    "slot": chat_slot,
-                    "stage": "gateway_accepted",
-                    "label": "✓ 网关已接收",
-                }
-            )
-            if self._active_slot == chat_slot:
-                if not (raw_text.startswith("/") and not attachments):
+            # Branch A: Live mid-turn steering directly into PC Antigravity IDE window (`slot_store == 'ide'`)
+            if slot_store == "ide" and slot_cid and self._pc_window_sender is not None:
+                self._append_slot_history(chat_slot, user_entry)
+                if self._active_slot == chat_slot:
                     await self._broadcast({"type": "user_msg", "slot": chat_slot, "item": user_entry})
                 await self._broadcast(
                     {
-                        "type": "stream_start",
+                        "type": "chat_ack",
+                        "client_id": client_id,
                         "slot": chat_slot,
-                        "msg_id": reply_id,
-                        "model": initial_model_label,
+                        "stage": "gateway_accepted",
+                        "label": "⚡ 正在向电脑窗口注入引导指令...",
+                    }
+                )
+                ide_root_st = self.ide_store_dir if self.ide_store_dir is not None else _default_ide_dir()
+                pre_snap_st = await asyncio.to_thread(read_ide_live_turn_snapshot, ide_root_st, slot_cid, 10**9)
+                active_inf["pending_steers"] = int(active_inf.get("pending_steers") or 0) + 1
+                try:
+                    delivered_st, note_st = await asyncio.to_thread(
+                        self._pc_window_sender, slot_cid, slot_title, prompt_text
+                    )
+                finally:
+                    active_inf["pending_steers"] = max(0, int(active_inf.get("pending_steers") or 1) - 1)
+
+                if not delivered_st:
+                    self._remove_slot_local_turn(chat_slot, client_id)
+                    await self._broadcast(
+                        {
+                            "type": "chat_ack",
+                            "client_id": client_id,
+                            "slot": chat_slot,
+                            "stage": "steer_failed",
+                            "label": f"⚠ 未送达电脑窗口（可点重填）",
+                        }
+                    )
+                    try:
+                        await ws.send(
+                            json.dumps(
+                                {"type": "toast", "level": "err", "text": f"引导指令未能送达电脑窗口：{note_st}"},
+                                ensure_ascii=False,
+                            )
+                        )
+                    except Exception:
+                        pass
+                    return
+
+                self._remove_slot_local_turn(chat_slot, client_id)
+                if self._slot_inflight.get(chat_slot) is active_inf:
+                    active_inf.setdefault("steered_ack_queue", []).append(
+                        {"client_id": client_id, "sent_mono": time.monotonic()}
+                    )
+                    active_inf["last_steer_mono"] = time.monotonic()
+                    await self._broadcast(
+                        {
+                            "type": "chat_ack",
+                            "client_id": client_id,
+                            "slot": chat_slot,
+                            "stage": "delivered_pc",
+                            "label": "⚡ 已送达电脑端，本步完成后无缝继续",
+                        }
+                    )
+                    try:
+                        await ws.send(
+                            json.dumps(
+                                {"type": "toast", "level": "info", "text": "⚡ 引导指令已送达电脑窗口，无需中断直接继续"},
+                                ensure_ascii=False,
+                            )
+                        )
+                    except Exception:
+                        pass
+                    return
+
+                # Previous turn finished right while we were pasting `prompt_text` into IDE -> seamlessly track the new turn!
+                if chat_slot not in self._slot_inflight:
+                    already_delivered_pc = True
+                    already_persisted_user = True
+                    preset_baseline = int(pre_snap_st.get("total_lines") or 0)
+                else:
+                    return
+            else:
+                # Branch B: Codex / CLI subprocess (`stdin` closed) -> FIFO queue for automatic immediate continuation!
+                self._append_slot_history(chat_slot, user_entry)
+                if self._active_slot == chat_slot:
+                    await self._broadcast({"type": "user_msg", "slot": chat_slot, "item": user_entry})
+                fq.append(
+                    {
+                        "raw_text": raw_text,
+                        "attachments": attachments,
+                        "prompt_text": prompt_text,
+                        "user_entry": user_entry,
+                        "client_id": client_id,
+                    }
+                )
+                await self._broadcast(
+                    {
+                        "type": "chat_ack",
+                        "client_id": client_id,
+                        "slot": chat_slot,
+                        "stage": "queued_followup",
+                        "label": "⏳ 已排队，当前轮结束后自动继续",
+                    }
+                )
+                try:
+                    await ws.send(
+                        json.dumps(
+                            {"type": "toast", "level": "info", "text": "⏳ 当前对话正在执行中，已将引导指令排入队列自动续跑"},
+                            ensure_ascii=False,
+                        )
+                    )
+                except Exception:
+                    pass
+                return
+
+        if explicit_client_id and explicit_client_id not in self._processed_client_ids:
+            self._processed_client_ids[explicit_client_id] = now_mono
+
+        if not already_persisted_user and raw_text.startswith("/") and not attachments:
+            self._append_slot_history(chat_slot, user_entry)
+            if self._active_slot == chat_slot:
+                await self._broadcast({"type": "user_msg", "slot": chat_slot, "item": user_entry})
+            handled = await self._handle_slash_command(chat_slot, session, raw_text)
+            if handled:
+                return
+
+        was_brand_new = not bool(slot_cid)
+        while True:
+            # Atomically claim `self._slot_inflight[chat_slot]` BEFORE the first `await` so concurrent sends cannot slip in!
+            slot_meta = self._slot_meta.get(chat_slot, {})
+            slot_store = str(slot_meta.get("store") or (session.linked_store if session.linked_ide_id else ""))
+            slot_cid = str(slot_meta.get("conversation_id") or session.linked_ide_id or "")
+            slot_title = str(slot_meta.get("title") or session.active_title or "")
+
+            reply_id = f"a-{uuid.uuid4().hex[:10]}"
+            initial_model_label = (
+                "Antigravity 电脑端"
+                if slot_store == "ide"
+                else ("Codex 电脑端" if slot_store == "codex" else (session.model or "default"))
+            )
+            inflight_state: dict[str, Any] = {
+                "msg_id": reply_id,
+                "slot": chat_slot,
+                "model": initial_model_label,
+                "text": "",
+                "status": "正在思考...",
+                "steps": [],
+                "started_ms": int(time.time() * 1000),
+            }
+            self._slot_inflight[chat_slot] = inflight_state
+            if not already_persisted_user and not (raw_text.startswith("/") and not attachments):
+                self._append_slot_history(chat_slot, user_entry)
+
+            turn_start_sec = time.time()
+            partial_before_finish = ""
+            pc_direct_persisted = False
+            extra_pc_images: list[Path] = []
+            result: TurnResult | None = None
+
+            async def _on_delta(delta: str) -> None:
+                cur_mid = str(inflight_state.get("msg_id") or reply_id)
+                inflight_state["text"] = str(inflight_state.get("text") or "") + delta
+                inflight_state["status"] = ""
+                if self._active_slot == chat_slot:
+                    await self._broadcast(
+                        {"type": "stream_delta", "slot": chat_slot, "msg_id": cur_mid, "delta": delta}
+                    )
+
+            async def _on_reset() -> None:
+                cur_mid = str(inflight_state.get("msg_id") or reply_id)
+                inflight_state["text"] = ""
+                if self._active_slot == chat_slot:
+                    await self._broadcast({"type": "stream_reset", "slot": chat_slot, "msg_id": cur_mid})
+
+            async def _on_status(status_txt: str) -> None:
+                cur_mid = str(inflight_state.get("msg_id") or reply_id)
+                inflight_state["status"] = status_txt
+                clean_st = status_txt.strip().rstrip(".")
+                if clean_st and clean_st != "正在思考":
+                    steps_arr: list[str] = inflight_state.setdefault("steps", [])
+                    if not steps_arr or steps_arr[-1] != clean_st:
+                        if len(steps_arr) < 16:
+                            steps_arr.append(clean_st)
+                if self._active_slot == chat_slot:
+                    await self._broadcast(
+                        {
+                            "type": "stream_status",
+                            "slot": chat_slot,
+                            "msg_id": cur_mid,
+                            "status": status_txt,
+                            "steps": list(inflight_state.get("steps") or []),
+                        }
+                    )
+
+            async def _on_tool(tool_name: str) -> None:
+                tlow = tool_name.lower()
+                if "screenshot" in tlow or "snapshot" in tlow:
+                    hint = "电脑端正在截取画面..."
+                elif "edit" in tlow or "write" in tlow:
+                    hint = "电脑端正在修改代码..."
+                elif "mcp" in tlow or "command" in tlow:
+                    hint = "电脑端正在执行命令..."
+                else:
+                    hint = "电脑端正在检索与处理..."
+                await _on_status(hint)
+
+            try:
+                if not already_persisted_user:
+                    await self._broadcast(
+                        {
+                            "type": "chat_ack",
+                            "client_id": client_id,
+                            "slot": chat_slot,
+                            "stage": "gateway_accepted",
+                            "label": "✓ 网关已接收",
+                        }
+                    )
+                else:
+                    await self._broadcast(
+                        {
+                            "type": "chat_ack",
+                            "client_id": client_id,
+                            "slot": chat_slot,
+                            "stage": "processing_followup",
+                            "label": "⚡ 正在自动执行此引导指令",
+                        }
+                    )
+                if self._active_slot == chat_slot:
+                    if not already_persisted_user and not (raw_text.startswith("/") and not attachments):
+                        await self._broadcast({"type": "user_msg", "slot": chat_slot, "item": user_entry})
+                    await self._broadcast(
+                        {
+                            "type": "stream_start",
+                            "slot": chat_slot,
+                            "msg_id": reply_id,
+                            "model": initial_model_label,
+                            "slots_overview": self._build_slots_overview(),
+                        }
+                    )
+                else:
+                    await self._broadcast_slots_overview()
+
+                # 1. Existing PC Antigravity IDE conversation -> deliver into live PC IDE window
+                if slot_store == "ide" and slot_cid:
+                    pc_ide_out = await self._try_run_pc_ide_window_turn(
+                        chat_slot=chat_slot,
+                        ide_cid=slot_cid,
+                        title=slot_title,
+                        prompt_text=prompt_text,
+                        reply_id=reply_id,
+                        inflight_state=inflight_state,
+                        turn_start_sec=turn_start_sec,
+                        on_delta=_on_delta,
+                        on_reset=_on_reset,
+                        on_tool=_on_tool,
+                        on_status=_on_status,
+                        already_delivered=already_delivered_pc,
+                        preset_baseline_lines=preset_baseline,
+                    )
+                    if pc_ide_out is not None:
+                        result, extra_pc_images = pc_ide_out
+                        pc_direct_persisted = True
+                        await self._broadcast(
+                            {
+                                "type": "chat_ack",
+                                "client_id": client_id,
+                                "slot": chat_slot,
+                                "stage": "delivered_pc",
+                                "label": "✓ 已投递至电脑窗口",
+                            }
+                        )
+
+                # 2. Brand-new PC Antigravity IDE conversation (tapped `+` or sent from default home screen)
+                elif not slot_cid and slot_store in {"", "ide"} and self._pc_window_new_sender is not None:
+                    pc_new_out = await self._try_run_pc_ide_new_chat_turn(
+                        chat_slot=chat_slot,
+                        session=session,
+                        raw_title_seed=raw_text,
+                        prompt_text=prompt_text,
+                        reply_id=reply_id,
+                        inflight_state=inflight_state,
+                        turn_start_sec=turn_start_sec,
+                        on_delta=_on_delta,
+                        on_reset=_on_reset,
+                        on_tool=_on_tool,
+                        on_status=_on_status,
+                    )
+                    if pc_new_out is not None:
+                        result, extra_pc_images = pc_new_out
+                        pc_direct_persisted = True
+                        await self._broadcast(
+                            {
+                                "type": "chat_ack",
+                                "client_id": client_id,
+                                "slot": chat_slot,
+                                "stage": "delivered_pc",
+                                "label": "✓ 已在电脑端新建并投递",
+                            }
+                        )
+
+                # 3. Existing OR brand-new PC OpenAI Codex conversation (`slot_store == "codex"`)
+                elif slot_store == "codex":
+                    cdx_out = await self._try_run_codex_cli_turn(
+                        chat_slot=chat_slot,
+                        codex_cid=slot_cid,
+                        workspace=session.workspace,
+                        prompt_text=prompt_text,
+                        reply_id=reply_id,
+                        on_delta=_on_delta,
+                        on_tool=_on_tool,
+                        on_status=_on_status,
+                    )
+                    if cdx_out is not None:
+                        result = cdx_out
+                        pc_direct_persisted = True
+                        await self._broadcast(
+                            {
+                                "type": "chat_ack",
+                                "client_id": client_id,
+                                "slot": chat_slot,
+                                "stage": "delivered_pc",
+                                "label": "✓ 已交由电脑 Codex 执行",
+                            }
+                        )
+                        if not slot_cid and cdx_out.conversation_id:
+                            new_title = raw_text[:38] or "Codex 新对话"
+                            meta_cur = self._slot_meta.setdefault(chat_slot, {})
+                            meta_cur["conversation_id"] = cdx_out.conversation_id
+                            meta_cur["store"] = "codex"
+                            meta_cur["title"] = new_title
+                            session.linked_ide_id = cdx_out.conversation_id
+                            session.linked_store = "codex"
+                            session.active_title = new_title
+                            if self._active_slot == chat_slot:
+                                await self._broadcast(
+                                    {
+                                        "type": "meta_update",
+                                        "slot": chat_slot,
+                                        "model": "Codex 电脑端",
+                                        "workspace": str(session.workspace),
+                                        "active_conversation_id": cdx_out.conversation_id,
+                                        "active_title": new_title,
+                                        "active_store": "codex",
+                                        "busy": True,
+                                    }
+                                )
+
+                # 4. Fallback to standalone `agy.exe` session when in a mobile/CLI chat or when PC desktop app is closed
+                if result is None:
+                    final_mid_chk = str(inflight_state.get("msg_id") or reply_id)
+                    if final_mid_chk in self._cancelled_reply_ids or reply_id in self._cancelled_reply_ids:
+                        result = TurnResult(
+                            status="CANCELLED",
+                            response=str(inflight_state.get("text") or ""),
+                            active_model=initial_model_label,
+                        )
+                    else:
+                        if slot_store in {"ide", "codex"} and (self._pc_window_sender is not None or slot_store == "codex"):
+                            await _on_status("桌面窗口未就绪，已切换后台引擎接力处理...")
+                        result = await session.ask(
+                            prompt_text,
+                            on_delay_notice=None,
+                            on_stream_delta=_on_delta,
+                            on_stream_reset=_on_reset,
+                            on_tool_start=_on_tool,
+                        )
+            except asyncio.CancelledError:
+                final_mid_chk = str(inflight_state.get("msg_id") or reply_id)
+                if final_mid_chk not in self._cancelled_reply_ids and reply_id not in self._cancelled_reply_ids:
+                    if self._slot_inflight.get(chat_slot) is inflight_state:
+                        self._slot_inflight.pop(chat_slot, None)
+                    raise
+                result = TurnResult(
+                    status="CANCELLED",
+                    response=str(inflight_state.get("text") or ""),
+                    active_model=initial_model_label,
+                )
+            finally:
+                partial_before_finish = str(inflight_state.get("text") or "")
+                if (
+                    not pc_direct_persisted
+                    and self._pc_window_sender is None
+                    and session.linked_ide_id
+                    and session.conversation_id
+                ):
+                    map_key = f"{session.linked_store}:{session.linked_ide_id}" if session.linked_store else session.linked_ide_id
+                    self._continuation_map[map_key] = session.conversation_id
+                    self._continuation_map[session.linked_ide_id] = session.conversation_id
+                    await asyncio.to_thread(self._save_continuation_map)
+
+            final_reply_id = str(inflight_state.get("msg_id") or reply_id)
+            was_user_cancelled = final_reply_id in self._cancelled_reply_ids or reply_id in self._cancelled_reply_ids
+            self._cancelled_reply_ids.discard(final_reply_id)
+            self._cancelled_reply_ids.discard(reply_id)
+
+            if result.status == "SUCCESS":
+                clean_text, img_paths, file_paths = extract_pwa_media_and_text(result.response or "")
+                if result.switched_from_model and result.active_model:
+                    note = f"（注：{result.switched_from_model} 额度已满，已自动切到 {result.active_model}）"
+                    clean_text = f"{clean_text}\n\n{note}" if clean_text else note
+            elif was_user_cancelled or result.status == "CANCELLED":
+                clean_resp, img_paths, file_paths = extract_pwa_media_and_text(result.response or partial_before_finish)
+                clean_text = f"{clean_resp}\n\n⏹ 已停止生成。".strip() if clean_resp else "⏹ 已停止生成。"
+            else:
+                clean_resp, img_paths, file_paths = extract_pwa_media_and_text(result.response or partial_before_finish)
+                err = result.error or f"执行未成功 ({result.status})"
+                clean_text = f"{clean_resp}\n\n刚才这步出了点状况：\n{err}".strip()
+
+            for ep in extra_pc_images:
+                if ep not in img_paths and is_safe_outbound_file(ep, image_only=True):
+                    img_paths.append(ep)
+
+            if not pc_direct_persisted:
+                cli_root = self.cli_store_dir if self.cli_store_dir is not None else _default_cli_dir()
+                harvested = await asyncio.to_thread(
+                    harvest_recent_cli_turn_images,
+                    cli_root,
+                    result.conversation_id or session.conversation_id,
+                    turn_start_sec,
+                )
+                for hp in harvested:
+                    if hp not in img_paths:
+                        img_paths.append(hp)
+            else:
+                # Turn was written directly into the PC IDE / Codex transcript — avoid duplicating in `_slot_local_turns`!
+                self._remove_slot_local_turn(chat_slot, client_id)
+
+            if result.status == "SUCCESS" and not clean_text and not img_paths and not file_paths:
+                clean_text = "已完成。"
+
+            # Update slot metadata if this was a brand-new conversation that just received a CLI ID
+            if chat_slot.startswith("new:") or chat_slot == DEFAULT_SLOT_KEY:
+                if session.conversation_id:
+                    meta_cur = self._slot_meta.setdefault(chat_slot, {})
+                    if not meta_cur.get("conversation_id"):
+                        meta_cur["conversation_id"] = session.conversation_id
+                        meta_cur["store"] = "cli"
+                        meta_cur["title"] = raw_text[:36] or "新对话"
+
+            img_items = [{"media_id": self.register_media(p), "name": p.name} for p in img_paths]
+            file_items = [
+                {"media_id": self.register_media(p), "name": p.name, "size": self._safe_file_size(p)}
+                for p in file_paths
+            ]
+
+            assistant_entry = {
+                "role": "assistant",
+                "id": final_reply_id,
+                "text": clean_text,
+                "images": img_items,
+                "files": file_items,
+                "steps": list(inflight_state.get("steps") or []),
+                "duration_sec": max(1, int(round(time.time() - turn_start_sec))),
+                "model": result.active_model or session.model or "default",
+                "ts": int(time.time() * 1000),
+            }
+            self._append_slot_history(chat_slot, assistant_entry, persist_local=not pc_direct_persisted)
+
+            # Atomically check FIFO follow-up queue BEFORE releasing `self._slot_inflight[chat_slot]`!
+            fq_after = self._slot_followup_queue.get(chat_slot)
+            has_next_queued = bool(fq_after)
+            if not has_next_queued and self._slot_inflight.get(chat_slot) is inflight_state:
+                self._slot_inflight.pop(chat_slot, None)
+
+            if self._active_slot == chat_slot:
+                await self._broadcast(
+                    {
+                        "type": "stream_end",
+                        "slot": chat_slot,
+                        "item": assistant_entry,
+                        "keep_busy": has_next_queued,
                         "slots_overview": self._build_slots_overview(),
                     }
                 )
             else:
-                await self._broadcast_slots_overview()
-
-            # 1. Existing PC Antigravity IDE conversation -> deliver into live PC IDE window
-            if slot_store == "ide" and slot_cid:
-                pc_ide_out = await self._try_run_pc_ide_window_turn(
-                    chat_slot=chat_slot,
-                    ide_cid=slot_cid,
-                    title=slot_title,
-                    prompt_text=prompt_text,
-                    reply_id=reply_id,
-                    inflight_state=inflight_state,
-                    turn_start_sec=turn_start_sec,
-                    on_delta=_on_delta,
-                    on_reset=_on_reset,
-                    on_tool=_on_tool,
-                    on_status=_on_status,
-                )
-                if pc_ide_out is not None:
-                    result, extra_pc_images = pc_ide_out
-                    pc_direct_persisted = True
-                    await self._broadcast(
-                        {
-                            "type": "chat_ack",
-                            "client_id": client_id,
-                            "slot": chat_slot,
-                            "stage": "delivered_pc",
-                            "label": "✓ 已投递至电脑窗口",
-                        }
-                    )
-
-            # 2. Brand-new PC Antigravity IDE conversation (tapped `+` or sent from default home screen)
-            elif not slot_cid and slot_store in {"", "ide"} and self._pc_window_new_sender is not None:
-                pc_new_out = await self._try_run_pc_ide_new_chat_turn(
-                    chat_slot=chat_slot,
-                    session=session,
-                    raw_title_seed=raw_text,
-                    prompt_text=prompt_text,
-                    reply_id=reply_id,
-                    inflight_state=inflight_state,
-                    turn_start_sec=turn_start_sec,
-                    on_delta=_on_delta,
-                    on_reset=_on_reset,
-                    on_tool=_on_tool,
-                    on_status=_on_status,
-                )
-                if pc_new_out is not None:
-                    result, extra_pc_images = pc_new_out
-                    pc_direct_persisted = True
-                    await self._broadcast(
-                        {
-                            "type": "chat_ack",
-                            "client_id": client_id,
-                            "slot": chat_slot,
-                            "stage": "delivered_pc",
-                            "label": "✓ 已在电脑端新建并投递",
-                        }
-                    )
-
-            # 3. Existing OR brand-new PC OpenAI Codex conversation (`slot_store == "codex"`)
-            elif slot_store == "codex":
-                cdx_out = await self._try_run_codex_cli_turn(
-                    chat_slot=chat_slot,
-                    codex_cid=slot_cid,
-                    workspace=session.workspace,
-                    prompt_text=prompt_text,
-                    reply_id=reply_id,
-                    on_delta=_on_delta,
-                    on_tool=_on_tool,
-                    on_status=_on_status,
-                )
-                if cdx_out is not None:
-                    result = cdx_out
-                    pc_direct_persisted = True
-                    await self._broadcast(
-                        {
-                            "type": "chat_ack",
-                            "client_id": client_id,
-                            "slot": chat_slot,
-                            "stage": "delivered_pc",
-                            "label": "✓ 已交由电脑 Codex 执行",
-                        }
-                    )
-                    if not slot_cid and cdx_out.conversation_id:
-                        new_title = raw_text[:38] or "Codex 新对话"
-                        meta_cur = self._slot_meta.setdefault(chat_slot, {})
-                        meta_cur["conversation_id"] = cdx_out.conversation_id
-                        meta_cur["store"] = "codex"
-                        meta_cur["title"] = new_title
-                        session.linked_ide_id = cdx_out.conversation_id
-                        session.linked_store = "codex"
-                        session.active_title = new_title
-                        if self._active_slot == chat_slot:
-                            await self._broadcast(
-                                {
-                                    "type": "meta_update",
-                                    "slot": chat_slot,
-                                    "model": "Codex 电脑端",
-                                    "workspace": str(session.workspace),
-                                    "active_conversation_id": cdx_out.conversation_id,
-                                    "active_title": new_title,
-                                    "active_store": "codex",
-                                    "busy": True,
-                                }
-                            )
-
-            # 4. Fallback to standalone `agy.exe` session when in a mobile/CLI chat or when PC desktop app is closed
-            if result is None:
-                if reply_id in self._cancelled_reply_ids:
-                    result = TurnResult(
-                        status="CANCELLED",
-                        response=str(inflight_state.get("text") or ""),
-                        active_model=initial_model_label,
-                    )
-                else:
-                    if slot_store in {"ide", "codex"} and (self._pc_window_sender is not None or slot_store == "codex"):
-                        await _on_status("桌面窗口未就绪，已切换后台引擎接力处理...")
-                    result = await session.ask(
-                        prompt_text,
-                        on_delay_notice=None,
-                        on_stream_delta=_on_delta,
-                        on_stream_reset=_on_reset,
-                        on_tool_start=_on_tool,
-                    )
-        except asyncio.CancelledError:
-            if reply_id not in self._cancelled_reply_ids:
-                raise
-            result = TurnResult(
-                status="CANCELLED",
-                response=str(inflight_state.get("text") or ""),
-                active_model=initial_model_label,
-            )
-        finally:
-            partial_before_finish = str(inflight_state.get("text") or "")
-            if self._slot_inflight.get(chat_slot) is inflight_state:
-                self._slot_inflight.pop(chat_slot, None)
-            if (
-                not pc_direct_persisted
-                and self._pc_window_sender is None
-                and session.linked_ide_id
-                and session.conversation_id
-            ):
-                map_key = f"{session.linked_store}:{session.linked_ide_id}" if session.linked_store else session.linked_ide_id
-                self._continuation_map[map_key] = session.conversation_id
-                self._continuation_map[session.linked_ide_id] = session.conversation_id
-                await asyncio.to_thread(self._save_continuation_map)
-
-        was_user_cancelled = reply_id in self._cancelled_reply_ids
-        self._cancelled_reply_ids.discard(reply_id)
-
-        if result.status == "SUCCESS":
-            clean_text, img_paths, file_paths = extract_pwa_media_and_text(result.response or "")
-            if result.switched_from_model and result.active_model:
-                note = f"（注：{result.switched_from_model} 额度已满，已自动切到 {result.active_model}）"
-                clean_text = f"{clean_text}\n\n{note}" if clean_text else note
-        elif was_user_cancelled or result.status == "CANCELLED":
-            clean_resp, img_paths, file_paths = extract_pwa_media_and_text(result.response or partial_before_finish)
-            clean_text = f"{clean_resp}\n\n⏹ 已停止生成。".strip() if clean_resp else "⏹ 已停止生成。"
-        else:
-            clean_resp, img_paths, file_paths = extract_pwa_media_and_text(result.response or partial_before_finish)
-            err = result.error or f"执行未成功 ({result.status})"
-            clean_text = f"{clean_resp}\n\n刚才这步出了点状况：\n{err}".strip()
-
-        for ep in extra_pc_images:
-            if ep not in img_paths and is_safe_outbound_file(ep, image_only=True):
-                img_paths.append(ep)
-
-        if not pc_direct_persisted:
-            cli_root = self.cli_store_dir if self.cli_store_dir is not None else _default_cli_dir()
-            harvested = await asyncio.to_thread(
-                harvest_recent_cli_turn_images,
-                cli_root,
-                result.conversation_id or session.conversation_id,
-                turn_start_sec,
-            )
-            for hp in harvested:
-                if hp not in img_paths:
-                    img_paths.append(hp)
-        else:
-            # Turn was written directly into the PC IDE / Codex transcript — avoid duplicating in `_slot_local_turns`!
-            self._remove_slot_local_turn(chat_slot, client_id)
-
-        if result.status == "SUCCESS" and not clean_text and not img_paths and not file_paths:
-            clean_text = "已完成。"
-
-        # Update slot metadata if this was a brand-new conversation that just received a CLI ID
-        if chat_slot.startswith("new:") or chat_slot == DEFAULT_SLOT_KEY:
-            if session.conversation_id:
-                meta_cur = self._slot_meta.setdefault(chat_slot, {})
-                if not meta_cur.get("conversation_id"):
-                    meta_cur["conversation_id"] = session.conversation_id
-                    meta_cur["store"] = "cli"
-                    meta_cur["title"] = raw_text[:36] or "新对话"
-
-        img_items = [{"media_id": self.register_media(p), "name": p.name} for p in img_paths]
-        file_items = [
-            {"media_id": self.register_media(p), "name": p.name, "size": self._safe_file_size(p)}
-            for p in file_paths
-        ]
-
-        assistant_entry = {
-            "role": "assistant",
-            "id": reply_id,
-            "text": clean_text,
-            "images": img_items,
-            "files": file_items,
-            "steps": list(inflight_state.get("steps") or []),
-            "duration_sec": max(1, int(round(time.time() - turn_start_sec))),
-            "model": result.active_model or session.model or "default",
-            "ts": int(time.time() * 1000),
-        }
-        self._append_slot_history(chat_slot, assistant_entry, persist_local=not pc_direct_persisted)
-        if self._active_slot == chat_slot:
-            await self._broadcast(
-                {
-                    "type": "stream_end",
+                meta_done = self._slot_meta.get(chat_slot, {})
+                done_title = meta_done.get("title") or "后台会话"
+                self._unread_slots[chat_slot] = {
                     "slot": chat_slot,
-                    "item": assistant_entry,
-                    "slots_overview": self._build_slots_overview(),
+                    "conversation_id": str(meta_done.get("conversation_id") or result.conversation_id or ""),
+                    "store": str(meta_done.get("store") or "cli"),
+                    "title": done_title,
+                    "preview": clean_text[:60],
+                    "ts": int(time.time() * 1000),
                 }
-            )
-        else:
-            meta_done = self._slot_meta.get(chat_slot, {})
-            done_title = meta_done.get("title") or "后台会话"
-            self._unread_slots[chat_slot] = {
-                "slot": chat_slot,
-                "conversation_id": str(meta_done.get("conversation_id") or result.conversation_id or ""),
-                "store": str(meta_done.get("store") or "cli"),
-                "title": done_title,
-                "preview": clean_text[:60],
-                "ts": int(time.time() * 1000),
-            }
-            await self._broadcast_slots_overview()
-            await self._broadcast(
-                {
-                    "type": "toast",
-                    "level": "info",
-                    "text": f"✓ 「{done_title[:18]}」已完成回复",
-                }
-            )
+                await self._broadcast_slots_overview()
+                await self._broadcast(
+                    {
+                        "type": "toast",
+                        "level": "info",
+                        "text": f"✓ 「{done_title[:18]}」已完成回复",
+                    }
+                )
+
+            if has_next_queued and fq_after:
+                nxt = fq_after.pop(0)
+                raw_text = str(nxt["raw_text"])
+                attachments = nxt["attachments"]
+                prompt_text = str(nxt["prompt_text"])
+                user_entry = nxt["user_entry"]
+                client_id = str(nxt["client_id"])
+                already_persisted_user = True
+                already_delivered_pc = False
+                preset_baseline = None
+                continue
+            break
 
         # Refresh conversation sidebar list whenever a brand-new conversation finished its first turn
         if was_brand_new and self._clients:

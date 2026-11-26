@@ -1032,7 +1032,7 @@
       background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 0;
     }
 
-    /* ── Three-State Adaptive Pill Composer + Bottom Tab Bar + Bento More Page (Screenshots 1 & 2) ── */
+    /* ── Three-State Adaptive Pill Composer + Persistent Bottom Tab Bar + Bento More Page ── */
     .tabbar {
       display: flex;
       justify-content: center;
@@ -1047,15 +1047,16 @@
       overflow: hidden;
       transition: max-height 0.16s ease, opacity 0.16s ease;
     }
-    body.in-conversation:not(.view-more) .tabbar {
+    body.kb-open .tabbar {
       max-height: 0;
       padding-top: 0;
       padding-bottom: 0;
       opacity: 0;
+      visibility: hidden;
       pointer-events: none;
     }
-    body.in-conversation:not(.view-more) .composer-outer {
-      padding-bottom: calc((1 - var(--kb-open, 0)) * var(--safe-bot) + 8px);
+    body.kb-open .composer-outer {
+      padding-bottom: 8px;
     }
     .tab-item {
       width: 62px;
@@ -1409,6 +1410,22 @@
       background: rgba(239, 68, 68, 0.22);
       color: #fca5a5;
     }
+
+    .stop-inline-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      background: rgba(239, 68, 68, 0.14);
+      color: #fca5a5;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: transform 0.12s, background 0.15s;
+    }
+    .stop-inline-btn:active { transform: scale(0.9); background: rgba(239, 68, 68, 0.28); }
 
     .send-btn {
       width: 34px;
@@ -2319,6 +2336,11 @@
               <line x1="12" y1="19" x2="12" y2="23"></line>
             </svg>
           </button>
+          <button id="stopBtn" type="button" class="stop-inline-btn" title="中断当前生成">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="4" y="4" width="16" height="16" rx="2.5"></rect>
+            </svg>
+          </button>
           <button id="sendBtn" type="button" class="send-btn empty" title="发送">
             <svg id="sendIconUp" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
               <line x1="12" y1="19" x2="12" y2="5"></line>
@@ -2598,6 +2620,7 @@
     const kbOpen = (window.innerHeight - h) > 110 ? 1 : 0;
     document.documentElement.style.setProperty('--app-h', h + 'px');
     document.documentElement.style.setProperty('--kb-open', String(kbOpen));
+    document.body.classList.toggle('kb-open', Boolean(kbOpen));
     if (window.scrollY !== 0) window.scrollTo(0, 0);
     if (kbOpen) scrollToBottom(false);
   }
@@ -3388,18 +3411,33 @@
     return '<div id="emptyHero" class="empty-hero"></div>';
   }
 
+  function hasComposerPayload() {
+    return Boolean(msgInput.value.trim()) || pendingAttachments.length > 0;
+  }
+
   function refreshSendBtnVisual() {
-    const hasText = Boolean(msgInput.value.trim()) || pendingAttachments.length > 0;
-    $('sendIconUp').style.display = isStreaming ? 'none' : 'block';
-    $('sendIconStop').style.display = isStreaming ? 'block' : 'none';
-    if (isStreaming) {
+    const hasPayload = hasComposerPayload();
+    const stopEl = $('stopBtn');
+    const showStopOnSendBtn = isStreaming && !hasPayload;
+    if (stopEl) {
+      stopEl.style.display = (isStreaming && hasPayload) ? 'inline-flex' : 'none';
+    }
+    $('sendIconUp').style.display = showStopOnSendBtn ? 'none' : 'block';
+    $('sendIconStop').style.display = showStopOnSendBtn ? 'block' : 'none';
+    if (showStopOnSendBtn) {
       sendBtn.classList.add('stop');
       sendBtn.classList.remove('empty');
       sendBtn.title = '停止生成';
+      sendBtn.setAttribute('aria-label', '停止生成');
+    } else if (isStreaming && hasPayload) {
+      sendBtn.classList.remove('stop', 'empty');
+      sendBtn.title = '发送引导指令（无需中断直接继续）';
+      sendBtn.setAttribute('aria-label', '发送引导指令');
     } else {
       sendBtn.classList.remove('stop');
-      sendBtn.classList.toggle('empty', !hasText);
+      sendBtn.classList.toggle('empty', !hasPayload);
       sendBtn.title = '发送';
+      sendBtn.setAttribute('aria-label', '发送');
     }
     syncAppChromeState();
   }
@@ -4220,6 +4258,12 @@
         streamBuffers.set(data.msg_id, '');
         const bub = document.getElementById('bub-' + data.msg_id);
         if (bub) bub.innerHTML = '<span class="gpt-dot"></span>';
+      } else if (data.type === 'stream_abandon') {
+        if (data.slot && activeSlot && data.slot !== activeSlot) return;
+        const abRow = document.getElementById('row-' + data.msg_id);
+        if (abRow) abRow.remove();
+        streamBuffers.delete(data.msg_id);
+        rawMessageTexts.delete(data.msg_id);
       } else if (data.type === 'stream_delta') {
         if (data.slot && activeSlot && data.slot !== activeSlot) return;
         clearOptimisticPlaceholder();
@@ -4234,11 +4278,15 @@
         if (data.slots_overview) applySlotsOverview(data.slots_overview);
         if (data.slot && activeSlot && data.slot !== activeSlot) return;
         clearOptimisticPlaceholder();
-        setStreamingState(false);
+        if (!data.keep_busy) {
+          setStreamingState(false);
+        }
         streamBuffers.delete(data.item.id);
         finalizeAssistantBubble(data.item, false);
         scrollToBottom(false, true);
-        notifyReplyFinished(data.item.text || '');
+        if (!data.keep_busy) {
+          notifyReplyFinished(data.item.text || '');
+        }
       } else if (data.type === 'desktop_frame') {
         const sep = mediaUrl(data.media_id).includes('?') ? '&' : '?';
         const u = mediaUrl(data.media_id) + sep + '_t=' + data.ts;
@@ -4383,13 +4431,18 @@
     scrollToBottom(true);
   }
 
+  function cancelCurrentStream() {
+    if (!isStreaming) return;
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: 'cancel', slot: activeSlot, msg_id: activeStreamMsgId }));
+    }
+  }
+
   function sendChat(overrideText = null) {
     setPlusOpen(false);
     $('slashMenu').classList.remove('show');
-    if (isStreaming && overrideText === null) {
-      if (ws && ws.readyState === 1) {
-        ws.send(JSON.stringify({ type: 'cancel', slot: activeSlot, msg_id: activeStreamMsgId }));
-      }
+    if (isStreaming && overrideText === null && !hasComposerPayload()) {
+      cancelCurrentStream();
       return;
     }
     const text = overrideText !== null ? overrideText : msgInput.value.trim();
@@ -4397,6 +4450,7 @@
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().catch(() => {});
     }
+    const steeringMidTurn = Boolean(isStreaming);
     const clientId = 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     const atts = pendingAttachments.splice(0, pendingAttachments.length);
     const payload = {
@@ -4405,18 +4459,23 @@
       client_id: clientId,
       text,
       attachments: atts,
+      steer: steeringMidTurn,
     };
 
     const isConnected = Boolean(ws && ws.readyState === 1);
     appendUserBubble(
       { id: clientId, role: 'user', text, attachments: atts },
       true,
-      isConnected ? '发送中...' : '⏳ 重连中，恢复后自动投递'
+      isConnected
+        ? (steeringMidTurn ? '⚡ 正在发送引导指令...' : '发送中...')
+        : '⏳ 重连中，恢复后自动投递'
     );
 
     if (isConnected) {
-      showOptimisticPlaceholder();
-      setStreamingState(true);
+      if (!steeringMidTurn) {
+        showOptimisticPlaceholder();
+        setStreamingState(true);
+      }
       ws.send(JSON.stringify(payload));
     } else {
       if (outboundQueue.length >= 5) outboundQueue.shift();
@@ -4490,7 +4549,14 @@
   $('menuBtn').onclick = openDrawer;
   drawerBackdrop.onclick = closeDrawer;
 
+  if ($('stopBtn')) $('stopBtn').onclick = () => cancelCurrentStream();
   sendBtn.onclick = () => sendChat();
+  msgInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 700) {
+      e.preventDefault();
+      if (hasComposerPayload()) sendChat();
+    }
+  });
   msgInput.addEventListener('input', () => {
     msgInput.style.height = 'auto';
     msgInput.style.height = Math.min(msgInput.scrollHeight, 136) + 'px';
@@ -4513,12 +4579,6 @@
   msgInput.addEventListener('blur', () => {
     isInputFocused = false;
     syncAppChromeState();
-  });
-  msgInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 700) {
-      e.preventDefault();
-      if (!isStreaming) sendChat();
-    }
   });
 
   // Fallback click on microphone when SpeechRecognition is unavailable on iOS WebKit
@@ -4734,6 +4794,7 @@
       $('inChatSearchInput').value = '';
       clearInChatSearchHighlights();
     }
+    try { sessionStorage.removeItem('agy_active_conv_v1'); } catch (_) {}
     if (activeConvId || renderedIds.size > 0 || isStreaming) {
       if (ws && ws.readyState === 1) {
         startNewConversation('', 'ide', false);
@@ -4786,7 +4847,7 @@
     }
   }
 
-  $('newChatTopBtn').onclick = () => startNewConversation('', activeConvStore === 'codex' ? 'codex' : 'ide', true);
+  $('newChatTopBtn').onclick = () => startNewConversation('', activeConvStore || newChatTarget || 'ide', true);
   $('drawerNewChatBtn').onclick = () => {
     const preferred = convFilter === 'codex' ? 'codex' : (convFilter === 'ide' ? 'ide' : (newChatTarget || 'ide'));
     startNewConversation('', preferred, true);

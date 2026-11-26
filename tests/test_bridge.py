@@ -1010,7 +1010,7 @@ async def test_duplicate_inflight_chat_guard_and_new_codex_thread(tmp_path: Path
     )
     mock_codex_cmd = tmp_path / ("mock_codex.cmd" if sys.platform == "win32" else "mock_codex.sh")
     if sys.platform == "win32":
-        mock_codex_cmd.write_text(f'@"{sys.executable}" "{mock_codex_py}" %*\r\n', encoding="utf-8")
+        mock_codex_cmd.write_text(f'@chcp 65001 >nul\r\n@"{sys.executable}" "{mock_codex_py}" %*\r\n', encoding="utf-8")
     else:
         mock_codex_cmd.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{mock_codex_py}" "$@"\n', encoding="utf-8")
         mock_codex_cmd.chmod(0o755)
@@ -1063,9 +1063,9 @@ async def test_duplicate_inflight_chat_guard_and_new_codex_thread(tmp_path: Path
 
             # 2. Start brand-new Codex PC conversation (`target='codex'`)
             await ws.send(json.dumps({"type": "new_conversation", "workspace": str(tmp_path), "target": "codex"}))
-            for _ in range(8):
+            for _ in range(12):
                 ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
-                if ev["type"] == "toast":
+                if ev["type"] == "toast" and "Codex" in ev.get("text", ""):
                     break
 
             await ws.send(json.dumps({"type": "chat", "text": "帮我初始化 Codex 后端服务"}))
@@ -1158,7 +1158,7 @@ async def test_security_cswsh_port_identity_codex_reconnect_and_no_double_exec(t
     )
     mock_cdx_cmd = tmp_path / ("mock_cdx_midfail.cmd" if sys.platform == "win32" else "mock_cdx_midfail.sh")
     if sys.platform == "win32":
-        mock_cdx_cmd.write_text(f'@"{sys.executable}" "{mock_cdx_fail_py}" %*\r\n', encoding="utf-8")
+        mock_cdx_cmd.write_text(f'@chcp 65001 >nul\r\n@"{sys.executable}" "{mock_cdx_fail_py}" %*\r\n', encoding="utf-8")
     else:
         mock_cdx_cmd.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{mock_cdx_fail_py}" "$@"\n', encoding="utf-8")
         mock_cdx_cmd.chmod(0o755)
@@ -1483,13 +1483,15 @@ async def test_chatgpt_ios_ui_steps_timeline_and_canvas_sandbox(tmp_path: Path):
     from qq_agy_bridge.conversations import _humanize_tool_step, load_conversation_detail
     from qq_agy_bridge.web_pwa import STATIC_DIR
 
-    assert "antigravity-ios-shell-v12" in STATIC_PWA_SW_JS
+    assert "antigravity-ios-shell-v13" in STATIC_PWA_SW_JS
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     assert 'content="#000000"' in html
     assert 'id="composerCard"' in html
     assert "compact-pill" in html
     assert 'id="centerPlaceholder"' in html
     assert 'id="tabbar"' in html
+    assert 'id="stopBtn"' in html
+    assert "body.in-conversation:not(.view-more) .tabbar" not in html
     assert 'id="tabPinned"' in html
     assert 'id="morePage"' in html
     assert 'id="drawerNavAgy"' in html
@@ -1873,6 +1875,166 @@ async def test_mobile_sidebar_dual_entries_noise_filtering_and_gentle_home_switc
                 if ev["type"] == "toast":
                     break
             assert opener_calls == 1
+    finally:
+        stop_event.set()
+        await asyncio.wait_for(pwa_task, timeout=5.0)
+        await sessions.shutdown_all()
+
+
+@pytest.mark.asyncio
+async def test_live_midturn_steering_ide_pivot_and_cli_fifo_queue(tmp_path: Path) -> None:
+    """Verify:
+    1. While a PC Antigravity IDE turn (`R1`) is mid-stream, sending a steering message (`U2`)
+       injects `U2` into the live PC window WITHOUT cancelling `R1`, keeps `R1`'s pre-steer output
+       strictly above `U2`, and pivots to a new assistant bubble below `U2` for `U2`'s reply.
+    2. Sending a steering message to an ALREADY-running PC-started IDE session (`db_running=True`)
+       injects directly instead of rejecting with '正在运行上一条任务'.
+    3. Sending a follow-up message to a mid-stream CLI session queues and auto-executes in FIFO order.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    ide_dir = tmp_path / "ide_steer"
+    cid = "steer-ide-conv-12345678"
+    tf = ide_dir / "brain" / cid / ".system_generated" / "logs" / "transcript.jsonl"
+    tf.parent.mkdir(parents=True)
+    tf.write_text(
+        json.dumps({"step_index": 0, "type": "USER_INPUT", "content": "历史首句"}, ensure_ascii=False)
+        + "\n"
+        + json.dumps({"step_index": 1, "type": "PLANNER_RESPONSE", "content": "历史首答"}, ensure_ascii=False)
+        + "\n",
+        encoding="utf-8",
+    )
+    db_path = ide_dir / "conversation_summaries.db"
+    con = sqlite3.connect(db_path)
+    con.execute(
+        "CREATE TABLE conversation_summaries ("
+        "conversation_id TEXT, title TEXT, preview TEXT, step_count INT, "
+        "last_modified_time TEXT, workspace_uris TEXT, status TEXT, "
+        "source TEXT, app_data_dir TEXT, nesting_depth INT, killed INT)"
+    )
+    con.execute(
+        "INSERT INTO conversation_summaries VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (cid, "远程操控开发", "历史首答", 2, "2026-11-26 02:00:00+00:00", "", "CASCADE_RUN_STATUS_IDLE", "", str(ide_dir), 0, 0),
+    )
+    con.commit()
+    con.close()
+
+    sent_to_pc: list[str] = []
+
+    def _sim_pc_sender(target_cid: str, _title: str, prompt: str) -> tuple[bool, str]:
+        assert target_cid == cid
+        sent_to_pc.append(prompt)
+        import threading
+
+        if len(sent_to_pc) == 1:
+            def _run_r1() -> None:
+                c1 = sqlite3.connect(db_path)
+                c1.execute("UPDATE conversation_summaries SET status = 'CASCADE_RUN_STATUS_RUNNING' WHERE conversation_id = ?", (cid,))
+                c1.commit()
+                c1.close()
+                with tf.open("a", encoding="utf-8") as fh:
+                    fh.write(json.dumps({"step_index": 2, "type": "USER_INPUT", "content": f"<USER_REQUEST>{prompt}</USER_REQUEST>"}, ensure_ascii=False) + "\n")
+                    fh.write(json.dumps({"step_index": 3, "type": "PLANNER_RESPONSE", "content": "第一阶段前置输出", "tool_calls": [{"name": "read_file"}]}, ensure_ascii=False) + "\n")
+            threading.Thread(target=_run_r1, daemon=True).start()
+        elif len(sent_to_pc) == 2:
+            def _run_u2_steer() -> None:
+                time.sleep(0.08)
+                with tf.open("a", encoding="utf-8") as fh:
+                    # R1 tail line BEFORE U2 USER_INPUT -> must stay in R1 bubble!
+                    fh.write(json.dumps({"step_index": 4, "type": "PLANNER_RESPONSE", "content": "第一阶段前置输出\n\n第一阶段收尾段"}, ensure_ascii=False) + "\n")
+                    # Now IDE consumes queued steering U2!
+                    fh.write(json.dumps({"step_index": 5, "type": "USER_INPUT", "content": f"<USER_REQUEST>{prompt}</USER_REQUEST>"}, ensure_ascii=False) + "\n")
+                    fh.write(json.dumps({"step_index": 6, "type": "PLANNER_RESPONSE", "content": "已结合引导命令完成最终优化！"}, ensure_ascii=False) + "\n")
+                time.sleep(0.14)
+                c2 = sqlite3.connect(db_path)
+                c2.execute("UPDATE conversation_summaries SET status = 'CASCADE_RUN_STATUS_IDLE' WHERE conversation_id = ?", (cid,))
+                c2.commit()
+                c2.close()
+            threading.Thread(target=_run_u2_steer, daemon=True).start()
+        return (True, "OK")
+
+    tok = "live-steer-token-2026"
+    cfg = _make_config(tmp_path, web_pwa_port=port, web_access_token=tok)
+    sessions = SessionManager(cfg, command_override=[sys.executable, str(MOCK_AGY)])
+    pwa = WebPwaServer(
+        cfg,
+        session_manager=sessions,
+        access_token=tok,
+        ide_store_dir=ide_dir,
+        cli_store_dir=tmp_path / "cli_s",
+        codex_store_dir=tmp_path / "cdx_s",
+        pc_window_sender=_sim_pc_sender,
+    )
+    pwa.pc_ide_poll_interval = 0.06
+    stop_event = asyncio.Event()
+    pwa_task = asyncio.create_task(pwa.run(stop_event=stop_event))
+    try:
+        await asyncio.sleep(0.2)
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws?token={tok}") as ws:
+            await asyncio.wait_for(ws.recv(), timeout=4.0)  # hello
+
+            # 1. Select PC IDE conversation, start R1, then inject U2 mid-turn WITHOUT stopping!
+            await ws.send(json.dumps({"type": "select_conversation", "conversation_id": cid, "store": "ide"}))
+            loaded = json.loads(await asyncio.wait_for(ws.recv(), timeout=4.0))
+            assert loaded["type"] == "conversation_loaded"
+
+            await ws.send(json.dumps({"type": "chat", "client_id": "u-r1", "text": "开始全面自查"}))
+            # Wait until R1 emits its first delta (still `CASCADE_RUN_STATUS_RUNNING`)
+            for _ in range(25):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=4.0))
+                if ev["type"] == "stream_delta" and "第一阶段前置输出" in ev["delta"]:
+                    break
+
+            # Inject mid-turn steering command U2!
+            await ws.send(json.dumps({"type": "chat", "client_id": "u-steer-2", "text": "顺便保留底部三个导航模块", "steer": True}))
+
+            ended_items: list[dict] = []
+            for _ in range(50):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                if ev["type"] == "stream_end":
+                    ended_items.append(ev["item"])
+                    if not ev.get("keep_busy"):
+                        break
+
+            assert sent_to_pc == ["开始全面自查", "顺便保留底部三个导航模块"]
+            assert len(ended_items) == 2
+            # R1 tail stays strictly in bubble 1; U2 reply goes strictly into bubble 2!
+            assert "第一阶段收尾段" in ended_items[0]["text"]
+            assert "已结合引导命令完成最终优化" not in ended_items[0]["text"]
+            assert "已结合引导命令完成最终优化！" in ended_items[1]["text"]
+
+            # Verify chronological order in slot history: [..., u-r1, a1, u-steer-2, a2]
+            hist_roles_texts = [(m["role"], m["text"]) for m in pwa._slot_history[f"ide:{cid}"][-4:]]
+            assert hist_roles_texts[0] == ("user", "开始全面自查")
+            assert hist_roles_texts[1][0] == "assistant" and "第一阶段收尾段" in hist_roles_texts[1][1]
+            assert hist_roles_texts[2] == ("user", "顺便保留底部三个导航模块")
+            assert hist_roles_texts[3][0] == "assistant" and "已结合引导命令完成最终优化！" in hist_roles_texts[3][1]
+
+            # 2. Verify CLI FIFO follow-up queue auto-executes second message after slow turn finishes
+            await ws.send(json.dumps({"type": "new_conversation", "workspace": "", "target": "cli"}))
+            for _ in range(6):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
+                if ev["type"] == "meta_update":
+                    break
+
+            await ws.send(json.dumps({"type": "chat", "client_id": "cli-1", "text": "慢速首轮 __SLOW_STREAM__"}))
+            for _ in range(12):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=4.0))
+                if ev["type"] == "stream_start":
+                    break
+
+            await ws.send(json.dumps({"type": "chat", "client_id": "cli-2", "text": "自动续跑的第二条引导命令", "steer": True}))
+            cli_ends: list[dict] = []
+            for _ in range(40):
+                ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                if ev["type"] == "stream_end":
+                    cli_ends.append(ev["item"])
+                    if len(cli_ends) >= 2:
+                        break
+            assert len(cli_ends) == 2
+            assert "自动续跑的第二条引导命令" in cli_ends[1]["text"]
     finally:
         stop_event.set()
         await asyncio.wait_for(pwa_task, timeout=5.0)
