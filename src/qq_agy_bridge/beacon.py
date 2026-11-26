@@ -155,7 +155,7 @@ def detect_github_pages_info(project_dir: Path) -> tuple[str, str, str, str] | N
 STATIC_PWA_SW_JS = """\
 const SCOPE_SLUG = new URL(self.registration.scope).pathname.replace(/[^a-zA-Z0-9_-]/g, '_');
 const CACHE_PREFIX = 'antigravity-ios-shell-' + SCOPE_SLUG + '-';
-const CACHE_NAME = CACHE_PREFIX + 'v18';
+const CACHE_NAME = CACHE_PREFIX + 'v19';
 const LEGACY_EXACT = new Set(['antigravity-ios-shell-v16', 'antigravity-ios-shell-v17', 'antigravity-ios-shell-v18']);
 const REQUIRED_SHELL = ['./', './index.html'];
 const OPTIONAL_ASSETS = ['./apple-touch-icon.png', './icon-192.png', './icon-512.png', './manifest.json'];

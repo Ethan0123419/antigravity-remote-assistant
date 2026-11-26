@@ -1484,10 +1484,12 @@ async def test_chatgpt_ios_ui_steps_timeline_and_canvas_sandbox(tmp_path: Path):
     from qq_agy_bridge.web_pwa import STATIC_DIR
 
     assert "CACHE_PREFIX = 'antigravity-ios-shell-' + SCOPE_SLUG + '-'" in STATIC_PWA_SW_JS
-    assert "CACHE_NAME = CACHE_PREFIX + 'v18'" in STATIC_PWA_SW_JS
+    assert "CACHE_NAME = CACHE_PREFIX + 'v19'" in STATIC_PWA_SW_JS
     assert "REQUIRED_SHELL = ['./', './index.html']" in STATIC_PWA_SW_JS
     assert "Promise.allSettled(OPTIONAL_ASSETS" in STATIC_PWA_SW_JS
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    assert "--app-y" in html and "pageTop" in html
+    assert "position: fixed" not in html
     assert "connEpoch" in html
     assert "inboundSeq" in html
     assert "isForActiveSlot" in html
