@@ -1483,12 +1483,14 @@ async def test_chatgpt_ios_ui_steps_timeline_and_canvas_sandbox(tmp_path: Path):
     from qq_agy_bridge.conversations import _humanize_tool_step, load_conversation_detail
     from qq_agy_bridge.web_pwa import STATIC_DIR
 
-    assert "antigravity-ios-shell-v15" in STATIC_PWA_SW_JS
+    assert "antigravity-ios-shell-v16" in STATIC_PWA_SW_JS
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     assert 'content="#000000"' in html
     assert 'id="appStage"' in html
     assert 'id="tabGlider"' in html
     assert 'id="netReconnPill"' in html
+    assert "--standalone-h: calc(100dvh + env(safe-area-inset-top, 0px))" in html
+    assert "ambient-glow" not in html
     assert 'id="composerCard"' in html
     assert "compact-pill" in html
     assert 'id="centerPlaceholder"' in html
