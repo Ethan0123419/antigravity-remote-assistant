@@ -153,7 +153,7 @@ def detect_github_pages_info(project_dir: Path) -> tuple[str, str, str, str] | N
 
 
 STATIC_PWA_SW_JS = """\
-const CACHE_NAME = 'antigravity-ios-shell-v13';
+const CACHE_NAME = 'antigravity-ios-shell-v14';
 const SHELL_ASSETS = ['./', './index.html', './apple-touch-icon.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {

@@ -1483,7 +1483,7 @@ async def test_chatgpt_ios_ui_steps_timeline_and_canvas_sandbox(tmp_path: Path):
     from qq_agy_bridge.conversations import _humanize_tool_step, load_conversation_detail
     from qq_agy_bridge.web_pwa import STATIC_DIR
 
-    assert "antigravity-ios-shell-v13" in STATIC_PWA_SW_JS
+    assert "antigravity-ios-shell-v14" in STATIC_PWA_SW_JS
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     assert 'content="#000000"' in html
     assert 'id="composerCard"' in html
@@ -1492,11 +1492,14 @@ async def test_chatgpt_ios_ui_steps_timeline_and_canvas_sandbox(tmp_path: Path):
     assert 'id="tabbar"' in html
     assert 'id="stopBtn"' in html
     assert "body.in-conversation:not(.view-more) .tabbar" not in html
-    assert 'id="tabPinned"' in html
+    assert 'id="tabAssistant"' in html
+    assert 'id="assistantPage"' in html
+    assert 'id="drawerNavAssistant"' in html
     assert 'id="morePage"' in html
     assert 'id="drawerNavAgy"' in html
     assert 'id="drawerNavCodex"' in html
     assert "BENTO_MODULES" in html
+    assert "AI_SPECIALIST_SKILLS" in html
     assert "cont-deck" in html
     assert 'id="drawerNewChatBtn"' in html
     assert 'id="composerTargetBtn"' in html
@@ -1857,8 +1860,18 @@ async def test_mobile_sidebar_dual_entries_noise_filtering_and_gentle_home_switc
     pwa_task = asyncio.create_task(pwa.run(stop_event=stop_event))
     try:
         await asyncio.sleep(0.2)
+        # Simulate a stale CLI session_id sitting on the default slot before mobile connects ->
+        # `hello` and `conversations_list` MUST NOT leak that stale CLI id or switch `hello.model` to CLI!
+        pwa._session_for_slot("default-chat").conversation_id = "stale-bg-cli-9999"
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws?token={tok}") as ws:
-            await asyncio.wait_for(ws.recv(), timeout=4.0)  # hello
+            hello_ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=4.0))
+            assert hello_ev["active_conversation_id"] == ""
+            assert hello_ev["active_store"] == "ide"
+            assert hello_ev["model"] == "Antigravity 电脑端"
+            await ws.send(json.dumps({"type": "list_conversations"}))
+            clist_ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=4.0))
+            assert clist_ev["type"] == "conversations_list"
+            assert clist_ev["active_id"] == ""
             await ws.send(json.dumps({"type": "new_conversation", "workspace": "", "target": "ide", "open_pc_window": False}))
             saw_clear = False
             for _ in range(6):

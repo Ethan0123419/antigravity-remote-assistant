@@ -569,7 +569,11 @@ class WebPwaServer:
         self._slot_followup_queue: dict[str, list[dict[str, Any]]] = {}
         self._slot_codex_procs: dict[str, asyncio.subprocess.Process] = {}
         self._slot_meta: dict[str, dict[str, Any]] = {
-            DEFAULT_SLOT_KEY: {"conversation_id": "", "title": "", "store": ""}
+            DEFAULT_SLOT_KEY: {
+                "conversation_id": "",
+                "title": "",
+                "store": "ide" if self._pc_window_new_sender is not None else "",
+            }
         }
         self._unread_slots: dict[str, dict[str, Any]] = {}
         self._processed_client_ids: OrderedDict[str, float] = OrderedDict()
@@ -942,6 +946,28 @@ class WebPwaServer:
 
         return self._http_response(404, "Not Found", b"Not Found", "text/plain")
 
+    def _effective_slot_identity(self, slot: str, session: AgySession) -> tuple[str, str]:
+        """Return `(active_conversation_id, active_store)` without leaking background CLI IDs onto empty Home slots."""
+        meta = self._slot_meta.get(slot, {})
+        meta_cid = str(meta.get("conversation_id") or "")
+        meta_store = str(meta.get("store") or "")
+        has_slot_activity = bool(self._slot_history.get(slot)) or (slot in self._slot_inflight)
+
+        if meta_cid:
+            return meta_cid, (meta_store or session.linked_store or "ide")
+        if meta_store in {"ide", "codex"}:
+            return (str(session.linked_ide_id or "") if has_slot_activity else ""), meta_store
+        if meta_store == "cli":
+            return (str(session.conversation_id or "") if has_slot_activity else ""), "cli"
+        if not has_slot_activity:
+            default_store = "ide" if self._pc_window_new_sender is not None else ""
+            return "", default_store
+        active_cid = str(session.linked_ide_id or session.conversation_id or "")
+        active_store = str(
+            session.linked_store if session.linked_ide_id else ("cli" if session.conversation_id else "")
+        )
+        return active_cid, active_store
+
     async def _handle_ws(self, ws: ServerConnection) -> None:
         req = ws.request
         ip = self._client_ip(ws, req.headers if req else None)
@@ -980,10 +1006,7 @@ class WebPwaServer:
             slot = self._active_slot
             session = self._session_for_slot(slot)
             meta = self._slot_meta.get(slot, {})
-            active_cid = meta.get("conversation_id") or session.linked_ide_id or session.conversation_id
-            active_store = meta.get("store") or (
-                session.linked_store if session.linked_ide_id else ("cli" if session.conversation_id else "")
-            )
+            active_cid, active_store = self._effective_slot_identity(slot, session)
             pub_inflight = self._public_inflight(slot)
             hello_model = (
                 "Antigravity 电脑端"
@@ -1205,6 +1228,7 @@ class WebPwaServer:
                             str(msg.get("target") or "ide"),
                             str(msg.get("req_id") or ""),
                             open_pc_window=bool(msg.get("open_pc_window", True)),
+                            silent_keep_view=bool(msg.get("silent_keep_view", False)),
                         )
                     )
                     self._tasks.add(t)
@@ -1296,6 +1320,8 @@ class WebPwaServer:
                     t = asyncio.create_task(self._handle_chat(ws, msg, req_slot))
                     self._tasks.add(t)
                     t.add_done_callback(self._tasks.discard)
+        except websockets.exceptions.ConnectionClosed:
+            pass
         finally:
             _stop_live_screen()
             for st in uploads.values():
@@ -1420,11 +1446,12 @@ class WebPwaServer:
             self.cli_store_dir,
             self.codex_store_dir,
         )
+        active_cid_for_list, _ = self._effective_slot_identity(self._active_slot, session)
         await ws.send(
             json.dumps(
                 {
                     "type": "conversations_list",
-                    "active_id": meta.get("conversation_id") or session.linked_ide_id or session.conversation_id,
+                    "active_id": active_cid_for_list,
                     "current_workspace": str(session.workspace),
                     "items": visible_items,
                     "workspaces": workspaces,
@@ -1569,6 +1596,7 @@ class WebPwaServer:
         req_id: str = "",
         *,
         open_pc_window: bool = True,
+        silent_keep_view: bool = False,
     ) -> None:
         new_slot = f"new:{uuid.uuid4().hex[:8]}"
         session = self._session_for_slot(new_slot)
@@ -1610,7 +1638,9 @@ class WebPwaServer:
         self._slot_meta[new_slot] = {"conversation_id": "", "title": title_label, "store": store_mode}
         self._ide_watch_sig = ("", "", 0, 0)
 
-        await self._broadcast({"type": "clear_history", "slot": new_slot, "req_id": req_id})
+        await self._broadcast(
+            {"type": "clear_history", "slot": new_slot, "req_id": req_id, "keep_view": silent_keep_view}
+        )
         await self._broadcast_slots_overview()
         await self._broadcast(
             {
@@ -1628,7 +1658,7 @@ class WebPwaServer:
                 "busy": False,
             }
         )
-        if toast_note:
+        if toast_note and not silent_keep_view:
             await ws.send(json.dumps({"type": "toast", "level": "info", "text": toast_note}, ensure_ascii=False))
 
     async def _stream_pc_ide_transcript_until_idle(
