@@ -763,18 +763,31 @@ class WebPwaServer:
             self._media_registry.popitem(last=False)
         return media_id
 
+    async def _safe_send(self, ws: ServerConnection, raw_or_dict: str | dict[str, Any], timeout: float = 4.0) -> bool:
+        raw = raw_or_dict if isinstance(raw_or_dict, str) else json.dumps(raw_or_dict, ensure_ascii=False)
+        try:
+            await asyncio.wait_for(ws.send(raw), timeout=timeout)
+            return True
+        except Exception:
+            self._clients.discard(ws)
+            try:
+                await ws.close()
+            except Exception:
+                pass
+            return False
+
     async def _broadcast(self, payload: dict[str, Any]) -> None:
         if not self._clients:
             return
         raw = json.dumps(payload, ensure_ascii=False)
-        stale: list[ServerConnection] = []
-        for client in list(self._clients):
-            try:
-                await client.send(raw)
-            except Exception:
-                stale.append(client)
-        for s in stale:
-            self._clients.discard(s)
+        clients_snapshot = list(self._clients)
+        if len(clients_snapshot) == 1:
+            await self._safe_send(clients_snapshot[0], raw, timeout=3.5)
+            return
+        await asyncio.gather(
+            *(self._safe_send(c, raw, timeout=3.5) for c in clients_snapshot),
+            return_exceptions=True,
+        )
 
     def _http_response(
         self,

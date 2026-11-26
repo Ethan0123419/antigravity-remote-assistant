@@ -1483,9 +1483,12 @@ async def test_chatgpt_ios_ui_steps_timeline_and_canvas_sandbox(tmp_path: Path):
     from qq_agy_bridge.conversations import _humanize_tool_step, load_conversation_detail
     from qq_agy_bridge.web_pwa import STATIC_DIR
 
-    assert "antigravity-ios-shell-v14" in STATIC_PWA_SW_JS
+    assert "antigravity-ios-shell-v15" in STATIC_PWA_SW_JS
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     assert 'content="#000000"' in html
+    assert 'id="appStage"' in html
+    assert 'id="tabGlider"' in html
+    assert 'id="netReconnPill"' in html
     assert 'id="composerCard"' in html
     assert "compact-pill" in html
     assert 'id="centerPlaceholder"' in html
@@ -1587,6 +1590,22 @@ async def test_chatgpt_ios_ui_steps_timeline_and_canvas_sandbox(tmp_path: Path):
                     clear_ev = ev
                     break
             assert clear_ev is not None and clear_ev.get("req_id") == "br-test-99"
+
+            # 4. Stalled/hung peer socket MUST be evicted via `_safe_send` timeout without blocking healthy clients!
+            class _HungPeer:
+                async def send(self, _raw: str) -> None:
+                    await asyncio.sleep(60.0)
+
+                async def close(self) -> None:
+                    return None
+
+            hung_peer = _HungPeer()
+            pwa._clients.add(hung_peer)  # type: ignore[arg-type]
+            t0 = time.monotonic()
+            ok_hung = await pwa._safe_send(hung_peer, {"type": "pong"}, timeout=0.08)  # type: ignore[arg-type]
+            assert ok_hung is False
+            assert (time.monotonic() - t0) < 1.0
+            assert hung_peer not in pwa._clients
     finally:
         stop_event.set()
         await asyncio.wait_for(pwa_task, timeout=5.0)

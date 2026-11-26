@@ -33,18 +33,22 @@
       --safe-top: env(safe-area-inset-top, 0px);
       --top-safe: var(--safe-top);
       --safe-bot: env(safe-area-inset-bottom, 0px);
-      --app-h: 100dvh;
+      --bot-pad: max(calc(var(--safe-bot) - 12px), 4px);
+      --top-chrome-h: calc(var(--top-safe) + 50px);
+      --bot-chrome-h: calc(98px + var(--bot-pad));
       --kb-open: 0;
+      --spring-ios: cubic-bezier(0.32, 0.72, 0, 1);
+      --spring-pop: cubic-bezier(0.34, 1.48, 0.64, 1);
     }
 
-    /* Push header & drawer cleanly below iOS standalone system status-bar progressive blur scrim */
+    /* Authentic tight iOS Standalone top inset — right below status bar/Dynamic Island with zero extra black band */
     html.ios-standalone {
-      --top-safe: calc(max(env(safe-area-inset-top, 0px), 54px) + 16px);
+      --top-safe: max(env(safe-area-inset-top, 0px), 47px);
     }
     @media all and (display-mode: standalone) {
       @supports (-webkit-touch-callout: none) {
         :root {
-          --top-safe: calc(max(env(safe-area-inset-top, 0px), 54px) + 16px);
+          --top-safe: max(env(safe-area-inset-top, 0px), 47px);
         }
       }
     }
@@ -54,65 +58,111 @@
     html, body {
       margin: 0;
       padding: 0;
+      position: fixed;
+      inset: 0;
       width: 100%;
       max-width: 100vw;
-      height: var(--app-h, 100dvh);
+      height: var(--app-h, 100%);
       overflow: hidden;
-      overflow-x: hidden;
       overscroll-behavior: none;
       background: var(--bg-main);
       color: var(--text-pri);
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "HarmonyOS Sans SC", "Segoe UI", system-ui, sans-serif;
-      display: flex;
-      flex-direction: column;
       -webkit-font-smoothing: antialiased;
       text-rendering: optimizeLegibility;
     }
 
-    /* Hard opaque top status-bar shield so iOS WebKit samples pure #000000 AMOLED black */
-    .ios-status-shield {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: var(--top-safe);
-      background: #000000;
-      z-index: 25;
-      pointer-events: none;
+    /* Interactive depth stage wrapper for smooth finger-tracking drawer gesture (strictly <= 100vw!) */
+    .app-stage {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-main);
+      overflow: hidden;
+      contain: layout paint;
+      transform-origin: right center;
+      transition: transform 0.34s var(--spring-ios), border-radius 0.34s var(--spring-ios), filter 0.34s ease;
+    }
+    body.drawer-open:not(.drawer-dragging) .app-stage {
+      transform: scale(0.968);
+      border-radius: 22px;
+    }
+    body.drawer-dragging .app-stage,
+    body.drawer-dragging .sidebar-drawer,
+    body.drawer-dragging .drawer-backdrop {
+      transition: none !important;
     }
 
     /* Subtle Apple Pro spatial ambient light field over AMOLED black */
     .ambient-glow {
-      position: fixed;
+      position: absolute;
       top: 0;
       left: 0;
       right: 0;
-      height: 360px;
+      height: 320px;
       background:
-        radial-gradient(110% 68% at 50% -8%, rgba(68, 132, 255, 0.13) 0%, rgba(124, 92, 255, 0.055) 42%, rgba(0, 0, 0, 0) 78%);
+        radial-gradient(110% 65% at 50% -10%, rgba(68, 132, 255, 0.12) 0%, rgba(124, 92, 255, 0.05) 42%, rgba(0, 0, 0, 0) 78%);
       pointer-events: none;
       z-index: 1;
     }
 
     button { font-family: inherit; }
 
-    /* ── Floating Circular Liquid-Glass Top Controls ── */
+    /* ── Full-Bleed Floating Liquid-Glass Top Controls (Zero Solid Black Header Band) ── */
     .topbar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
       width: 100%;
       max-width: 100vw;
       min-width: 0;
       overflow: hidden;
-      height: calc(var(--top-safe) + 56px);
-      padding: var(--top-safe) 14px 0;
-      background: linear-gradient(180deg, rgba(0, 0, 0, 0.92) 55%, rgba(0, 0, 0, 0.65) 84%, rgba(0, 0, 0, 0));
+      padding: calc(var(--top-safe) + 4px) 14px 8px;
+      background: linear-gradient(180deg, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.32) 66%, rgba(0, 0, 0, 0) 100%);
       border-bottom: none;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      z-index: 22;
-      flex-shrink: 0;
+      z-index: 24;
+      pointer-events: none;
       transform: translateZ(0);
+      transition: background 0.22s ease;
+    }
+    .topbar > * { pointer-events: auto; }
+    .topbar.is-scrolled {
+      background: linear-gradient(180deg, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.68) 72%, rgba(0, 0, 0, 0) 100%);
+    }
+
+    /* Subtle live network reconnect banner below topbar */
+    .net-reconn-pill {
+      position: absolute;
+      top: calc(var(--top-safe) + 50px);
+      left: 50%;
+      transform: translate3d(-50%, -12px, 0) scale(0.94);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 25;
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: rgba(28, 28, 36, 0.92);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      color: #fde68a;
+      font-size: 11.5px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: opacity 0.22s var(--spring-ios), transform 0.22s var(--spring-ios);
+    }
+    .net-reconn-pill.show {
+      opacity: 1;
+      transform: translate3d(-50%, 0, 0) scale(1);
     }
 
     .nav-circle-btn {
@@ -265,16 +315,17 @@
       visibility: hidden;
       pointer-events: none;
       transform: translate3d(-105%, 0, 0);
-      transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 0.26s;
-      padding: calc(var(--top-safe) + 12px) 14px 0;
+      transition: transform 0.34s var(--spring-ios), visibility 0s linear 0.34s;
+      padding: calc(var(--top-safe) + 6px) 14px 0;
       border-right: 1px solid rgba(255, 255, 255, 0.06);
       box-shadow: none;
+      will-change: transform;
     }
     .sidebar-drawer.show {
       visibility: visible;
       pointer-events: auto;
       transform: translate3d(0, 0, 0);
-      transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 0s;
+      transition: transform 0.34s var(--spring-ios), visibility 0s linear 0s;
       box-shadow: 24px 0 60px rgba(0, 0, 0, 0.88);
     }
 
@@ -595,10 +646,10 @@
       max-width: 100%;
       overflow-y: auto;
       overflow-x: hidden;
-      padding: 14px 14px 24px;
+      padding: calc(var(--top-safe) + 52px) 14px 16px;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 18px;
       -webkit-overflow-scrolling: touch;
     }
     .chat-scroll > * {
@@ -1113,72 +1164,89 @@
       background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 0;
     }
 
-    /* ── Floating Liquid-Glass Bottom Dock + Dedicated AI Assistant Studio + Bento More Page ── */
+    /* ── Authentic ChatGPT iOS Minimalist Bottom Tab Bar + Spring Sliding Pill Indicator ── */
     .tabbar {
-      width: fit-content;
-      max-width: calc(100vw - 24px);
-      margin: 2px auto calc(var(--safe-bot) + 6px);
-      padding: 4px;
-      border-radius: 999px;
-      background: rgba(22, 22, 28, 0.88);
-      backdrop-filter: blur(26px) saturate(180%);
-      -webkit-backdrop-filter: blur(26px) saturate(180%);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 10px 28px rgba(0, 0, 0, 0.72);
-      display: flex;
-      justify-content: center;
+      width: 100%;
+      max-width: 360px;
+      margin: 0 auto;
+      padding: 2px 18px var(--bot-pad);
+      background: transparent;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       align-items: center;
-      gap: 4px;
+      justify-items: center;
       flex-shrink: 0;
       position: relative;
       z-index: 16;
-      max-height: calc((1 - var(--kb-open, 0)) * 60px);
+      max-height: calc((1 - var(--kb-open, 0)) * 64px);
       overflow: hidden;
-      transition: max-height 0.16s ease, opacity 0.16s ease, margin 0.16s ease;
+      transition: max-height 0.22s var(--spring-ios), opacity 0.18s ease, padding 0.22s var(--spring-ios);
+    }
+    .tab-glider {
+      position: absolute;
+      top: 2px;
+      left: 0;
+      height: 36px;
+      width: 76px;
+      border-radius: 999px;
+      background: #242428;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      pointer-events: none;
+      z-index: 0;
+      transition: transform 0.34s var(--spring-ios), width 0.34s var(--spring-ios), background 0.24s ease;
+      will-change: transform, width;
+    }
+    .tab-glider.assistant-tint {
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.28) 0%, rgba(139, 92, 246, 0.26) 100%);
+      box-shadow: inset 0 1px 0 rgba(191, 219, 254, 0.26);
+    }
+    .tab-glider.stretching {
+      transform-origin: center center;
     }
     body.kb-open .tabbar {
       max-height: 0;
-      margin-top: 0;
-      margin-bottom: 0;
       padding-top: 0;
       padding-bottom: 0;
-      border-width: 0;
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
     }
     body.kb-open .composer-outer {
-      padding-bottom: 8px;
+      padding-bottom: 6px;
     }
     .tab-item {
-      height: 38px;
-      padding: 0 15px;
+      position: relative;
+      z-index: 1;
+      height: 36px;
+      padding: 0 14px;
       border: none;
       background: transparent;
-      color: #8e8e98;
+      color: #8e8e96;
       border-radius: 999px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
-      font-size: 13px;
+      gap: 5.5px;
+      font-size: 12.5px;
       font-weight: 600;
       letter-spacing: -0.1px;
       white-space: nowrap;
       cursor: pointer;
-      transition: background 0.18s ease, color 0.18s ease, transform 0.1s ease, box-shadow 0.18s ease;
+      transition: color 0.2s ease, transform 0.14s var(--spring-pop);
     }
     .tab-item.active {
-      background: linear-gradient(180deg, #32323c 0%, #26262e 100%);
       color: #ffffff;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 3px 10px rgba(0, 0, 0, 0.45);
     }
-    .tab-item#tabAssistant.active {
-      background: linear-gradient(135deg, rgba(59, 130, 246, 0.28) 0%, rgba(139, 92, 246, 0.26) 100%);
-      color: #f8fafc;
-      box-shadow: inset 0 1px 0 rgba(191, 219, 254, 0.28), 0 3px 12px rgba(59, 130, 246, 0.22);
+    .tab-item:active { transform: scale(0.88); }
+
+    @keyframes viewStageEnter {
+      from { opacity: 0; transform: translate3d(0, 8px, 0) scale(0.988); }
+      to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
     }
-    .tab-item:active { transform: scale(0.94); }
+    @keyframes cardCascadeIn {
+      from { opacity: 0; transform: translate3d(0, 10px, 0) scale(0.97); }
+      to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+    }
 
     /* Dedicated Center Tab: Smart AI Assistant Studio (`#assistantPage`) */
     .assistant-page {
@@ -1189,17 +1257,20 @@
       overflow-y: auto;
       overflow-x: hidden;
       scrollbar-width: none;
-      padding: 8px 14px 20px;
+      padding: calc(var(--top-safe) + 52px) 14px 14px;
       display: none;
       flex-direction: column;
-      gap: 14px;
+      gap: 13px;
       position: relative;
       z-index: 2;
       -webkit-overflow-scrolling: touch;
     }
     .assistant-page::-webkit-scrollbar,
     .more-page::-webkit-scrollbar { display: none; }
-    body.view-assistant .assistant-page { display: flex; }
+    body.view-assistant .assistant-page {
+      display: flex;
+      animation: viewStageEnter 0.24s var(--spring-ios);
+    }
     body.view-assistant .chat-wrap { display: none; }
 
     .ai-hub-container {
@@ -1309,10 +1380,12 @@
       flex-direction: column;
       gap: 8px;
       min-width: 0;
-      transition: transform 0.13s ease, border-color 0.15s, background 0.15s;
+      animation: cardCascadeIn 0.28s var(--spring-ios) both;
+      animation-delay: calc(var(--stagger, 0) * 26ms);
+      transition: transform 0.16s var(--spring-pop), border-color 0.15s, background 0.15s;
     }
     .ai-skill-card:hover { border-color: rgba(255, 255, 255, 0.16); }
-    .ai-skill-card:active { transform: scale(0.965); }
+    .ai-skill-card:active { transform: scale(0.955); }
     .ai-skill-ico {
       width: 34px;
       height: 34px;
@@ -1394,7 +1467,7 @@
       outline: none;
     }
 
-    /* Bento 2x4 More Space Page */
+    /* Bento 2x4 More Space Page (Exact ChatGPT iOS Screenshot 1 Proportions!) */
     .more-page {
       flex: 1;
       min-height: 0;
@@ -1404,30 +1477,36 @@
       overflow-y: auto;
       overflow-x: hidden;
       scrollbar-width: none;
-      padding: 8px 16px 24px;
+      padding: calc(var(--top-safe) + 52px) 16px 12px;
       display: none;
       position: relative;
       z-index: 2;
       -webkit-overflow-scrolling: touch;
     }
-    body.view-more .more-page { display: block; }
+    body.view-more .more-page {
+      display: flex;
+      flex-direction: column;
+      animation: viewStageEnter 0.24s var(--spring-ios);
+    }
     body.view-more .chat-wrap { display: none; }
 
     .more-grid {
+      width: 100%;
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
+      gap: 11px;
       max-width: 520px;
       margin: 0 auto;
     }
     .more-card {
       position: relative;
-      background: linear-gradient(165deg, rgba(32, 32, 38, 0.92) 0%, rgba(21, 21, 25, 0.96) 100%);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 8px 22px rgba(0, 0, 0, 0.48);
+      background: linear-gradient(165deg, rgba(31, 31, 36, 0.94) 0%, rgba(22, 22, 26, 0.98) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.075);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.095), 0 6px 18px rgba(0, 0, 0, 0.42);
       color: #f5f5f7;
       border-radius: 22px;
-      height: 112px;
+      min-height: 112px;
+      height: clamp(106px, 14.5dvh, 128px);
       padding: 15px 16px 14px;
       display: flex;
       flex-direction: column;
@@ -1441,10 +1520,12 @@
       -webkit-user-select: none;
       user-select: none;
       touch-action: pan-y;
-      transition: transform 0.13s ease, background 0.15s, border-color 0.15s;
+      animation: cardCascadeIn 0.28s var(--spring-ios) both;
+      animation-delay: calc(var(--stagger, 0) * 20ms);
+      transition: transform 0.16s var(--spring-pop), background 0.15s, border-color 0.15s;
     }
     .more-card:hover { border-color: rgba(255, 255, 255, 0.15); }
-    .more-card:active { transform: scale(0.965); }
+    .more-card:active { transform: scale(0.955); }
     .more-card-sub {
       font-size: 11.5px;
       font-weight: 400;
@@ -1488,8 +1569,8 @@
     .more-hint {
       text-align: center;
       color: #6e6e73;
-      font-size: 13px;
-      margin: 22px 0 8px;
+      font-size: 12.5px;
+      margin: 14px 0 4px;
       letter-spacing: 0.1px;
     }
     .more-search-results {
@@ -1530,14 +1611,14 @@
     .more-search-input:focus { text-align: left; }
     .more-search-input::placeholder { color: #8e8e93; }
 
-    /* Adaptive Composer Outer & Card */
+    /* Adaptive Composer Outer & Card (Tightly Docked Above Tab Bar — Zero Dead Black Gap) */
     .composer-outer {
       width: 100%;
       max-width: 100vw;
       min-width: 0;
       overflow-x: hidden;
-      padding: 4px 12px 6px;
-      background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, #000000 32%);
+      padding: 2px 12px 4px;
+      background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.92) 38%, #000000 100%);
       flex-shrink: 0;
       position: relative;
       z-index: 15;
@@ -1550,13 +1631,19 @@
       margin: 0 auto;
       background: linear-gradient(180deg, rgba(35, 35, 42, 0.96) 0%, rgba(24, 24, 29, 0.98) 100%);
       border: 1px solid rgba(255, 255, 255, 0.105);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 10px 28px rgba(0, 0, 0, 0.58);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 8px 24px rgba(0, 0, 0, 0.55);
       border-radius: 26px;
       padding: 9px 10px 8px 13px;
       display: flex;
       flex-direction: column;
       gap: 6px;
-      transition: border-color 0.16s, background 0.16s, border-radius 0.16s, box-shadow 0.16s;
+      transition: border-color 0.24s var(--spring-ios), background 0.24s ease, border-radius 0.26s var(--spring-ios), padding 0.24s var(--spring-ios), box-shadow 0.24s ease;
+    }
+    .composer-extra-chip {
+      animation: cardCascadeIn 0.22s var(--spring-ios) both;
+    }
+    .send-btn {
+      transition: opacity 0.18s ease, transform 0.22s var(--spring-pop), background 0.18s ease;
     }
     .composer-card:focus-within {
       border-color: rgba(147, 197, 253, 0.28);
@@ -2399,81 +2486,9 @@
   </style>
 </head>
 <body class="is-home-empty">
-  <div class="ios-status-shield" aria-hidden="true"></div>
-  <div class="ambient-glow" aria-hidden="true"></div>
-
-  <!-- Floating Circular Liquid-Glass Top Controls (Screenshots 1 & 2) -->
-  <header class="topbar">
-    <button id="menuBtn" class="nav-circle-btn" title="打开侧边导航">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
-        <line x1="5" y1="9.5" x2="19" y2="9.5"></line>
-        <line x1="5" y1="14.5" x2="13.5" y2="14.5"></line>
-      </svg>
-      <span id="connDot" class="conn-dot"></span>
-      <span id="activityBadge" class="activity-badge"></span>
-    </button>
-
-    <button id="modelBtn" class="center-model-btn" title="切换模型与查看连接">
-      <div class="header-title-row">
-        <span id="headerTitle" class="header-title">反重力助手</span>
-        <span class="header-chevron">▾</span>
-      </div>
-      <div id="subInfo" class="header-sub">正在连接...</div>
-    </button>
-
-    <div class="right-nav-group">
-      <!-- Shown inside active multi-turn conversations -->
-      <button id="chatSearchToggleBtn" class="nav-icon-btn" style="display:none" title="在本会话中查找">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.2" y2="16.2"></line></svg>
-      </button>
-      <button id="syncPcBtn" class="nav-icon-btn" style="display:none" title="同步电脑端最新消息">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="23 4 23 10 17 10"></polyline>
-          <polyline points="1 20 1 14 7 14"></polyline>
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-        </svg>
-      </button>
-      <button id="newChatTopBtn" class="nav-icon-btn" style="display:none" title="发起新对话">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-        </svg>
-      </button>
-      <!-- Shown on Empty Home (Screenshot 2 Waveform / Live Control Orb) -->
-      <button id="topWaveBtn" type="button" class="nav-circle-btn" title="电脑实时触控桌面与快捷中枢">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-          <line x1="5" y1="10" x2="5" y2="14"></line>
-          <line x1="9.5" y1="6" x2="9.5" y2="18"></line>
-          <line x1="14" y1="8.5" x2="14" y2="15.5"></line>
-          <line x1="18.5" y1="10.5" x2="18.5" y2="13.5"></line>
-        </svg>
-      </button>
-      <!-- Shown on More Page (Screenshot 1 Gear Button) -->
-      <button id="topSettingsBtn" type="button" class="nav-circle-btn" style="display:none" title="连接与偏好设置">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-        </svg>
-      </button>
-    </div>
-  </header>
-
-  <div id="inChatSearchBar" class="inchat-search-bar">
-    <input id="inChatSearchInput" class="inchat-search-input" type="search" placeholder="在本会话中查找消息..." />
-    <span id="inChatSearchCount" style="font-size:12px;color:var(--text-muted);white-space:nowrap">0/0</span>
-    <button type="button" id="inChatPrevBtn" class="pill-btn" style="padding:4px 9px">↑</button>
-    <button type="button" id="inChatNextBtn" class="pill-btn" style="padding:4px 9px">↓</button>
-    <button type="button" id="inChatCloseBtn" class="pill-btn" style="padding:4px 9px">✕</button>
-  </div>
-
-  <div id="iosInstallBanner" style="display:none;background:rgba(24,24,30,0.92);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid var(--border-subtle);padding:9px 14px;font-size:12.5px;color:var(--text-pri);align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;z-index:19">
-    <span style="line-height:1.45">点底部 <b>分享 → 添加到主屏幕</b>，即可生成永久全屏 iPhone App</span>
-    <button id="closeIosBannerBtn" type="button" style="background:transparent;border:none;color:var(--text-muted);font-size:16px;padding:2px 6px;cursor:pointer">✕</button>
-  </div>
-
   <div id="toast" class="toast"></div>
 
-  <!-- Slide-Over Pure Black Sidebar Drawer with Floating Bottom Pills (Screenshot 3) -->
+  <!-- Slide-Over Pure Black Sidebar Drawer with Real-Time Finger Tracking -->
   <div id="drawerBackdrop" class="drawer-backdrop"></div>
   <aside id="sidebarDrawer" class="sidebar-drawer">
     <div class="drawer-primary-nav">
@@ -2557,6 +2572,84 @@
       </div>
     </div>
   </aside>
+
+  <!-- Main Edge-to-Edge Stage -->
+  <div id="appStage" class="app-stage">
+    <div class="ambient-glow" aria-hidden="true"></div>
+
+    <!-- Floating Circular Liquid-Glass Top Controls -->
+    <header id="topbar" class="topbar">
+      <button id="menuBtn" class="nav-circle-btn" title="打开侧边导航">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+          <line x1="5" y1="9.5" x2="19" y2="9.5"></line>
+          <line x1="5" y1="14.5" x2="13.5" y2="14.5"></line>
+        </svg>
+        <span id="connDot" class="conn-dot"></span>
+        <span id="activityBadge" class="activity-badge"></span>
+      </button>
+
+      <button id="modelBtn" class="center-model-btn" title="切换模型与查看连接">
+        <div class="header-title-row">
+          <span id="headerTitle" class="header-title">反重力助手</span>
+          <span class="header-chevron">▾</span>
+        </div>
+        <div id="subInfo" class="header-sub">正在连接...</div>
+      </button>
+
+      <div class="right-nav-group">
+        <!-- Shown inside active multi-turn conversations -->
+        <button id="chatSearchToggleBtn" class="nav-icon-btn" style="display:none" title="在本会话中查找">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.2" y2="16.2"></line></svg>
+        </button>
+        <button id="syncPcBtn" class="nav-icon-btn" style="display:none" title="同步电脑端最新消息">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
+        <button id="newChatTopBtn" class="nav-icon-btn" style="display:none" title="发起新对话">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+        </button>
+        <!-- Shown on Empty Home -->
+        <button id="topWaveBtn" type="button" class="nav-circle-btn" title="电脑实时触控桌面与快捷中枢">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <line x1="5" y1="10" x2="5" y2="14"></line>
+            <line x1="9.5" y1="6" x2="9.5" y2="18"></line>
+            <line x1="14" y1="8.5" x2="14" y2="15.5"></line>
+            <line x1="18.5" y1="10.5" x2="18.5" y2="13.5"></line>
+          </svg>
+        </button>
+        <!-- Shown on More / AI Assistant Page -->
+        <button id="topSettingsBtn" type="button" class="nav-circle-btn" style="display:none" title="连接与偏好设置">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="netReconnPill" class="net-reconn-pill" aria-live="polite">
+      <span style="width:6px;height:6px;border-radius:50%;background:#f59e0b"></span>
+      <span id="netReconnTxt">正在自动重连电脑...</span>
+    </div>
+
+    <div id="inChatSearchBar" class="inchat-search-bar" style="margin-top:calc(var(--top-safe) + 50px)">
+      <input id="inChatSearchInput" class="inchat-search-input" type="search" placeholder="在本会话中查找消息..." />
+      <span id="inChatSearchCount" style="font-size:12px;color:var(--text-muted);white-space:nowrap">0/0</span>
+      <button type="button" id="inChatPrevBtn" class="pill-btn" style="padding:4px 9px">↑</button>
+      <button type="button" id="inChatNextBtn" class="pill-btn" style="padding:4px 9px">↓</button>
+      <button type="button" id="inChatCloseBtn" class="pill-btn" style="padding:4px 9px">✕</button>
+    </div>
+
+    <div id="iosInstallBanner" style="display:none;margin-top:calc(var(--top-safe) + 50px);background:rgba(24,24,30,0.92);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid var(--border-subtle);padding:9px 14px;font-size:12.5px;color:var(--text-pri);align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;z-index:19">
+      <span style="line-height:1.45">点底部 <b>分享 → 添加到主屏幕</b>，即可生成永久全屏 iPhone App</span>
+      <button id="closeIosBannerBtn" type="button" style="background:transparent;border:none;color:var(--text-muted);font-size:16px;padding:2px 6px;cursor:pointer">✕</button>
+    </div>
 
   <!-- Main Chat Stream -->
   <div class="chat-wrap">
@@ -2692,10 +2785,11 @@
     </div>
   </footer>
 
-  <!-- Floating Frosted-Obsidian Bottom Three-Slot Dock -->
+  <!-- Authentic ChatGPT iOS Minimalist Three-Slot Tab Bar with Spring Glider -->
   <nav id="tabbar" class="tabbar" aria-label="主导航">
+    <span id="tabGlider" class="tab-glider" aria-hidden="true"></span>
     <button id="tabHome" type="button" class="tab-item active" title="对话首页">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.1 3.2 10.3V20.5a1 1 0 0 0 1 1h5.3v-5.8h5v5.8h5.3a1 1 0 0 0 1-1V10.3z"/></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.1 3.2 10.3V20.5a1 1 0 0 0 1 1h5.3v-5.8h5v5.8h5.3a1 1 0 0 0 1-1V10.3z"/></svg>
       <span>对话</span>
     </button>
     <button id="tabAssistant" type="button" class="tab-item" title="AI 助手">
@@ -2706,12 +2800,13 @@
       <span>AI 助手</span>
     </button>
     <button id="tabMore" type="button" class="tab-item" title="更多空间">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
         <circle cx="7.5" cy="7.5" r="3"/><circle cx="16.5" cy="7.5" r="3"/><circle cx="7.5" cy="16.5" r="3"/><circle cx="16.5" cy="16.5" r="3"/>
       </svg>
       <span>更多</span>
     </button>
   </nav>
+  </div><!-- /#appStage -->
 
   <!-- Settings & Quick Preferences Sheet (Gear Button in Screenshot 1 & 3) -->
   <div id="settingsModal" class="overlay">
@@ -2955,23 +3050,35 @@
     if (savedDraft) msgInput.value = savedDraft;
   } catch (_) {}
 
-  // Mobile Virtual Keyboard Viewport Adaptation
+  function hapticTick(ms = 8) {
+    if (navigator.vibrate) {
+      try { navigator.vibrate(ms); } catch (_) {}
+    }
+  }
+
+  // Mobile Virtual Keyboard Viewport Adaptation (Zero Bottom Black Gap When Keyboard Closed!)
   function updateVisualViewport() {
     const vv = window.visualViewport;
     if (!vv) return;
     const h = Math.round(vv.height);
     const kbOpen = (window.innerHeight - h) > 110 ? 1 : 0;
-    document.documentElement.style.setProperty('--app-h', h + 'px');
+    if (kbOpen) {
+      document.documentElement.style.setProperty('--app-h', h + 'px');
+    } else {
+      document.documentElement.style.removeProperty('--app-h');
+    }
     document.documentElement.style.setProperty('--kb-open', String(kbOpen));
     document.body.classList.toggle('kb-open', Boolean(kbOpen));
     if (window.scrollY !== 0) window.scrollTo(0, 0);
     if (kbOpen) scrollToBottom(false);
+    requestAnimationFrame(() => updateTabGlider(false));
   }
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', updateVisualViewport);
     window.visualViewport.addEventListener('scroll', updateVisualViewport);
     updateVisualViewport();
   }
+  window.addEventListener('resize', () => requestAnimationFrame(() => updateTabGlider(false)));
   msgInput.addEventListener('blur', () => {
     setTimeout(() => {
       if (window.scrollY !== 0) window.scrollTo(0, 0);
@@ -3017,7 +3124,40 @@
   const renderedIds = new Set();
   const slotScrollMap = new Map();
   const outboundQueue = [];
+  let pendingControlFrame = null;
+  let streamHoldTimer = null;
+  let netBannerTimer = null;
+  let lastInboundTs = 0;
   let slotsOverview = { running: [], unread: [] };
+
+  function safeWsSend(payloadObj, queueControl = false) {
+    if (ws && ws.readyState === 1) {
+      try {
+        ws.send(JSON.stringify(payloadObj));
+        return true;
+      } catch (_) {}
+    }
+    if (queueControl && payloadObj && payloadObj.type) {
+      pendingControlFrame = { payload: payloadObj, ts: Date.now() };
+      handleAppWakeup();
+    }
+    return false;
+  }
+
+  function setReconnectBanner(visible, text = '正在自动重连电脑...') {
+    clearTimeout(netBannerTimer);
+    const pill = $('netReconnPill');
+    const txt = $('netReconnTxt');
+    if (!pill) return;
+    if (!visible) {
+      pill.classList.remove('show');
+      return;
+    }
+    if (txt) txt.textContent = text;
+    netBannerTimer = setTimeout(() => {
+      if (!ws || ws.readyState !== 1) pill.classList.add('show');
+    }, 1100);
+  }
 
   let slotDrafts = {};
   let pinnedConvIds = new Set();
@@ -3178,42 +3318,127 @@
     $('plusBtn').classList.toggle('open', Boolean(open));
   }
 
+  function clearDrawerDragInline() {
+    document.body.classList.remove('drawer-dragging');
+    sidebarDrawer.style.transform = '';
+    sidebarDrawer.style.visibility = '';
+    drawerBackdrop.style.opacity = '';
+    const stg = $('appStage');
+    if (stg) {
+      stg.style.transform = '';
+      stg.style.borderRadius = '';
+    }
+  }
+
   function openDrawer() {
+    clearDrawerDragInline();
     setPlusOpen(false);
     if ($('toast')) $('toast').style.display = 'none';
     chatScroll.style.overflowY = 'hidden';
+    document.body.classList.add('drawer-open');
     sidebarDrawer.classList.add('show');
     drawerBackdrop.classList.add('show');
     syncDrawerNavHighlight();
-    if (ws && ws.readyState === 1) {
-      ws.send(JSON.stringify({ type: 'list_conversations' }));
-    }
+    hapticTick(8);
+    safeWsSend({ type: 'list_conversations' }, true);
   }
   function closeDrawer() {
+    clearDrawerDragInline();
+    document.body.classList.remove('drawer-open');
     sidebarDrawer.classList.remove('show');
     drawerBackdrop.classList.remove('show');
     chatScroll.style.overflowY = 'auto';
   }
 
-  // Edge swipe gesture to open/close left sidebar drawer (like native ChatGPT iOS/Android)
-  let touchStartX = 0;
-  let touchStartY = 0;
+  // Real-time 60fps finger-tracking edge pan + parallax stage push (Native ChatGPT iOS feel)
+  let panStartX = 0;
+  let panStartY = 0;
+  let panLastX = 0;
+  let panLastTs = 0;
+  let panVelocityX = 0;
+  let panActive = false;
+  let panLockedAxis = '';
+  let panStartOpen = false;
+  let panDrawerW = 300;
+
   document.addEventListener('touchstart', (e) => {
     if (!e.touches || e.touches.length !== 1) return;
-    touchStartX = e.touches[0].clientX;
-    touchStartY = e.touches[0].clientY;
+    const x = e.touches[0].clientX;
+    const y = e.touches[0].clientY;
+    const isOpen = sidebarDrawer.classList.contains('show');
+    if (!isOpen && x > 34) {
+      panActive = false;
+      return;
+    }
+    if (document.querySelector('.overlay.show')) {
+      panActive = false;
+      return;
+    }
+    panStartX = x;
+    panStartY = y;
+    panLastX = x;
+    panLastTs = performance.now();
+    panVelocityX = 0;
+    panStartOpen = isOpen;
+    panLockedAxis = '';
+    panActive = true;
+    panDrawerW = sidebarDrawer.getBoundingClientRect().width || Math.min(window.innerWidth * 0.84, 316);
   }, { passive: true });
-  document.addEventListener('touchend', (e) => {
-    if (!e.changedTouches || e.changedTouches.length !== 1) return;
-    const dx = e.changedTouches[0].clientX - touchStartX;
-    const dy = Math.abs(e.changedTouches[0].clientY - touchStartY);
-    if (dy > 60) return;
-    if (!sidebarDrawer.classList.contains('show') && touchStartX < 28 && dx > 65) {
-      openDrawer();
-    } else if (sidebarDrawer.classList.contains('show') && dx < -65) {
-      closeDrawer();
+
+  document.addEventListener('touchmove', (e) => {
+    if (!panActive || !e.touches || e.touches.length !== 1) return;
+    const x = e.touches[0].clientX;
+    const y = e.touches[0].clientY;
+    const dx = x - panStartX;
+    const dy = y - panStartY;
+
+    if (!panLockedAxis) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      panLockedAxis = Math.abs(dx) > Math.abs(dy) * 1.15 ? 'x' : 'y';
+      if (panLockedAxis !== 'x' || (!panStartOpen && dx < 0)) {
+        panActive = false;
+        return;
+      }
+      document.body.classList.add('drawer-dragging');
+      sidebarDrawer.style.visibility = 'visible';
+    }
+
+    const now = performance.now();
+    const dt = Math.max(1, now - panLastTs);
+    panVelocityX = (x - panLastX) / dt;
+    panLastX = x;
+    panLastTs = now;
+
+    const baseOffset = panStartOpen ? 0 : -panDrawerW;
+    const curOffset = Math.max(-panDrawerW, Math.min(0, baseOffset + dx));
+    const prog = Math.max(0, Math.min(1, (curOffset + panDrawerW) / panDrawerW));
+
+    sidebarDrawer.style.transform = `translate3d(${curOffset.toFixed(1)}px, 0, 0)`;
+    drawerBackdrop.style.opacity = String((prog * 0.98).toFixed(3));
+    const stg = $('appStage');
+    if (stg) {
+      const sc = (1 - 0.032 * prog).toFixed(4);
+      const rad = Math.round(22 * prog);
+      stg.style.transform = `scale(${sc})`;
+      stg.style.borderRadius = `${rad}px`;
     }
   }, { passive: true });
+
+  const finishDrawerPan = () => {
+    if (!panActive) return;
+    const wasDragging = panLockedAxis === 'x';
+    panActive = false;
+    if (!wasDragging) return;
+    const dx = panLastX - panStartX;
+    const baseOffset = panStartOpen ? 0 : -panDrawerW;
+    const curOffset = Math.max(-panDrawerW, Math.min(0, baseOffset + dx));
+    const prog = (curOffset + panDrawerW) / panDrawerW;
+    const shouldOpen = panVelocityX > 0.38 || (panVelocityX > -0.32 && prog > 0.36);
+    if (shouldOpen) openDrawer();
+    else closeDrawer();
+  };
+  document.addEventListener('touchend', finishDrawerPan, { passive: true });
+  document.addEventListener('touchcancel', finishDrawerPan, { passive: true });
 
   async function copyTextSafe(text, btnEl, okLabel = '已复制') {
     const orig = btnEl ? btnEl.textContent : '';
@@ -3618,7 +3843,22 @@
       $('jumpBtnTxt').style.display = hasUnreadBelow ? 'inline' : 'none';
     }
   }
-  chatScroll.addEventListener('scroll', updateJumpButton, { passive: true });
+  function syncTopbarScrollShade() {
+    const tb = $('topbar');
+    if (!tb) return;
+    let scTop = 0;
+    if (currentMainView === 'assistant' && $('assistantPage')) scTop = $('assistantPage').scrollTop;
+    else if (currentMainView === 'more' && $('morePage')) scTop = $('morePage').scrollTop;
+    else scTop = chatScroll.scrollTop;
+    tb.classList.toggle('is-scrolled', scTop > 12);
+  }
+
+  chatScroll.addEventListener('scroll', () => {
+    updateJumpButton();
+    syncTopbarScrollShade();
+  }, { passive: true });
+  if ($('assistantPage')) $('assistantPage').addEventListener('scroll', syncTopbarScrollShade, { passive: true });
+  if ($('morePage')) $('morePage').addEventListener('scroll', syncTopbarScrollShade, { passive: true });
   jumpBottomBtn.onclick = () => {
     hasUnreadBelow = false;
     chatScroll.scrollTo({ top: chatScroll.scrollHeight, behavior: 'smooth' });
@@ -3753,14 +3993,38 @@
       cardBtn.appendChild(arrow);
 
       let swipeX = 0;
+      let swipeY = 0;
+      let draggingCard = false;
       cardBtn.addEventListener('touchstart', (ev) => {
-        if (ev.touches && ev.touches.length === 1) swipeX = ev.touches[0].clientX;
+        if (ev.touches && ev.touches.length === 1) {
+          swipeX = ev.touches[0].clientX;
+          swipeY = ev.touches[0].clientY;
+          draggingCard = cards.length > 1;
+          cardBtn.style.transition = 'none';
+        }
+      }, { passive: true });
+      cardBtn.addEventListener('touchmove', (ev) => {
+        if (!draggingCard || !ev.touches || !ev.touches.length) return;
+        const dx = ev.touches[0].clientX - swipeX;
+        const dy = Math.abs(ev.touches[0].clientY - swipeY);
+        if (dy > Math.abs(dx) && dy > 16) {
+          draggingCard = false;
+          cardBtn.style.transition = '';
+          cardBtn.style.transform = '';
+          return;
+        }
+        const damped = Math.max(-72, Math.min(72, dx * 0.52));
+        const rot = (damped * 0.025).toFixed(2);
+        cardBtn.style.transform = `translate3d(${damped.toFixed(1)}px, 0, 0) rotate(${rot}deg)`;
       }, { passive: true });
       cardBtn.addEventListener('touchend', (ev) => {
+        cardBtn.style.transition = '';
+        cardBtn.style.transform = '';
         if (!ev.changedTouches || !ev.changedTouches.length || cards.length <= 1) return;
         const dx = ev.changedTouches[0].clientX - swipeX;
         if (Math.abs(dx) > 42) {
           ev.preventDefault();
+          hapticTick(8);
           heroDeckIdx = (heroDeckIdx + (dx < 0 ? 1 : -1) + cards.length) % cards.length;
           renderHeroDeck();
         }
@@ -4361,35 +4625,41 @@
       }
     }
 
-    // 2. Secondary race (only if PC rebooted <15s ago or token was rotated while GitHub Pages CDN is still updating): strict 3.5s timeout!
+    // 2. Secondary concurrent race (both GitHub API & raw fire in parallel — fastest valid tunnel wins immediately!)
     if (beaconRepo) {
-      const tasks = [
+      const candidates = [
+        fetchJsonWithTimeout(
+          `https://raw.githubusercontent.com/${beaconRepo}/gh-pages/beacon.json?_t=${Date.now()}`,
+          3500
+        ),
         fetchJsonWithTimeout(
           `https://api.github.com/repos/${beaconRepo}/contents/beacon.json?ref=gh-pages&_t=${Date.now()}`,
           3500,
           { Accept: 'application/vnd.github.v3+json' }
         ).then((meta) => JSON.parse(atob(String(meta.content || '').replace(/\s+/g, '')))),
-        fetchJsonWithTimeout(
-          `https://raw.githubusercontent.com/${beaconRepo}/gh-pages/beacon.json?_t=${Date.now()}`,
-          3500
-        ),
-      ];
-      for (const p of tasks) {
+      ].map(async (p) => {
         try {
           const env2 = await p;
-          if (env2 && env2.ct) {
-            const dec2 = await decryptBeaconEnvelope(env2, token);
-            const cand2 = String(dec2.tunnel_url || '').replace(/\/$/, '');
-            if (cand2 && (await probePing(cand2, 2200))) {
-              try { localStorage.setItem('agy_last_tunnel', cand2); } catch (_) {}
-              return cand2;
-            }
-            if (cand2 && !fallbackTunnel) fallbackTunnel = cand2;
-          }
+          if (!env2 || !env2.ct) throw new Error('EMPTY');
+          const dec2 = await decryptBeaconEnvelope(env2, token);
+          const cand2 = String(dec2.tunnel_url || '').replace(/\/$/, '');
+          if (!cand2) throw new Error('EMPTY');
+          if (!fallbackTunnel) fallbackTunnel = cand2;
+          if (await probePing(cand2, 2200)) return cand2;
+          throw new Error('PING_FAIL');
         } catch (e) {
           if (String((e && e.message) || '') === 'BEACON_MAC_MISMATCH') sawMacMismatch = true;
+          throw e;
         }
-      }
+      });
+
+      try {
+        const winner = await Promise.any(candidates);
+        if (winner) {
+          try { localStorage.setItem('agy_last_tunnel', winner); } catch (_) {}
+          return winner;
+        }
+      } catch (_) {}
     }
 
     if (fallbackTunnel) {
@@ -4474,28 +4744,60 @@
     wsInstance.onopen = () => {
       if (ws !== wsInstance) return;
       clearConnectWatchdog();
+      clearTimeout(streamHoldTimer);
+      setReconnectBanner(false);
       reconnectAttempt = 0;
+      lastInboundTs = Date.now();
       connDot.className = 'conn-dot online';
       $('authModal').classList.remove('show');
       syncAppChromeState();
       clearInterval(pingTimer);
       const sendPing = () => {
-        if (ws === wsInstance && wsInstance.readyState === 1) {
+        if (ws !== wsInstance || wsInstance.readyState !== 1) return;
+        try {
           wsInstance.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
+        } catch (_) {
+          return;
         }
+        // Active half-open zombie socket watchdog: if zero inbound frames arrive within 4.8s of ping, recycle!
+        clearPongWatchdog();
+        const pingSentAt = Date.now();
+        pongWatchdog = setTimeout(() => {
+          if (ws === wsInstance && lastInboundTs < pingSentAt) {
+            ws = null;
+            try { wsInstance.close(); } catch (_) {}
+            connDot.className = 'conn-dot offline';
+            setReconnectBanner(true, '检测到网络切换，正在无缝重连...');
+            connect();
+          }
+        }, 4800);
       };
       sendPing();
       pingTimer = setInterval(sendPing, 8000);
-      wsInstance.send(JSON.stringify({ type: 'list_conversations' }));
+      safeWsSend({ type: 'list_conversations' });
+      if (pendingControlFrame && (Date.now() - pendingControlFrame.ts) < 15000) {
+        const cf = pendingControlFrame.payload;
+        pendingControlFrame = null;
+        if (cf.type !== 'list_conversations') safeWsSend(cf);
+      } else {
+        pendingControlFrame = null;
+      }
       if (liveScreenOn && $('deskModal').classList.contains('show')) {
-        wsInstance.send(JSON.stringify({ type: 'live_screen', enable: true, interval_ms: 1600 }));
+        safeWsSend({ type: 'live_screen', enable: true, interval_ms: 1600 });
       }
     };
 
     wsInstance.onmessage = (ev) => {
       if (ws !== wsInstance) return;
+      lastInboundTs = Date.now();
       clearPongWatchdog();
-      const data = JSON.parse(ev.data);
+      let data = null;
+      try {
+        data = JSON.parse(ev.data);
+      } catch (_) {
+        return;
+      }
+      if (!data || typeof data !== 'object') return;
       if (data.type === 'pong' && data.ts) {
         lastRttMs = Math.max(1, Date.now() - Number(data.ts));
         refreshHeaderSubtitle();
@@ -4757,6 +5059,11 @@
       }
     };
 
+    wsInstance.onerror = () => {
+      if (ws !== wsInstance) return;
+      try { wsInstance.close(); } catch (_) {}
+    };
+
     wsInstance.onclose = (ev) => {
       if (ws !== wsInstance) return;
       clearConnectWatchdog();
@@ -4766,8 +5073,9 @@
       branchingInFlight = false;
       branchDraftByReq.clear();
       connDot.className = 'conn-dot offline';
-      setStreamingState(false);
       if (ev.code === 4001 || ev.code === 4003) {
+        setReconnectBanner(false);
+        setStreamingState(false);
         subInfo.textContent = '需要验证访问密钥';
         try { localStorage.removeItem('agy_pwa_token'); } catch (_) {}
         token = '';
@@ -4775,9 +5083,20 @@
         $('authModal').classList.add('show');
         return;
       }
-      const delay = Math.min(3500, 450 * Math.pow(1.45, reconnectAttempt++));
+      // Hold in-flight streaming state briefly across sub-second mobile handoffs so UI never flickers!
+      if (isStreaming) {
+        clearTimeout(streamHoldTimer);
+        streamHoldTimer = setTimeout(() => {
+          if (!ws || ws.readyState !== 1) setStreamingState(false);
+        }, 4200);
+      } else {
+        setStreamingState(false);
+      }
+      setReconnectBanner(true, '连接中断，正在自动恢复...');
+      const baseDelay = Math.min(3500, 380 * Math.pow(1.42, reconnectAttempt++));
+      const jitter = Math.floor(Math.random() * 180);
       subInfo.textContent = '正在重连...';
-      reconnectTimer = setTimeout(connect, delay);
+      reconnectTimer = setTimeout(connect, baseDelay + jitter);
     };
   }
 
@@ -4843,18 +5162,28 @@
     if (!ws || ws.readyState !== 1) return showToast('尚未连接服务器');
     const uid = Math.random().toString(36).slice(2, 10);
     showToast(`正在上传 ${file.name}...`);
-    ws.send(JSON.stringify({ type: 'upload_init', upload_id: uid, name: file.name, size: file.size }));
+    if (!safeWsSend({ type: 'upload_init', upload_id: uid, name: file.name, size: file.size })) {
+      return showToast('网络波动，请重连后重试上传');
+    }
 
     const chunkSize = 384 * 1024;
     for (let offset = 0; offset < file.size; offset += chunkSize) {
+      if (!ws || ws.readyState !== 1) return showToast('上传中断，正在自动重连...');
+      // Mobile WebKit send-buffer backpressure guard (>1.5MB buffered -> yield briefly)
+      let guard = 0;
+      while (ws && ws.readyState === 1 && ws.bufferedAmount > 1536 * 1024 && guard++ < 40) {
+        await new Promise((r) => setTimeout(r, 45));
+      }
       const slice = file.slice(offset, offset + chunkSize);
       const buf = await slice.arrayBuffer();
       let binary = '';
       const bytes = new Uint8Array(buf);
       for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-      ws.send(JSON.stringify({ type: 'upload_chunk', upload_id: uid, data: btoa(binary) }));
+      if (!safeWsSend({ type: 'upload_chunk', upload_id: uid, data: btoa(binary) })) {
+        return showToast('上传中断，请稍后重试');
+      }
     }
-    ws.send(JSON.stringify({ type: 'upload_complete', upload_id: uid }));
+    safeWsSend({ type: 'upload_complete', upload_id: uid });
   }
 
   function clearOptimisticPlaceholder() {
@@ -5520,10 +5849,11 @@
 
     const sGrid = document.createElement('div');
     sGrid.className = 'ai-skills-grid';
-    AI_SPECIALIST_SKILLS.forEach((sk) => {
+    AI_SPECIALIST_SKILLS.forEach((sk, idx) => {
       const card = document.createElement('button');
       card.type = 'button';
       card.className = 'ai-skill-card';
+      card.style.setProperty('--stagger', String(idx));
       const ico = document.createElement('span');
       ico.className = 'ai-skill-ico';
       ico.style.background = sk.bg;
@@ -5651,11 +5981,35 @@
     if ($('drawerNavMore')) $('drawerNavMore').classList.toggle('active', isMore);
   }
 
+  function updateTabGlider(animate = true) {
+    const glider = $('tabGlider');
+    if (!glider) return;
+    const targetBtn = currentMainView === 'assistant'
+      ? $('tabAssistant')
+      : (currentMainView === 'more' ? $('tabMore') : $('tabHome'));
+    if (!targetBtn) return;
+    const x = targetBtn.offsetLeft;
+    const w = targetBtn.offsetWidth;
+    if (!w) return;
+    if (!animate) glider.style.transition = 'none';
+    glider.classList.toggle('assistant-tint', currentMainView === 'assistant');
+    glider.style.width = `${w}px`;
+    glider.style.transform = `translate3d(${x}px, 0, 0)`;
+    if (!animate) {
+      void glider.offsetWidth;
+      glider.style.transition = '';
+    }
+  }
+
   function setMainView(viewName) {
-    currentMainView = (viewName === 'more' || viewName === 'assistant') ? viewName : 'home';
+    const nextView = (viewName === 'more' || viewName === 'assistant') ? viewName : 'home';
+    const changed = nextView !== currentMainView;
+    currentMainView = nextView;
     $('tabHome').classList.toggle('active', currentMainView === 'home');
     if ($('tabAssistant')) $('tabAssistant').classList.toggle('active', currentMainView === 'assistant');
     $('tabMore').classList.toggle('active', currentMainView === 'more');
+    updateTabGlider(changed);
+    if (changed) hapticTick(8);
 
     if (currentMainView === 'more' || currentMainView === 'assistant') {
       if ($('inChatSearchBar').classList.contains('show')) {
@@ -5668,13 +6022,14 @@
       renderAssistantHub();
     } else if (currentMainView === 'more') {
       renderMoreBentoGrid($('moreSearchInput') ? $('moreSearchInput').value : '');
-      if (ws && ws.readyState === 1 && !latestWsData) {
-        ws.send(JSON.stringify({ type: 'workspace_inspect', rel_dir: '' }));
+      if (!latestWsData) {
+        safeWsSend({ type: 'workspace_inspect', rel_dir: '' });
       }
     }
     refreshHeaderSubtitle();
     syncDrawerNavHighlight();
     syncAppChromeState();
+    syncTopbarScrollShade();
   }
 
   function renderMoreBentoGrid(filterText = '') {
@@ -5685,10 +6040,11 @@
     grid.innerHTML = '';
 
     const matchedMods = BENTO_MODULES.filter((m) => !q || m.title.toLowerCase().includes(q) || (m.sub || '').toLowerCase().includes(q) || m.key.includes(q));
-    matchedMods.forEach((mod) => {
+    matchedMods.forEach((mod, idx) => {
       const card = document.createElement('button');
       card.type = 'button';
       card.className = 'more-card';
+      card.style.setProperty('--stagger', String(idx));
 
       const topWrap = document.createElement('div');
       topWrap.style.width = '100%';
@@ -6505,6 +6861,7 @@
   renderMoreBentoGrid();
   renderHeroDeck();
   refreshHeaderSubtitle();
+  requestAnimationFrame(() => updateTabGlider(false));
   if (msgInput.value) {
     msgInput.style.height = Math.min(msgInput.scrollHeight, 136) + 'px';
   }
