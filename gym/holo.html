@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-beacon-repo="Ethan0123419/antigravity-remote-assistant" data-beacon-subpath="gym">
+<head>
+  <meta charset="UTF-8">
+  <meta name="referrer" content="no-referrer">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="反重力全息">
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
+  <title>Antigravity 健身全息投影端</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden; background: #000; color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      display: flex; align-items: center; justify-content: center;
+    }
+    canvas { width: min(100vw, 100vh); height: min(100vw, 100vh); display: block; background: #000; }
+    .hud {
+      position: fixed; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between;
+      align-items: center; gap: 8px; pointer-events: none; z-index: 10;
+    }
+    .hud-pill {
+      background: rgba(11, 18, 36, 0.85); border: 1px solid #38bdf8; color: #7dd3fc;
+      padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 700; pointer-events: auto;
+    }
+    .toolbar {
+      position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; z-index: 10;
+    }
+    .tbtn {
+      background: rgba(15, 23, 42, 0.9); border: 1px solid #334155; color: #f8fafc;
+      padding: 7px 12px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer;
+    }
+    body.clean .hud, body.clean .toolbar { display: none !important; }
+    body.embed .toolbar { bottom: 6px; }
+  </style>
+</head>
+<body>
+  <div class="hud">
+    <div class="hud-pill" id="connPill">○ 正在连接中枢…</div>
+    <div class="hud-pill" id="moodPill">⚡ Antigravity</div>
+  </div>
+  <canvas id="holoCanvas" width="720" height="720"></canvas>
+  <div class="toolbar">
+    <button class="tbtn" id="btnFaces">切单图直看</button>
+    <button class="tbtn" id="btnMirror">镜像翻转</button>
+    <button class="tbtn" id="btnClean">⛶ 全屏清屏(双击退出)</button>
+  </div>
+  <script>'use strict';
+
+(() => {
+  const canvas = document.getElementById('holoCanvas');
+  const ctx = canvas.getContext('2d');
+  const connPill = document.getElementById('connPill');
+  const moodPill = document.getElementById('moodPill');
+
+  const params = new URLSearchParams(location.search);
+  const isEmbed = params.get('embed') === '1' || window.self !== window.top;
+  if (isEmbed) document.body.classList.add('embed');
+
+  let fourFaces = params.get('faces') !== '1';
+  let mirrorFlip = true;
+  let state = {
+    scene: 'gym',
+    lift: 'deadlift',
+    lift_meta: { zh: '硬拉', emoji: '🏋️' },
+    weight_kg: 100,
+    plates: [{ kg: 20, color: '#2563eb', h: 0.96 }, { kg: 20, color: '#2563eb', h: 0.96 }],
+    current_reps: 0,
+    target_reps: 5,
+    progress: 0,
+    effort: 0,
+    phase: 'idle',
+    bubble_text: '',
+    daily: { mood: 'sedentary', mood_label: '🛋️ 今日未动', aura_color: '#38bdf8', levitate: false, progress_pct: 0 },
+  };
+
+  const GW = 108, GH = 90;
+  const pix = document.createElement('canvas');
+  pix.width = GW; pix.height = GH;
+  const pctx = pix.getContext('2d');
+
+  const off = document.createElement('canvas');
+  off.width = 324; off.height = 270;
+  const g = off.getContext('2d');
+
+  const C = {
+    ink: '#1a1624',
+    skinHi: '#fff0e2', skinMid: '#f7d6be', skinSh: '#daa88c', blush: '#f898a8', mole: '#442e2e',
+    hairDk: '#121118', hairMid: '#22202a', hairHi: '#403c4a', hairShine: '#6c6678',
+    tankDk: '#08090d', tankMid: '#12141b', tankHi: '#242834', tankTrim: '#343a4a',
+    shortsDk: '#0c0d12', shortsMid: '#181a23', shortsHi: '#2c303e',
+    sockW: '#f8fafc', sockSh: '#d0d8e4',
+    shoeW: '#f8fafc', shoeSh: '#d4dae4', shoeRed: '#d62838', shoeRedHi: '#f65c68',
+    watchBand: '#1a1c26', watchGlow: '#63b3ff',
+    bottleCap: '#9333ea', bottleCapHi: '#c084fc', bottleBody: '#ceeafc', bottleWater: '#93c5fd',
+    suitDk: '#08090d', suitMid: '#111319', suitHi: '#2a2e3a',
+    shirtW: '#f8fafc', shirtSh: '#d6deec',
+    tieDk: '#9e1624', tieMid: '#dc2638', tieHi: '#fc7680',
+    deskHi: '#c4865c', deskTop: '#9e6644', deskFront: '#744630', deskDk: '#523022',
+    cupW: '#f8f4ec', cupSh: '#cec6bc', coffee: '#704024',
+    beltDk: '#16141c', beltMid: '#2c2834', goldHi: '#fef3a4', goldMid: '#facc15',
+    steelDk: '#445068', steelMid: '#92a2ba', steelHi: '#eef4fc',
+    benchPad: '#282638', benchHi: '#484462', white: '#ffffff',
+    eyeDk: '#16121c', eyeWarm: '#3a2c2a',
+  };
+
+  const explicitRepo = document.documentElement.getAttribute('data-beacon-repo') || '';
+  const explicitSub = (document.documentElement.getAttribute('data-beacon-subpath') || '').replace(/^\/+|\/+$/g, '');
+  const isStaticShell = Boolean(explicitRepo) || location.hostname.endsWith('.github.io');
+  const hashP = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+  const inKey = (params.get('key') || params.get('token') || hashP.get('key') || hashP.get('token') || '').trim();
+  const inTunnel = (params.get('t') || hashP.get('t') || '').trim();
+  if (inKey) { try { localStorage.setItem('agy_gym_token', inKey); } catch {} }
+  if (inTunnel && /^https:\/\/[a-z0-9.-]+(?::\d+)?(?:\/.*)?$/i.test(inTunnel)) {
+    try { localStorage.setItem('agy_gym_last_tunnel', inTunnel.replace(/\/$/, '')); } catch {}
+  }
+  let gymToken = '';
+  try { gymToken = localStorage.getItem('agy_gym_token') || inKey || ''; } catch { gymToken = inKey; }
+  let apiBase = '';
+  let activeEs = null;
+  let activeWs = null;
+  let wsFailCount = 0;
+  let wsReconnectTimer = 0;
+  const apiUrl = p => (apiBase ? `${apiBase}${p}` : p);
+  const wsUrl = p => {
+    if (apiBase) return apiBase.replace(/^http/i, 'ws') + p;
+    return `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}${p}`;
+  };
+
+  function b64uToBytes(str) {
+    const pad = '='.repeat((4 - (str.length % 4)) % 4);
+    const bin = atob((str + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  async function decryptBeacon(env, secret) {
+    const salt = b64uToBytes(env.salt), nonce = b64uToBytes(env.nonce), ct = b64uToBytes(env.ct), expMac = b64uToBytes(env.mac);
+    const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret.trim()), 'PBKDF2', false, ['deriveBits']);
+    const derived = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: Number(env.iter) || 100000, hash: 'SHA-256' }, baseKey, 512));
+    const encK = derived.slice(0, 32), macK = derived.slice(32, 64);
+    const tag = new TextEncoder().encode('AGY-BEACON-V1');
+    const macIn = new Uint8Array(tag.length + salt.length + nonce.length + ct.length);
+    macIn.set(tag, 0); macIn.set(salt, tag.length); macIn.set(nonce, tag.length + salt.length); macIn.set(ct, tag.length + salt.length + nonce.length);
+    const mk = await crypto.subtle.importKey('raw', macK, { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+    if (!(await crypto.subtle.verify('HMAC', mk, expMac, macIn))) throw new Error('MAC');
+    const sk = await crypto.subtle.importKey('raw', encK, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const pt = new Uint8Array(ct.length);
+    for (let idx = 0; idx < Math.ceil(ct.length / 32); idx++) {
+      const bi = new Uint8Array(20); bi.set(nonce, 0); new DataView(bi.buffer).setUint32(16, idx, false);
+      const ks = new Uint8Array(await crypto.subtle.sign('HMAC', sk, bi));
+      for (let j = idx * 32; j < Math.min((idx + 1) * 32, ct.length); j++) pt[j] = ct[j] ^ ks[j - idx * 32];
+    }
+    return JSON.parse(new TextDecoder().decode(pt));
+  }
+  async function pingBase(u, ms = 2400) {
+    if (!u) return false;
+    const ctrl = new AbortController(); const tm = setTimeout(() => ctrl.abort(), ms);
+    try { const r = await fetch(`${u.replace(/\/$/, '')}/ping?_t=${Date.now()}`, { cache: 'no-store', signal: ctrl.signal }); return r.ok; }
+    catch { return false; } finally { clearTimeout(tm); }
+  }
+  async function resolveHoloBase(forceFresh = false) {
+    if (!isStaticShell) return '';
+    let cached = ''; try { cached = localStorage.getItem('agy_gym_last_tunnel') || ''; } catch {}
+    if (cached && !forceFresh && await pingBase(cached, 2200)) return cached.replace(/\/$/, '');
+    if (!gymToken) throw new Error('NO_KEY');
+    const ts = Date.now(), rel = explicitSub ? `${explicitSub}/beacon.json` : 'beacon.json';
+    const fetchJ = async (u, hdrs = {}, ghApi = false) => {
+      const ctrl = new AbortController(); const tm = setTimeout(() => ctrl.abort(), 8500);
+      try {
+        const r = await fetch(u, { cache: 'no-store', headers: hdrs, signal: ctrl.signal });
+        if (!r.ok) throw new Error('HTTP_' + r.status);
+        const j = await r.json();
+        return ghApi ? JSON.parse(atob(String(j.content || '').replace(/\s+/g, ''))) : j;
+      } finally { clearTimeout(tm); }
+    };
+    const srcs = [fetchJ(`./beacon.json?_t=${ts}`)];
+    if (explicitRepo && explicitRepo.includes('/')) {
+      const [ow, rp] = explicitRepo.split('/');
+      srcs.push(fetchJ(`https://${ow.toLowerCase()}.github.io/${rp}/${rel}?_t=${ts}`));
+      srcs.push(fetchJ(`https://raw.githubusercontent.com/${explicitRepo}/gh-pages/${rel}?_t=${ts}`));
+      srcs.push(fetchJ(`https://api.github.com/repos/${explicitRepo}/contents/${rel}?ref=gh-pages&_t=${ts}`, { Accept: 'application/vnd.github.v3+json' }, true));
+    }
+    let fallback = '';
+    const tasks = srcs.map(async p => {
+      const env = await p;
+      const dec = await decryptBeacon(env, gymToken);
+      const cand = String(dec.tunnel_url || '').replace(/\/$/, '');
+      if (!cand) throw new Error('EMPTY');
+      fallback = cand;
+      if (await pingBase(cand, 3000)) return cand;
+      throw new Error('PING');
+    });
+    try {
+      const win = await Promise.any(tasks);
+      try { localStorage.setItem('agy_gym_last_tunnel', win); } catch {}
+      return win;
+    } catch {
+      if (fallback) { try { localStorage.setItem('agy_gym_last_tunnel', fallback); } catch {} return fallback; }
+      throw new Error('BEACON_FAIL');
+    }
+  }
+
+  function applyState(next) {
+    if (!next || typeof next !== 'object') return;
+    if (next._fast) {
+      Object.assign(state, next);
+      delete state._fast;
+      return;
+    }
+    state = next;
+    connPill.textContent = (activeWs && activeWs.readyState === 1)
+      ? (isStaticShell ? '⚡ 永久全息 WS' : '⚡ 局域网 0延迟 WS')
+      : (isStaticShell ? '● 永久全息已连' : '● 局域网实时同步');
+    connPill.style.borderColor = '#4ade80';
+    connPill.style.color = '#4ade80';
+    const d = next.daily || {};
+    moodPill.textContent = next.scene === 'office' ? '💼 黑西装办公中' : (d.mood_label || '⚡ Antigravity');
+    moodPill.style.borderColor = d.aura_color || '#38bdf8';
+    moodPill.style.color = d.aura_color || '#7dd3fc';
+  }
+
+  function openHoloSse() {
+    if (activeEs) { try { activeEs.close(); } catch {} activeEs = null; }
+    const es = new EventSource(apiUrl('/api/sync/stream?fast=1'));
+    activeEs = es;
+    let errCnt = 0;
+    es.onmessage = ev => { errCnt = 0; try { applyState(JSON.parse(ev.data)); } catch {} };
+    es.onerror = () => {
+      connPill.textContent = '○ 重连中…';
+      connPill.style.borderColor = '#f59e0b';
+      connPill.style.color = '#fde047';
+      if (isStaticShell && ++errCnt >= 2) {
+        try { es.close(); } catch {}
+        setTimeout(() => bootHolo(true), 2000);
+      }
+    };
+  }
+  function openHoloStream() {
+    if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = 0; }
+    if (activeWs) { try { activeWs.close(); } catch {} activeWs = null; }
+    if (typeof WebSocket === 'undefined') { openHoloSse(); return; }
+    let ws;
+    try { ws = new WebSocket(wsUrl('/ws')); } catch { openHoloSse(); return; }
+    activeWs = ws;
+    ws.onopen = () => {
+      wsFailCount = 0;
+      if (activeEs) { try { activeEs.close(); } catch {} activeEs = null; }
+    };
+    ws.onmessage = ev => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg && msg._pong === undefined) applyState(msg);
+      } catch {}
+    };
+    ws.onclose = () => {
+      if (activeWs === ws) activeWs = null;
+      wsFailCount += 1;
+      if (!activeEs && wsFailCount >= 2) openHoloSse();
+      if (isStaticShell && wsFailCount >= 3) {
+        wsFailCount = 0;
+        wsReconnectTimer = setTimeout(() => bootHolo(true), 1800);
+      } else {
+        wsReconnectTimer = setTimeout(() => openHoloStream(), Math.min(6000, 1000 * wsFailCount));
+      }
+    };
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  }
+  async function bootHolo(forceFresh = false) {
+    if (isStaticShell) {
+      connPill.textContent = '⏳ 信标寻址中…';
+      try { apiBase = await resolveHoloBase(forceFresh); }
+      catch { connPill.textContent = '○ 电脑未在线，稍后重试'; setTimeout(() => bootHolo(true), 5000); return; }
+    }
+    openHoloStream();
+  }
+
+  if (isEmbed && typeof BroadcastChannel !== 'undefined') {
+    const bus = new BroadcastChannel('agy-gym-bus');
+    bus.onmessage = ev => applyState(ev.data);
+    fetch('/api/status', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(applyState).catch(() => {});
+  } else {
+    bootHolo(false);
+    const cleanup = () => {
+      if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
+      try { activeWs?.close(); } catch {}
+      try { activeEs?.close(); } catch {}
+    };
+    window.addEventListener('pagehide', cleanup);
+    window.addEventListener('beforeunload', cleanup);
+  }
+
+  function dot(x, y, col, a = 1) {
+    if (a < 1) { pctx.save(); pctx.globalAlpha = a; pctx.fillStyle = col; pctx.fillRect(Math.round(x), Math.round(y), 1, 1); pctx.restore(); }
+    else { pctx.fillStyle = col; pctx.fillRect(Math.round(x), Math.round(y), 1, 1); }
+  }
+  function rect(x, y, w, h, col) { pctx.fillStyle = col; pctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }
+  function roundedBox(x, y, w, h, fill, hi, sh) {
+    const x0 = Math.round(x), y0 = Math.round(y), wi = Math.round(w), hiI = Math.round(h);
+    rect(x0 - 1, y0, wi + 2, hiI, C.ink);
+    rect(x0, y0 - 1, wi, hiI + 2, C.ink);
+    rect(x0, y0, wi, hiI, fill);
+    if (hi && wi >= 2 && hiI >= 2) rect(x0, y0, wi - 1, 1, hi);
+    if (sh && wi >= 2 && hiI >= 2) rect(x0, y0 + hiI - 1, wi, 1, sh);
+  }
+  function ellipsePx(cx, cy, rx, ry, col, filled = true, alpha = 1) {
+    pctx.save(); pctx.globalAlpha = alpha; pctx.fillStyle = col;
+    const cxi = Math.round(cx), cyi = Math.round(cy), rxi = Math.max(1, Math.round(rx)), ryi = Math.max(1, Math.round(ry));
+    for (let yy = cyi - ryi; yy <= cyi + ryi; yy++) {
+      for (let xx = cxi - rxi; xx <= cxi + rxi; xx++) {
+        const d = ((xx - cx) / Math.max(0.5, rx)) ** 2 + ((yy - cy) / Math.max(0.5, ry)) ** 2;
+        if (filled ? d <= 1.0 : (d >= 0.70 && d <= 1.12)) pctx.fillRect(xx, yy, 1, 1);
+      }
+    }
+    pctx.restore();
+  }
+  function capsule(x0, y0, x1, y1, radius, fill = C.skinMid, hi = C.skinHi, sh = C.skinSh) {
+    const steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 1.6));
+    const rOut = radius + 0.95;
+    pctx.fillStyle = C.ink;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps, cx = x0 + (x1 - x0) * t, cy = y0 + (y1 - y0) * t;
+      for (let dy = -Math.ceil(rOut); dy <= Math.ceil(rOut); dy++) {
+        for (let dx = -Math.ceil(rOut); dx <= Math.ceil(rOut); dx++) {
+          if (dx * dx + dy * dy <= rOut * rOut) pctx.fillRect(Math.round(cx + dx), Math.round(cy + dy), 1, 1);
+        }
+      }
+    }
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps, cx = x0 + (x1 - x0) * t, cy = y0 + (y1 - y0) * t;
+      for (let dy = -Math.ceil(radius); dy <= Math.ceil(radius); dy++) {
+        for (let dx = -Math.ceil(radius); dx <= Math.ceil(radius); dx++) {
+          if (dx * dx + dy * dy <= radius * radius) {
+            pctx.fillStyle = (dx < 0 || dy < 0) ? hi : ((dx > 0 && dy >= 0) ? sh : fill);
+            pctx.fillRect(Math.round(cx + dx), Math.round(cy + dy), 1, 1);
+          }
+        }
+      }
+    }
+  }
+  function star(cx, cy, col, big = false) {
+    cx = Math.round(cx); cy = Math.round(cy);
+    dot(cx, cy, C.white);
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) dot(cx + dx, cy + dy, col);
+    if (big) {
+      for (const [dx, dy] of [[-2, 0], [2, 0], [0, -2], [0, 2]]) dot(cx + dx, cy + dy, col, 0.65);
+    }
+  }
+
+  function drawBarbell(cx, cy, plates, halfW = 27, glowCol = null) {
+    cx = Math.round(cx); cy = Math.round(cy);
+    if (glowCol) {
+      pctx.save(); pctx.globalAlpha = 0.2; rect(cx - halfW - 1, cy - 2, (halfW + 1) * 2, 5, glowCol); pctx.restore();
+    }
+    rect(cx - halfW, cy - 2, halfW * 2, 4, C.ink);
+    rect(cx - halfW + 1, cy - 1, halfW * 2 - 2, 2, C.steelMid);
+    rect(cx - halfW + 2, cy - 1, halfW * 2 - 4, 1, C.steelHi);
+    for (let kx = cx - 7; kx <= cx + 7; kx += 2) dot(kx, cy, C.steelDk);
+
+    const list = (plates && plates.length) ? plates : [{ kg: 5, color: '#f8fafc', h: 0.65 }];
+    for (const side of [-1, 1]) {
+      const collarX = cx + side * 16;
+      rect(collarX - 1, cy - 3, 3, 6, C.ink); rect(collarX, cy - 2, 1, 4, C.steelHi);
+      list.slice(0, 5).forEach((pl, idx) => {
+        let px = cx + side * (19 + idx * 3);
+        if (side < 0) px -= 1;
+        const ph = Math.max(4, Math.round(8.5 * (pl.h || 0.85)));
+        rect(px - 1, cy - ph - 1, 4, ph * 2 + 2, C.ink);
+        rect(px, cy - ph, 2, ph * 2, pl.color || '#38bdf8');
+        pctx.save(); pctx.globalAlpha = 0.32; rect(px, cy - ph, 1, Math.max(2, ph), C.white); pctx.restore();
+      });
+    }
+  }
+
+  function drawBottle(x, y) {
+    roundedBox(x - 2, y - 7, 5, 7, C.bottleBody, C.white, C.bottleWater);
+    rect(x - 1, y - 4, 3, 4, C.bottleWater); dot(x - 1, y - 6, C.white);
+    roundedBox(x - 1, y - 10, 3, 2, C.bottleCap, C.bottleCapHi, C.ink);
+    dot(x, y - 11, C.bottleCapHi);
+  }
+
+  function drawWatch(x, y) {
+    rect(Math.round(x) - 1, Math.round(y) - 2, 3, 3, C.watchBand);
+    dot(Math.round(x), Math.round(y) - 1, C.watchGlow);
+  }
+
+  function drawPersonalHead(cx, cy, t, mood, effort, phase, sipping = false, annoyed = '') {
+    cx = Math.round(cx); cy = Math.round(cy);
+    const bounce = Math.floor(t * 3.8) % 2 === 0 ? 1 : 0;
+    const curls = [
+      [-7, -5, 3.2], [-5, -8, 3.6], [-1, -9.5, 3.8], [3, -9, 3.7],
+      [6.5, -6.5, 3.4], [7.5, -4, 2.8], [-7.5, -3, 2.6], [0.5, -10.2 - bounce * 0.35, 3.0],
+    ];
+    for (const [ox, oy, r] of curls) ellipsePx(cx + ox, cy + oy, r + 1, r + 1, C.ink, true);
+    ellipsePx(cx, cy - 0.5, 8.2, 8.0, C.ink, true);
+    for (const s of [-1, 1]) {
+      const ex = cx + s * 8;
+      rect(ex - 1, cy - 1, 3, 4, C.ink); rect(ex, cy, 1, 2, C.skinMid);
+      dot(ex, cy + 1, C.white); dot(ex, cy + 2, '#e2e8f0');
+    }
+    for (const [ox, oy, r] of curls) ellipsePx(cx + ox, cy + oy, r, r, C.hairMid, true);
+    ellipsePx(cx, cy - 6, 8.2, 4.8, C.hairMid, true);
+
+    ellipsePx(cx, cy + 0.8, 6.8, 5.7, C.skinMid, true);
+    rect(cx - 5, cy - 2, 10, 2, C.skinHi);
+    rect(cx - 4, cy + 5, 8, 1, C.skinSh);
+    rect(cx - 5, cy + 6, 10, 1, C.ink);
+    dot(cx - 6, cy + 5, C.ink); dot(cx + 6, cy + 5, C.ink);
+
+    for (const [bx, by, bw, bh] of [[-6, -4, 2, 3], [-4, -5, 2, 3], [-2, -5, 2, 2], [0, -5, 2, 3], [2, -5, 2, 2], [4, -4, 2, 3], [6, -4, 1, 2]]) {
+      rect(cx + bx, cy + by, bw, bh, C.hairMid); dot(cx + bx, cy + by + bh - 1, C.hairDk);
+    }
+    rect(cx - 7, cy - 3, 1, 3, C.hairDk); rect(cx + 6, cy - 3, 1, 3, C.hairDk);
+    for (const [hx, hy] of [[-5, -8], [-2, -9], [2, -9], [5, -7], [-6, -5], [4, -5], [0, -7]]) {
+      rect(cx + hx, cy + hy, 2, 1, C.hairHi); dot(cx + hx, cy + hy, C.hairShine);
+    }
+    for (const [dx, dy] of [[-4, -6], [-1, -8], [3, -7], [6, -5], [-6, -3], [1, -6]]) dot(cx + dx, cy + dy, C.hairDk);
+
+    rect(cx - 6, cy + 2, 2, 1, C.blush); rect(cx + 4, cy + 2, 2, 1, C.blush);
+    dot(cx + 3, cy + 2, C.mole); dot(cx + 5, cy + 1, C.mole);
+
+    if (annoyed === 'shush') {
+      dot(cx - 5, cy - 3, C.hairDk); dot(cx - 4, cy - 2, C.hairDk); dot(cx - 3, cy - 2, C.hairDk);
+      dot(cx + 5, cy - 3, C.hairDk); dot(cx + 4, cy - 2, C.hairDk); dot(cx + 3, cy - 2, C.hairDk);
+      for (const sx of [-5, 2]) { rect(cx + sx, cy - 1, 3, 2, C.eyeDk); dot(cx + sx, cy - 1, C.white); }
+      rect(cx - 1, cy + 3, 2, 2, '#c95b6b');
+    } else if (annoyed === 'wave') {
+      dot(cx - 5, cy - 1, C.eyeDk); dot(cx - 4, cy, C.eyeDk); dot(cx - 3, cy, C.eyeDk); dot(cx - 4, cy + 1, C.eyeDk);
+      dot(cx + 5, cy - 1, C.eyeDk); dot(cx + 4, cy, C.eyeDk); dot(cx + 3, cy, C.eyeDk); dot(cx + 4, cy + 1, C.eyeDk);
+      dot(cx - 2, cy + 3, C.ink); dot(cx - 1, cy + 2, C.ink); dot(cx, cy + 3, C.ink); dot(cx + 1, cy + 2, C.ink);
+      rect(cx + 6, cy - 2, 2, 3, C.ink); dot(cx + 6, cy - 1, '#7dd3fc'); dot(cx + 7, cy, C.white);
+    } else if (annoyed === 'dnd') {
+      dot(cx - 5, cy - 3, C.hairDk); rect(cx - 4, cy - 2, 2, 1, C.hairDk);
+      dot(cx + 5, cy - 3, C.hairDk); rect(cx + 3, cy - 2, 2, 1, C.hairDk);
+      for (const sx of [-5, 2]) { rect(cx + sx, cy - 1, 3, 2, C.eyeDk); dot(cx + sx + 1, cy, '#38bdf8'); }
+      rect(cx - 2, cy + 3, 4, 1, C.ink);
+    } else if (annoyed === 'think') {
+      rect(cx - 5, cy - 2, 3, 1, C.hairDk); rect(cx + 2, cy - 3, 3, 1, C.hairDk);
+      for (const sx of [-5, 2]) { rect(cx + sx, cy - 1, 3, 3, C.eyeDk); dot(cx + sx + 2, cy - 1, C.white); }
+      rect(cx - 1, cy + 3, 3, 1, C.ink);
+    } else if (annoyed === 'phone') {
+      rect(cx - 5, cy - 2, 3, 1, C.hairDk); rect(cx + 2, cy - 2, 3, 1, C.hairDk);
+      for (const sx of [-5, 2]) { rect(cx + sx, cy, 3, 2, C.eyeDk); dot(cx + sx + 2, cy, '#7dd3fc'); }
+      rect(cx - 1, cy + 3, 3, 1, '#d97782'); dot(cx + 2, cy + 2, '#d97782');
+    } else if (annoyed === 'curl') {
+      dot(cx - 5, cy - 3, C.hairDk); rect(cx - 4, cy - 2, 2, 1, C.hairDk);
+      dot(cx + 5, cy - 3, C.hairDk); rect(cx + 3, cy - 2, 2, 1, C.hairDk);
+      for (const sx of [-5, 2]) { rect(cx + sx, cy - 1, 3, 3, C.eyeDk); dot(cx + sx, cy - 1, C.white); }
+      rect(cx - 2, cy + 3, 4, 1, C.ink); dot(cx - 1, cy + 3, C.white); dot(cx, cy + 3, C.white);
+    } else if (annoyed === 'coffee_nervous') {
+      rect(cx - 5, cy - 3, 3, 1, C.hairDk); rect(cx + 2, cy - 3, 3, 1, C.hairDk);
+      for (const sx of [-5, 2]) {
+        rect(cx + sx, cy - 1, 3, 3, C.white); rect(cx + sx + 1, cy, 2, 2, C.eyeDk); dot(cx + sx + 1, cy, C.white);
+      }
+      rect(cx - 1, cy + 3, 2, 2, C.ink);
+      dot(cx - 6, cy - 2, '#7dd3fc'); dot(cx - 6, cy - 1, C.white);
+    } else if (annoyed === 'coffee_splashed') {
+      dot(cx - 5, cy - 1, C.eyeDk); dot(cx - 4, cy, C.eyeDk); dot(cx - 3, cy, C.eyeDk); dot(cx - 4, cy + 1, C.eyeDk);
+      dot(cx + 5, cy - 1, C.eyeDk); dot(cx + 4, cy, C.eyeDk); dot(cx + 3, cy, C.eyeDk); dot(cx + 4, cy + 1, C.eyeDk);
+      rect(cx - 2, cy + 2, 4, 3, C.ink); rect(cx - 1, cy + 3, 2, 1, '#fb7185');
+      dot(cx + 4, cy + 1, C.coffee); dot(cx + 5, cy + 3, '#9c5e36'); dot(cx + 2, cy + 3, C.coffee);
+      rect(cx - 7, cy - 2, 2, 3, C.ink); dot(cx - 7, cy - 1, '#7dd3fc'); dot(cx - 6, cy, C.white);
+    } else if (annoyed === 'coffee_wipe') {
+      dot(cx - 5, cy - 2, C.hairDk); dot(cx - 4, cy - 3, C.hairDk);
+      dot(cx + 5, cy - 2, C.hairDk); dot(cx + 4, cy - 3, C.hairDk);
+      rect(cx - 5, cy, 3, 1, C.eyeDk); rect(cx + 2, cy, 3, 1, C.eyeDk);
+      rect(cx - 1, cy + 3, 2, 1, '#c95b6b'); dot(cx + 4, cy + 2, C.coffee);
+    } else if (sipping) {
+      for (const sx of [-5, 2]) {
+        dot(cx + sx, cy, C.eyeDk); dot(cx + sx + 1, cy - 1, C.eyeDk);
+        dot(cx + sx + 2, cy - 1, C.eyeDk); dot(cx + sx + 3, cy, C.eyeDk);
+      }
+      rect(cx - 1, cy + 3, 2, 1, '#c95b6b');
+    } else if (phase === 'lockout' || phase === 'set_celebrate' || mood === 'god_mode') {
+      for (const sx of [-5, 2]) {
+        dot(cx + sx, cy, C.eyeDk); dot(cx + sx + 1, cy - 1, C.eyeDk);
+        dot(cx + sx + 2, cy - 1, C.eyeDk); dot(cx + sx + 3, cy, C.eyeDk);
+      }
+      rect(cx - 2, cy + 2, 4, 2, '#dc4a64'); rect(cx - 1, cy + 2, 2, 1, C.white); rect(cx - 1, cy + 3, 2, 1, '#fda4af');
+    } else if (effort > 0.62) {
+      dot(cx - 5, cy - 1, C.eyeDk); dot(cx - 4, cy, C.eyeDk); dot(cx - 3, cy, C.eyeDk); dot(cx - 4, cy + 1, C.eyeDk);
+      dot(cx + 5, cy - 1, C.eyeDk); dot(cx + 4, cy, C.eyeDk); dot(cx + 3, cy, C.eyeDk); dot(cx + 4, cy + 1, C.eyeDk);
+      rect(cx - 2, cy + 2, 4, 2, C.ink); rect(cx - 1, cy + 2, 2, 1, C.white);
+      rect(cx + 6, cy - 2, 2, 3, C.ink); dot(cx + 6, cy - 1, '#7dd3fc'); dot(cx + 7, cy, C.white);
+    } else if (mood === 'sedentary') {
+      rect(cx - 5, cy, 3, 1, C.eyeDk); rect(cx + 2, cy, 3, 1, C.eyeDk);
+      rect(cx - 1, cy + 3, 2, 2, '#be123c');
+      const zy = cy - 13 - (Math.floor(t * 3.5) % 5);
+      rect(cx + 9, zy, 3, 1, '#cbd5e1'); dot(cx + 10, zy + 1, '#cbd5e1'); rect(cx + 9, zy + 2, 3, 1, '#cbd5e1');
+    } else {
+      rect(cx - 5, cy - 2, 3, 1, C.hairDk); rect(cx + 2, cy - 2, 3, 1, C.hairDk);
+      const blink = (Math.floor(t * 2) % 9 === 0) && ((t * 2) % 1 < 0.14);
+      for (const sx of [-5, 2]) {
+        if (blink) rect(cx + sx, cy, 3, 1, C.eyeDk);
+        else {
+          rect(cx + sx, cy - 1, 3, 3, C.eyeDk); rect(cx + sx, cy + 1, 3, 1, C.eyeWarm);
+          dot(cx + sx + 1, cy + 1, C.eyeDk); dot(cx + sx, cy - 1, C.white);
+        }
+      }
+      rect(cx - 2, cy + 3, 4, 1, '#d97782'); dot(cx - 2, cy + 2, C.skinSh); dot(cx + 2, cy + 2, C.skinSh);
+    }
+  }
+
+  function resolveMorph(st) {
+    const gr = (st && (st.growth || (st.daily && st.daily.growth))) || {};
+    const m = (gr && typeof gr.morph === 'object' && gr.morph) ? gr.morph : {};
+    return {
+      lean_score: Number(m.lean_score ?? 0.28),
+      shoulder_hw: Number(m.shoulder_hw ?? 6.1),
+      waist_hw: Number(m.waist_hw ?? 5.1),
+      delt_r: Number(m.delt_r ?? 1.68),
+      arm_r: Number(m.arm_r ?? 1.72),
+      thigh_r: Number(m.thigh_r ?? 1.85),
+      calf_r: Number(m.calf_r ?? 1.72),
+      chest_def: Number(m.chest_def ?? 0.28),
+      core_def: Number(m.core_def ?? 0.28),
+      suit_hw: Number(m.suit_hw ?? 8.8),
+      prestige_tier: Number(m.prestige_tier ?? 0) | 0,
+    };
+  }
+
+  function drawBlackTank(cx, topY, botY, effort, morph) {
+    const m = morph || resolveMorph(state);
+    const shHw = m.shoulder_hw, wHw = m.waist_hw, deltR = m.delt_r;
+    const chestDef = m.chest_def, coreDef = m.core_def, prestige = m.prestige_tier;
+    cx = Math.round(cx); topY = Math.round(topY); botY = Math.round(botY);
+    const h = Math.max(11, botY - topY);
+
+    rect(cx - 3, topY - 3, 6, 4, C.ink); rect(cx - 2, topY - 3, 4, 4, C.skinMid); rect(cx - 2, topY - 3, 4, 1, C.skinSh);
+    if (chestDef >= 0.30) {
+      const trapSpan = chestDef >= 0.70 ? 5 : 4;
+      for (const s of [-1, 1]) {
+        for (let k = 3; k <= trapSpan; k++) {
+          dot(cx + s * k, topY - 2, C.ink);
+          dot(cx + s * k, topY - 1, k === 3 ? C.skinMid : C.skinSh);
+        }
+        dot(cx + s * 3, topY - 1, C.skinHi);
+      }
+    }
+
+    const topHwI = Math.max(5, Math.round(shHw));
+    const strapHw = Math.max(4.6, shHw - (chestDef >= 0.35 ? 0.65 : 0.25));
+    const strapI = Math.max(5, Math.round(strapHw));
+    rect(cx - strapI, topY - 1, strapI * 2, 1, C.ink);
+    for (let dy = 0; dy < h; dy++) {
+      const u = dy / Math.max(1, h - 1);
+      const peakHw = shHw + 0.35 * Math.min(1, chestDef);
+      const rowHw = dy <= 2
+        ? (strapHw + (shHw - strapHw) * (dy / 2.5))
+        : (u <= 0.44 ? peakHw : (peakHw + (wHw - peakHw) * Math.pow((u - 0.44) / 0.56, 0.85)));
+      const hw = Math.max(4, Math.round(rowHw));
+      const yy = topY + dy;
+      rect(cx - hw - 1, yy, hw * 2 + 2, 1, C.ink);
+      rect(cx - hw, yy, hw * 2, 1, C.tankMid);
+      const edgeW = hw >= 7 ? 3 : 2;
+      rect(cx - hw, yy, edgeW, 1, C.tankHi);
+      rect(cx + hw - edgeW, yy, edgeW, 1, C.tankDk);
+    }
+    const botHwI = Math.max(5, Math.round(wHw));
+    rect(cx - botHwI, topY + h, botHwI * 2, 1, C.ink);
+
+    for (const s of [-1, 1]) {
+      const sx = cx + s * (shHw + 0.45), sy = topY + 2;
+      ellipsePx(sx, sy, deltR + 0.90, deltR + 0.90, C.ink, true);
+      ellipsePx(sx, sy, deltR, deltR, C.skinMid, true);
+      const hx = sx - (s < 0 ? 0.6 : -0.2);
+      dot(hx, sy - 0.8, C.skinHi);
+      if (chestDef >= 0.38) {
+        dot(hx, sy - 1.2, C.skinHi);
+        dot(sx + s * 0.4, sy - 0.5, C.skinHi);
+        dot(sx, sy + Math.max(1, deltR - 0.35), C.skinSh);
+      }
+      if (chestDef >= 0.78) dot(sx + s * 0.75, sy + 0.6, C.skinSh);
+    }
+
+    rect(cx - 3, topY, 6, 3, C.skinMid); rect(cx - 2, topY + 1, 4, 1, C.skinHi);
+    if (chestDef >= 0.25) {
+      dot(cx - 2, topY + 1, C.skinSh); dot(cx + 1, topY + 1, C.skinSh);
+      dot(cx - 2, topY, C.skinHi); dot(cx + 1, topY, C.skinHi);
+    }
+    dot(cx - 4, topY + 1, C.tankTrim); dot(cx + 3, topY + 1, C.tankTrim);
+    dot(cx - 3, topY + 2, C.tankTrim); dot(cx + 2, topY + 2, C.tankTrim);
+    rect(cx - 2, topY + 3, 4, 1, C.tankTrim);
+
+    if (chestDef >= 0.42) {
+      const pecY = topY + 5, pecSpan = Math.max(2, Math.min(4, Math.round(shHw - 2.6)));
+      rect(cx - pecSpan - 1, pecY - 1, pecSpan, 1, C.tankHi);
+      rect(cx + 1, pecY - 1, pecSpan, 1, C.tankHi);
+      rect(cx - pecSpan - 1, pecY + 1, pecSpan, 1, C.tankDk);
+      rect(cx + 1, pecY + 1, pecSpan, 1, C.tankDk);
+    }
+    if (coreDef >= 0.65) {
+      for (let cyAb = topY + 6; cyAb < Math.max(topY + 7, botY - 3); cyAb++) dot(cx, cyAb, C.tankDk);
+      if (coreDef >= 0.90 && h >= 12) { dot(cx - 2, topY + 7, C.tankHi); dot(cx + 2, topY + 7, C.tankHi); }
+    }
+
+    const ay = topY + 5, ax = cx + (topHwI <= 6 ? 2 : 3);
+    const acol = (effort > 0.7 || prestige >= 1) ? C.goldHi : C.white;
+    dot(ax, ay, acol); dot(ax - 1, ay + 1, acol); dot(ax + 1, ay + 1, acol); rect(ax - 1, ay + 2, 3, 1, acol);
+
+    const by = botY - 3, beltHw = Math.max(5, Math.round(wHw + 1));
+    rect(cx - beltHw - 1, by, beltHw * 2 + 2, 4, C.ink);
+    rect(cx - beltHw, by + 1, beltHw * 2, 2, C.beltMid);
+    rect(cx - beltHw, by + 2, beltHw * 2, 1, C.beltDk);
+    rect(cx - 2, by + 1, 4, 2, C.goldMid); rect(cx - 1, by + 1, 2, 1, C.goldHi);
+    if (prestige >= 1) { dot(cx - 3, by + 1, '#38bdf8'); dot(cx + 2, by + 1, '#38bdf8'); }
+  }
+
+  function drawLeanBicepPeak(x0, y0, x1, y1, side, armR, chestDef) {
+    if (chestDef < 0.45) return;
+    const mx = x0 + (x1 - x0) * 0.42 + side * (0.45 + 0.25 * Math.min(1, chestDef - 0.45));
+    const my = y0 + (y1 - y0) * 0.42;
+    const pr = Math.max(1.1, armR * 0.78);
+    ellipsePx(mx, my, pr + 0.7, pr + 0.7, C.ink, true);
+    ellipsePx(mx, my, pr, pr, C.skinMid, true);
+    dot(mx - (side < 0 ? 0.5 : -0.3), my - 0.6, C.skinHi);
+    dot(mx, my + Math.max(0.8, pr * 0.6), C.skinSh);
+  }
+
+  function drawShortsSocksSneakers(px, hipY, kneeX, kneeY, footX, footY, morph) {
+    const m = morph || resolveMorph(state);
+    const thighR = m.thigh_r, calfR = m.calf_r, wHw = m.waist_hw;
+    for (const s of [-1, 1]) {
+      const hx = px + s * 3.8, kx = px + s * kneeX, fx = px + s * footX;
+      capsule(hx, hipY, kx, kneeY, thighR);
+      capsule(kx, kneeY, fx, footY - 2, calfR);
+      if (thighR >= 1.98) {
+        const qx = (hx + kx) * 0.5 + s * (thighR * 0.45), qy = (hipY + kneeY) * 0.5;
+        dot(qx, qy - 0.5, C.skinHi); dot(qx, qy + 0.6, C.skinSh);
+      }
+      const sx = Math.round(fx), sy = Math.round(footY - 6);
+      const sockW = calfR < 2.05 ? 2 : 3;
+      rect(sx - Math.floor(sockW / 2) - 1, sy, sockW + 2, 4, C.ink);
+      rect(sx - Math.floor(sockW / 2), sy, sockW, 4, C.sockW);
+      rect(sx - Math.floor(sockW / 2), sy + 1, sockW, 1, '#262a38');
+    }
+    const shHalf = Math.max(6, Math.round(wHw + 1.5));
+    roundedBox(px - shHalf, hipY - 1, shHalf * 2, 5, C.shortsMid, C.shortsHi, C.shortsDk);
+    rect(px - 1, hipY + 2, 2, 3, C.ink); dot(px + shHalf - 3, hipY + 2, C.white);
+    for (const s of [-1, 1]) {
+      const fx = px + s * footX;
+      roundedBox(fx - 3, footY - 3, 6, 3, C.shoeW, C.white, C.shoeSh);
+      const toeX = fx + (s > 0 ? 0 : -3);
+      rect(toeX, footY - 3, 3, 2, C.shoeRed); dot(toeX + 1, footY - 3, C.shoeRedHi);
+      rect(fx - 3, footY, 6, 1, C.shoeW); rect(fx - 3, footY + 1, 6, 1, C.ink);
+    }
+  }
+
+  function drawMug(x, y, t) {
+    x = Math.round(x); y = Math.round(y);
+    roundedBox(x - 3, y - 4, 6, 5, C.cupW, C.white, C.cupSh);
+    rect(x - 2, y - 4, 4, 1, C.coffee);
+    rect(x + 3, y - 3, 2, 3, C.ink); dot(x + 3, y - 2, C.cupW);
+    const ph = Math.floor(t * 5) % 4;
+    for (let i = 0; i < 2; i++) {
+      const sy = y - 6 - ((ph + i * 2) % 4);
+      dot(x - 1 + i * 2 + ((sy + i) % 2 === 0 ? 1 : 0), sy, '#f0f8ff', 0.8);
+    }
+  }
+
+  function drawSidePlate(cx, cy, plates, scale = 1, dim = false) {
+    cx = Math.round(cx); cy = Math.round(cy);
+    const list = (plates && plates.length) ? plates : [{ kg: 5, color: '#f8fafc', h: 0.65 }];
+    const top = list[0];
+    const r = Math.max(4.2, (6.8 * (top.h || 0.88) + Math.min(2.0, list.length * 0.45)) * scale);
+    ellipsePx(cx, cy, r + 1, r + 1, C.ink, true);
+    ellipsePx(cx, cy, r, r, top.color || '#38bdf8', true, dim ? 0.75 : 1);
+    ellipsePx(cx - 1, cy - 1, Math.max(1.5, r - 2.2), Math.max(1.5, r - 2.2), C.white, false, dim ? 0.18 : 0.35);
+    if (list.length >= 2) ellipsePx(cx, cy, Math.max(2.2, r * 0.56), Math.max(2.2, r * 0.56), list[1].color || '#2563eb', true, dim ? 0.75 : 1);
+    ellipsePx(cx, cy, 2, 2, C.ink, true);
+    dot(cx, cy, C.steelHi); dot(cx - 1, cy, C.steelMid);
+  }
+
+  function drawLyingSideHead(cx, cy, t, mood, effort, phase) {
+    cx = Math.round(cx); cy = Math.round(cy);
+    const curls = [[-6, 1, 3.2], [-7, -2, 3.3], [-6, -5, 3.2], [-3, -7, 3.3], [1, -7, 3.1], [4, -5.5, 2.6], [-3, 4, 2.8]];
+    for (const [ox, oy, r] of curls) ellipsePx(cx + ox, cy + oy, r + 1, r + 1, C.ink, true);
+    ellipsePx(cx + 1, cy, 7.0, 6.8, C.ink, true);
+    for (const [ox, oy, r] of curls) ellipsePx(cx + ox, cy + oy, r, r, C.hairMid, true);
+    ellipsePx(cx + 2, cy - 0.5, 5.8, 5.4, C.skinMid, true);
+    rect(cx - 1, cy - 5, 7, 2, C.skinHi); rect(cx - 1, cy + 4, 6, 1, C.skinSh);
+    dot(cx + 3, cy - 6, C.ink); dot(cx + 2, cy - 5, C.skinHi);
+    for (const [bx, by] of [[-4, -5], [-2, -6], [0, -6], [-5, -3]]) { rect(cx + bx, cy + by, 2, 2, C.hairMid); dot(cx + bx, cy + by + 1, C.hairDk); }
+    for (const [hx, hy] of [[-6, -4], [-4, -7], [-1, -7], [-6, 0]]) dot(cx + hx, cy + hy, C.hairShine);
+    rect(cx - 3, cy + 1, 3, 3, C.ink); rect(cx - 2, cy + 1, 2, 2, C.skinMid);
+    dot(cx - 1, cy + 2, C.white); dot(cx - 1, cy + 3, '#e2e8f0');
+    rect(cx + 2, cy + 1, 2, 1, C.blush); dot(cx + 4, cy, C.mole);
+
+    if (phase === 'lockout' || phase === 'set_celebrate' || mood === 'god_mode') {
+      dot(cx + 1, cy - 2, C.eyeDk); dot(cx + 2, cy - 3, C.eyeDk); dot(cx + 3, cy - 2, C.eyeDk);
+      rect(cx + 5, cy - 2, 2, 2, '#dc4a64'); dot(cx + 5, cy - 2, C.white);
+    } else if (effort > 0.62) {
+      dot(cx + 1, cy - 3, C.eyeDk); dot(cx + 2, cy - 2, C.eyeDk); dot(cx + 1, cy - 1, C.eyeDk);
+      rect(cx + 5, cy - 2, 2, 2, C.ink); dot(cx + 5, cy - 2, C.white);
+      dot(cx - 1, cy - 3, '#7dd3fc'); dot(cx - 1, cy - 2, C.white);
+    } else {
+      rect(cx, cy - 4, 2, 1, C.hairDk);
+      const blink = (Math.floor(t * 2) % 9 === 0) && ((t * 2) % 1 < 0.14);
+      if (blink) rect(cx + 1, cy - 2, 2, 1, C.eyeDk);
+      else { rect(cx + 1, cy - 3, 2, 3, C.eyeDk); dot(cx + 1, cy - 3, C.white); }
+      dot(cx + 5, cy - 1, '#d97782'); dot(cx + 6, cy - 2, C.skinSh);
+    }
+  }
+
+  function drawLyingBenchPress(cx, gy, t, p, effort, phase, mood, plates, floatY, morph) {
+    const m = morph || resolveMorph(state);
+    const deltR = m.delt_r, armR = m.arm_r, thighR = m.thigh_r, calfR = m.calf_r, chestDef = m.chest_def;
+    const chestLift = Math.round(Math.min(2.0, chestDef * 1.8));
+    const benchY = gy - 15 + floatY, rackX = cx - 26;
+    rect(rackX - 5, gy - 2 + floatY, 12, 3, C.ink); rect(rackX - 4, gy - 1 + floatY, 10, 1, C.steelMid);
+    rect(rackX - 4, benchY - 26, 3, 40, C.ink); rect(rackX - 3, benchY - 25, 1, 38, C.steelDk);
+    rect(rackX, benchY - 24, 4, 39, C.ink); rect(rackX + 1, benchY - 23, 2, 37, C.steelMid); rect(rackX + 1, benchY - 22, 1, 35, C.steelHi);
+    roundedBox(rackX + 3, benchY - 19, 3, 3, C.steelDk, C.steelHi);
+
+    rect(cx - 21, benchY + 4, 4, gy - benchY - 3, C.ink); rect(cx - 20, benchY + 4, 2, gy - benchY - 4, C.steelDk);
+    rect(cx + 8, benchY + 4, 4, gy - benchY - 3, C.ink); rect(cx + 9, benchY + 4, 2, gy - benchY - 4, C.steelMid);
+    rect(cx + 6, gy - 1 + floatY, 8, 2, C.ink);
+    roundedBox(cx - 28, benchY, 42, 4, C.benchPad, C.benchHi, C.ink);
+
+    const barShake = effort > 0.52 ? Math.sin(t * 46) * (0.75 * effort) : 0;
+    const barX = cx - 9 + p * 4.5 + barShake, barY = (benchY - 25) + p * (15 - chestLift * 0.5), shX = cx - 10, shY = benchY - 4;
+    const farPx = barX - 9, farPy = barY - 4;
+    drawSidePlate(farPx, farPy, plates, 0.86, true);
+    const farElbX = shX - 2 + p * 2, farElbY = (shY + barY) * 0.5 + p * 4.5;
+    capsule(shX - 1, shY - 2, farElbX, farElbY, Math.max(1.25, armR * 0.85), C.skinSh, C.skinMid, C.skinSh);
+    capsule(farElbX, farElbY, barX - 3, barY - 1, Math.max(1.2, armR * 0.80), C.skinSh, C.skinMid, C.skinSh);
+
+    capsule(cx + 9, benchY - 2, cx + 18, benchY + 1, Math.max(1.4, thighR * 0.92), C.skinSh, C.skinMid, C.skinSh);
+    capsule(cx + 18, benchY + 1, cx + 20, gy - 2 + floatY, Math.max(1.35, calfR * 0.92), C.skinSh, C.skinMid, C.skinSh);
+    rect(cx + 19, gy - 6 + floatY, 3, 4, C.sockSh);
+    roundedBox(cx + 19, gy - 3 + floatY, 6, 3, C.shoeSh, C.shoeW, C.ink); rect(cx + 22, gy - 3 + floatY, 3, 2, C.shoeRed);
+
+    rect(cx - 17, benchY - 6, 5, 5, C.ink); rect(cx - 16, benchY - 5, 4, 3, C.skinMid);
+    const torsoH = chestDef < 0.2 ? 7 : 8;
+    roundedBox(cx - 13, benchY - torsoH, 17, torsoH, C.tankMid, C.tankHi, C.tankDk);
+    if (chestLift >= 1) {
+      rect(cx - 11, benchY - torsoH - chestLift, 9, chestLift + 1, C.tankHi);
+      rect(cx - 11, benchY - torsoH - chestLift - 1, 9, 1, C.ink);
+      if (chestLift >= 2) rect(cx - 10, benchY - torsoH - chestLift, 6, 1, C.tankTrim);
+    }
+    rect(cx - 8, benchY - 7 - (chestLift >= 2 ? 1 : 0), 2, 2, effort > 0.7 ? C.goldHi : C.white);
+    rect(cx + 1, benchY - 7, 4, 7, C.ink); rect(cx + 2, benchY - 6, 2, 5, C.beltMid);
+    rect(cx + 2, benchY - 5, 2, 3, C.goldMid); dot(cx + 2, benchY - 5, C.goldHi);
+
+    roundedBox(cx + 5, benchY - 7, 9, 7, C.shortsMid, C.shortsHi, C.shortsDk); dot(cx + 11, benchY - 3, C.white);
+    capsule(cx + 12, benchY - 3, cx + 21, benchY + 1, thighR);
+    capsule(cx + 21, benchY + 1, cx + 23, gy - 2 + floatY, calfR);
+    const sx = Math.round(cx + 23), sy = Math.round(gy - 6 + floatY);
+    rect(sx - 2, sy, 4, 4, C.ink); rect(sx - 1, sy, 2, 4, C.sockW); rect(sx - 1, sy + 1, 2, 1, '#262a38');
+    roundedBox(sx - 2, gy - 3 + floatY, 7, 3, C.shoeW, C.white, C.shoeSh);
+    rect(sx + 2, gy - 3 + floatY, 3, 2, C.shoeRed); dot(sx + 3, gy - 3 + floatY, C.shoeRedHi);
+    rect(sx - 2, gy + floatY, 7, 1, C.shoeW); rect(sx - 2, gy + 1 + floatY, 7, 1, C.ink);
+
+    drawLyingSideHead(cx - 21, benchY - 5, t, mood, effort, phase);
+    capsule(farPx, farPy, barX + 9, barY + 4, 1.1, C.steelMid, C.steelHi, C.steelDk);
+
+    ellipsePx(shX, shY, deltR + 0.9, deltR + 0.9, C.ink, true); ellipsePx(shX, shY, deltR, deltR, C.skinMid, true); dot(shX - 1, shY - 1, C.skinHi);
+    if (chestDef >= 0.45) dot(shX, shY - 1, C.skinHi);
+    const elbX = shX + 1.5 + p * 5.0, elbY = (shY + barY) * 0.5 + p * 6.5;
+    capsule(shX, shY, elbX, elbY, armR);
+    drawLeanBicepPeak(shX, shY, elbX, elbY, 1, armR, chestDef);
+    capsule(elbX, elbY, barX + 1, barY + 1, Math.max(1.3, armR * 0.92));
+    drawWatch(barX + 1, barY + 3); roundedBox(barX, barY - 1, 3, 3, C.skinHi);
+    drawSidePlate(barX + 10, barY + 4, plates, 1.0, false);
+
+    if (p >= 0.78) { star(barX - 3, barY - 7, C.goldMid); star(barX + 12, barY - 6, C.goldMid); }
+  }
+
+  function drawCoffeeKettle(x, y, tilted = false) {
+    x = Math.round(x); y = Math.round(y);
+    if (tilted) {
+      roundedBox(x - 3, y - 3, 7, 6, '#3a2a22', '#765c4a', C.ink);
+      rect(x - 2, y - 1, 5, 3, C.coffee);
+      dot(x - 1, y - 1, '#a86c42');
+      rect(x - 1, y - 5, 5, 2, C.ink); rect(x, y - 4, 3, 1, C.steelHi);
+      rect(x + 4, y - 2, 2, 4, C.ink); dot(x + 4, y - 1, C.steelDk);
+      capsule(x - 3, y + 1, x - 7, y + 3, 0.7, C.steelMid, C.steelHi, C.steelDk);
+    } else {
+      roundedBox(x - 3, y - 6, 7, 7, '#3a2a22', '#765c4a', C.ink);
+      rect(x - 2, y - 3, 5, 3, C.coffee);
+      rect(x - 2, y - 8, 5, 2, C.ink); rect(x - 1, y - 7, 3, 1, C.steelHi);
+      rect(x + 4, y - 5, 2, 4, C.ink);
+      capsule(x - 3, y - 2, x - 6, y - 5, 0.65, C.steelMid, C.steelHi, C.steelDk);
+    }
+  }
+
+  function drawAngerMark(x, y, pulse = 0) {
+    x = Math.round(x); y = Math.round(y);
+    const col = pulse % 2 === 0 ? '#ef4444' : '#fb7185';
+    for (const [ox, oy] of [[-2,-1],[-1,-1],[-1,-2],[2,-1],[1,-1],[1,-2],[-2,1],[-1,1],[-1,2],[2,1],[1,1],[1,2]]) dot(x + ox, y + oy, col);
+    dot(x, y, pulse % 2 === 0 ? C.white : '#fecdd3');
+  }
+
+  function drawDndSign(x, y) {
+    x = Math.round(x); y = Math.round(y);
+    rect(x - 5, y + 4, 11, 2, C.ink); rect(x - 4, y + 4, 9, 1, C.steelMid);
+    roundedBox(x - 7, y - 5, 15, 9, C.white, C.white, '#e2e8f0');
+    rect(x - 6, y - 4, 13, 1, '#dc2626'); rect(x - 6, y + 2, 13, 1, '#dc2626');
+    ellipsePx(x, y - 1, 2.8, 2.6, '#ef4444', false);
+    for (const d of [-2, -1, 0, 1, 2]) dot(x + d, y - 1 + d, '#ef4444');
+  }
+
+  function drawOfficeDumbbell(x, y) {
+    x = Math.round(x); y = Math.round(y);
+    rect(x - 4, y - 1, 9, 2, C.ink); rect(x - 2, y, 5, 1, C.steelHi);
+    for (const sx of [-4, 3]) {
+      rect(x + sx - 1, y - 3, 3, 7, C.ink); rect(x + sx, y - 2, 1, 5, '#242834'); dot(x + sx, y - 2, C.goldMid);
+    }
+  }
+  function drawPixelPhone(x, y, t) {
+    x = Math.round(x); y = Math.round(y);
+    roundedBox(x - 2, y - 4, 5, 8, '#161a26', C.steelHi, C.ink);
+    rect(x - 1, y - 3, 3, 5, Math.floor(t * 5) % 2 === 0 ? '#38bdf8' : '#818cf8');
+    dot(x - 1, y - 2, C.white); rect(x - 1, y, 2, 1, '#e0f2fe');
+  }
+  function drawPixelLightbulb(x, y, t) {
+    x = Math.round(x); y = Math.round(y);
+    ellipsePx(x, y - 2, 4.5, 4.5, '#fde047', true, 0.28);
+    ellipsePx(x, y - 2, 3, 3, C.ink, true); ellipsePx(x, y - 2, 2.2, 2.2, C.goldMid, true);
+    dot(x - 1, y - 3, C.white); dot(x, y - 2, C.goldHi);
+    rect(x - 1, y + 1, 3, 2, C.ink); rect(x, y + 1, 1, 1, C.steelHi);
+    if (Math.floor(t * 8) % 2 === 0) {
+      for (const [ox, oy] of [[-5, -2], [5, -2], [0, -7], [-4, -6], [4, -6]]) dot(x + ox, y + oy, C.goldHi);
+    }
+  }
+  function drawQuestionBubble(x, y, t) {
+    x = Math.round(x); y = Math.round(y - (Math.floor(t * 3.5) % 2));
+    rect(x - 4, y - 4, 9, 7, '#38bdf8'); rect(x - 3, y - 5, 7, 9, '#38bdf8');
+    rect(x - 3, y - 4, 7, 7, '#18223e');
+    rect(x - 1, y - 3, 3, 1, C.white); dot(x + 1, y - 2, C.white); dot(x, y - 1, C.white); dot(x, y + 1, C.goldHi);
+  }
+  function drawDeskNotebook(x, y) {
+    x = Math.round(x); y = Math.round(y);
+    roundedBox(x - 5, y - 2, 10, 4, '#f8f4e8', C.white, '#d4cec0');
+    rect(x, y - 2, 1, 4, '#94a3b8'); rect(x - 4, y - 1, 3, 1, '#64748b'); rect(x + 2, y - 1, 2, 1, '#38bdf8');
+  }
+  function resolveOfficeIdlePose(t) {
+    const c = ((t % 48) + 48) % 48;
+    if (c < 5.2) return ['typing', c / 5.2];
+    if (c < 8.2) return ['sip_coffee', (c - 5.2) / 3.0];
+    if (c < 13.0) return ['think_chin', (c - 8.2) / 4.8];
+    if (c < 17.5) return ['typing', (c - 13.0) / 4.5];
+    if (c < 22.0) return ['stretch_break', (c - 17.5) / 4.5];
+    if (c < 27.0) return ['desk_dumbbell', (c - 22.0) / 5.0];
+    if (c < 31.5) return ['typing', (c - 27.0) / 4.5];
+    if (c < 36.0) return ['jot_notes', (c - 31.5) / 4.5];
+    if (c < 40.5) return ['check_phone', (c - 36.0) / 4.5];
+    if (c < 44.5) return ['eureka_cheer', (c - 40.5) / 4.0];
+    return ['typing', (c - 44.5) / 3.5];
+  }
+
+  function drawOfficeScene(cx, gy, t, mood, levitate, officeAction = 'idle', actionP = 0, yOff = 0, morph = null, pourHeight = 0.26, pourActive = false) {
+    const m = morph || resolveMorph(state);
+    const suitHw = m.suit_hw, sleeveR = Math.max(1.55, Math.min(2.15, m.arm_r * 0.94));
+    const armXOff = Math.max(8, Math.round(suitHw - 0.3));
+    gy = gy + yOff;
+
+    const activeCustom = officeAction !== 'idle' && (pourActive || (actionP > 0 && actionP < 1));
+    const [pose, poseP] = activeCustom
+      ? [officeAction, (pourActive && officeAction === 'pour_coffee') ? 0.42 : actionP]
+      : resolveOfficeIdlePose(t);
+
+    const ph = Math.max(0, Math.min(1, Number(pourHeight || 0)));
+    const pouringSeq = pose === 'pour_coffee';
+    const wipeSeq = pose === 'wipe_coffee';
+    const shushSeq = pose === 'shush_busy';
+    const waveSeq = pose === 'wave_away';
+    const dndSeq = pose === 'dnd_sign';
+    const stretchSeq = pose === 'stretch_break';
+    const dumbSeq = pose === 'desk_dumbbell';
+    const thinkSeq = pose === 'think_chin' || (pose === 'debug_eureka' && poseP < 0.45);
+    const eurekaSeq = pose === 'eureka_cheer' || (pose === 'debug_eureka' && poseP >= 0.45);
+    const phoneSeq = pose === 'check_phone';
+    const notesSeq = pose === 'jot_notes';
+
+    let pouringLift = false, pouringStream = false, pouringSip = false;
+    if (pourActive && pouringSeq) {
+      pouringStream = true;
+    } else {
+      pouringLift = pouringSeq && poseP < 0.16;
+      const streamEnd = ph >= 0.68 ? 0.92 : 0.68;
+      pouringStream = pouringSeq && poseP >= 0.16 && poseP < streamEnd;
+      pouringSip = pouringSeq && poseP >= streamEnd && ph < 0.68;
+    }
+    const coffeeNervous = pouringStream && ph >= 0.36 && ph < 0.68;
+    const coffeeSplashed = pouringStream && ph >= 0.68;
+    const sipping = pouringSip || pose === 'sip_coffee';
+
+    const stretchLift = stretchSeq ? Math.sin(Math.min(1, Math.max(0, poseP)) * Math.PI) * 2.2 : 0;
+    const recoilX = coffeeSplashed ? (-2.4 + Math.sin(t * 36) * 0.65) : (coffeeNervous ? -0.8 : 0);
+    const bob = dndSeq ? Math.round(Math.sin(t * 22) * 0.7)
+      : (waveSeq ? Math.round(Math.sin(t * 14) * 0.6)
+      : (coffeeSplashed ? Math.round(Math.sin(t * 32) * 0.8)
+      : (dumbSeq ? Math.round(Math.sin(t * 9) * 0.5)
+      : (stretchSeq ? -Math.round(stretchLift)
+      : (eurekaSeq ? -Math.round(Math.abs(Math.sin(t * 10)) * 1.4)
+      : (pose === 'typing' ? Math.round(Math.sin(t * 6) * 0.5) : 0))))));
+
+    ellipsePx(cx, gy + 1 - yOff, 30, 3.5, '#141026', true, 0.48);
+    roundedBox(cx - 11, gy - 38, 22, 19, '#202434', '#384058', '#12141e');
+
+    const bcx = cx + recoilX;
+    const shY = gy - 33 + bob, deskTopY = gy - 18;
+    rect(bcx - 3, shY - 3, 6, 4, C.ink); rect(bcx - 2, shY - 3, 4, 4, C.skinMid); rect(bcx - 2, shY - 3, 4, 1, C.skinSh);
+    const suitH = Math.max(12, Math.round(deskTopY - shY + 1));
+    const topShI = Math.max(7, Math.round(suitHw));
+    rect(bcx - topShI + 1, shY - 1, topShI * 2 - 2, 1, C.ink);
+    for (let dy = 0; dy < suitH; dy++) {
+      const u = dy / Math.max(1, suitH - 1);
+      const rowHw = dy === 0 ? (suitHw - 0.8) : (suitHw + (7.2 - suitHw) * Math.pow(u, 0.85));
+      const hw = Math.max(7, Math.round(rowHw));
+      const yy = Math.round(shY) + dy;
+      rect(bcx - hw - 1, yy, hw * 2 + 2, 1, C.ink);
+      rect(bcx - hw, yy, hw * 2, 1, C.suitMid);
+      rect(bcx - hw, yy, 2, 1, C.suitHi);
+      rect(bcx + hw - 2, yy, 2, 1, C.suitDk);
+    }
+    if (m.chest_def >= 0.45) rect(bcx - topShI + 2, shY, topShI * 2 - 4, 1, C.suitHi);
+    rect(bcx - 5, shY + 1, 2, 6, C.suitHi); rect(bcx + 3, shY + 1, 2, 6, C.suitHi);
+    rect(bcx - 3, shY, 6, 11, C.shirtW); rect(bcx - 3, shY + 1, 1, 9, C.shirtSh); rect(bcx + 2, shY + 1, 1, 9, C.shirtSh);
+    rect(bcx - 1, shY + 1, 2, 2, C.tieDk); dot(bcx - 1, shY + 1, C.tieHi);
+    rect(bcx - 1, shY + 3, 2, 8, C.tieMid); dot(bcx - 1, shY + 4, C.tieHi); dot(bcx - 1, shY + 6, C.tieHi);
+    rect(bcx + 4, shY + 5, 3, 1, C.shirtW);
+
+    if (coffeeSplashed || (wipeSeq && poseP < 0.82)) {
+      const spots = [[1, 2], [-1, 4], [2, 6], [5, 3], [4, 7]];
+      const keepN = coffeeSplashed ? spots.length : Math.max(1, Math.round((1 - poseP / 0.82) * spots.length));
+      for (let i = 0; i < keepN; i++) {
+        const [sox, soy] = spots[i];
+        dot(bcx + sox, shY + soy, C.coffee);
+        dot(bcx + sox + 1, shY + soy, '#9c5e36');
+        if (coffeeSplashed && soy <= 5) dot(bcx + sox, shY + soy + 1, '#9c5e36');
+      }
+    }
+
+    const headY = shY - 8;
+    const annoyedKind = coffeeSplashed ? 'coffee_splashed'
+      : (coffeeNervous ? 'coffee_nervous'
+      : (wipeSeq ? 'coffee_wipe'
+      : (shushSeq ? 'shush'
+      : (waveSeq ? 'wave'
+      : (dndSeq ? 'dnd'
+      : (thinkSeq ? 'think'
+      : (phoneSeq ? 'phone'
+      : (dumbSeq ? 'curl' : ''))))))));
+    drawPersonalHead(
+      bcx, headY, t, mood, 0,
+      (pouringSip || eurekaSeq) ? 'set_celebrate' : 'idle',
+      sipping || (pouringStream && ph < 0.36) || stretchSeq,
+      annoyedKind,
+    );
+
+    const deskL = cx - 30, deskR = cx + 30;
+    roundedBox(deskL + 2, deskTopY + 4, 4, gy - deskTopY - 4, C.deskFront, C.deskTop, C.deskDk);
+    roundedBox(deskR - 14, deskTopY + 4, 12, gy - deskTopY - 4, C.deskFront, C.deskTop, C.deskDk);
+    rect(deskR - 13, deskTopY + 10, 10, 1, C.ink);
+    rect(deskR - 9, deskTopY + 7, 3, 1, C.goldMid); rect(deskR - 9, deskTopY + 13, 3, 1, C.goldMid);
+    roundedBox(deskL, deskTopY, deskR - deskL, 4, C.deskTop, C.deskHi, C.deskFront);
+
+    const lx = deskL + 6;
+    rect(lx - 2, deskTopY - 1, 5, 1, C.steelDk); rect(lx, deskTopY - 10, 1, 9, C.steelMid);
+    roundedBox(lx - 2, deskTopY - 13, 6, 3, C.goldMid, C.goldHi, '#b46e14');
+    ellipsePx(lx + 1, deskTopY - 5, 5, 4, '#fef08a', true, 0.16);
+
+    roundedBox(cx - 10, deskTopY - 10, 18, 10, '#2a3044', '#606e8e', '#181c2a');
+    rect(cx - 12, deskTopY - 1, 22, 1, C.steelHi);
+    const scrAcc = eurekaSeq ? '#34d399' : '#38bdf8';
+    dot(cx - 1, deskTopY - 6, C.white); dot(cx - 2, deskTopY - 5, scrAcc); dot(cx, deskTopY - 5, scrAcc);
+
+    const mugDeskX = cx + 15, kettleBaseX = cx + 22;
+    if (wipeSeq) {
+      drawMug(mugDeskX, deskTopY - 1, t);
+      if (poseP < 0.65) { dot(mugDeskX - 5, deskTopY, C.coffee); dot(mugDeskX - 8, deskTopY + 1, '#9c5e36'); }
+      const wx = Math.sin(t * 18) * 2.6, wy = Math.cos(t * 18) * 1.4;
+      const hx = bcx + 1.5 + wx, hy = shY + 4.5 + wy;
+      capsule(bcx - armXOff, shY + 4, hx, hy, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      drawWatch(hx - 2, hy + 1); roundedBox(hx - 1, hy - 1, 3, 3, C.skinHi);
+      roundedBox(hx + 1, hy - 2, 3, 3, C.white, C.white, C.shirtSh);
+      capsule(bcx + armXOff, shY + 4, cx + 10, deskTopY - 2, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      roundedBox(cx + 9, deskTopY - 3, 3, 2, C.skinHi);
+      dot(bcx - 10, headY - 6 - (Math.floor(t * 5) % 3), '#7dd3fc');
+    } else if (shushSeq) {
+      drawMug(mugDeskX, deskTopY - 1, t);
+      const lt = Math.floor(t * 10) % 2 === 0 ? -1 : 0;
+      capsule(cx - armXOff, shY + 4, cx - 10, deskTopY - 2 + lt, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      drawWatch(cx - 10, deskTopY - 2 + lt); roundedBox(cx - 11, deskTopY - 3 + lt, 3, 2, C.skinHi);
+      capsule(cx + armXOff, shY + 4, cx + 2, headY + 5, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      roundedBox(cx, headY + 4, 3, 2, C.skinMid); rect(cx, headY + 1, 2, 4, C.ink); rect(cx, headY + 1, 1, 3, C.skinHi);
+      drawAngerMark(cx + 11, headY - 7, Math.floor(t * 8));
+      for (let i = 0; i < 3; i++) dot(cx - 15 + i * 2, headY - 2 - (((Math.floor(t * 6) + i) % 3 === 0) ? 1 : 0), '#7dd3fc');
+    } else if (waveSeq) {
+      drawMug(mugDeskX, deskTopY - 1, t);
+      const lt = Math.floor(t * 18) % 2 === 0 ? -1 : 0;
+      capsule(cx - armXOff, shY + 4, cx - 10, deskTopY - 2 + lt, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      drawWatch(cx - 10, deskTopY - 2 + lt); roundedBox(cx - 11, deskTopY - 3 + lt, 3, 2, C.skinHi);
+      const wDx = Math.sin(t * 26) * 3.5, wDy = -Math.abs(Math.cos(t * 26)) * 2;
+      const hx = cx + 16 + wDx, hy = shY + 1 + wDy;
+      capsule(cx + armXOff, shY + 4, hx, hy, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      roundedBox(hx - 1, hy - 2, 4, 4, C.skinHi);
+      const ax = Math.round(hx + (wDx >= 0 ? 5 : -4));
+      dot(ax, Math.round(hy - 2), '#fde047'); dot(ax + (wDx >= 0 ? 1 : -1), Math.round(hy), '#fde047'); dot(ax, Math.round(hy + 2), '#fde047');
+      drawAngerMark(cx - 11, headY - 7, Math.floor(t * 10));
+      for (let i = 0; i < 3; i++) rect(cx - 8 + i * 6, deskTopY - 13 - ((Math.floor(t * 16) + i * 4) % 9), 3, 1, '#38bdf8');
+    } else if (dndSeq) {
+      drawMug(mugDeskX, deskTopY - 1, t);
+      const lt = Math.floor(t * 22) % 2 === 0 ? -2 : 0, rt = Math.floor(t * 22 + 1) % 2 === 0 ? -2 : 0;
+      capsule(cx - armXOff, shY + 4, cx - 10, deskTopY - 2 + lt, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      drawWatch(cx - 10, deskTopY - 2 + lt); roundedBox(cx - 11, deskTopY - 3 + lt, 3, 2, C.skinHi);
+      capsule(cx + armXOff, shY + 4, cx + 10, deskTopY - 2 + rt, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      roundedBox(cx + 9, deskTopY - 3 + rt, 3, 2, C.skinHi);
+      const popU = Math.min(1, poseP / 0.16), bounce = -Math.abs(Math.sin((1 - popU) * Math.PI)) * 5;
+      drawDndSign(cx - 1, deskTopY + 2 + bounce);
+      drawAngerMark(cx + 11, headY - 7, Math.floor(t * 10));
+      for (let i = 0; i < 4; i++) rect(cx - 10 + i * 5, deskTopY - 12 - ((Math.floor(t * 20) + i * 3) % 10), 3, 1, i % 2 === 0 ? C.goldMid : '#38bdf8');
+    } else if (stretchSeq) {
+      drawMug(mugDeskX, deskTopY - 1, t);
+      const uSt = Math.sin(Math.min(1, Math.max(0, poseP)) * Math.PI);
+      const spread = 11 + uSt * 4, raiseY = shY - 6 - uSt * 9;
+      for (const s of [-1, 1]) {
+        const ex = cx + s * (armXOff + 3 + uSt * 2), ey = shY - 1 - uSt * 3;
+        const hx = cx + s * spread, hy = raiseY;
+        capsule(cx + s * armXOff, shY + 3, ex, ey, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+        capsule(ex, ey, hx, hy, Math.max(1.45, sleeveR * 0.92), C.suitMid, C.suitHi, C.suitDk);
+        if (s < 0) drawWatch(hx, hy + 2);
+        roundedBox(hx - 1, hy - 2, 3, 3, C.skinHi);
+      }
+      if (uSt > 0.35) { star(cx - 17, headY - 10, '#7dd3fc', uSt > 0.7); star(cx + 17, headY - 10, C.goldMid, uSt > 0.7); }
+    } else if (dumbSeq) {
+      drawMug(mugDeskX, deskTopY - 1, t);
+      capsule(cx - armXOff, shY + 4, cx - 10, deskTopY - 2, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      drawWatch(cx - 10, deskTopY - 2); roundedBox(cx - 11, deskTopY - 3, 3, 2, C.skinHi);
+      const curlU = 0.5 - 0.5 * Math.cos(t * 7.2);
+      const ex = cx + armXOff + 4.5, ey = shY + 7.5;
+      const hx = cx + armXOff + 7.5 - curlU * 3, hy = (shY + 4.5) - curlU * 10.5;
+      capsule(cx + armXOff, shY + 3, ex, ey, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      capsule(ex, ey, hx, hy, Math.max(1.5, sleeveR * 0.94), C.suitMid, C.suitHi, C.suitDk);
+      drawOfficeDumbbell(hx + 1, hy - 1); roundedBox(hx - 1, hy - 1, 3, 3, C.skinHi);
+      if (curlU > 0.65) { star(hx + 5, hy - 5, C.goldMid); dot(cx + 7, headY - 2, '#7dd3fc'); }
+    } else if (thinkSeq) {
+      drawMug(mugDeskX, deskTopY - 1, t);
+      capsule(cx - armXOff, shY + 4, cx - 10, deskTopY - 2, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      drawWatch(cx - 10, deskTopY - 2); roundedBox(cx - 11, deskTopY - 3, 3, 2, C.skinHi);
+      const ex = cx + armXOff + 2, ey = deskTopY - 3;
+      capsule(cx + armXOff, shY + 4, ex, ey, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      capsule(ex, ey, cx + 3, headY + 6, Math.max(1.45, sleeveR * 0.92), C.suitMid, C.suitHi, C.suitDk);
+      roundedBox(cx + 1, headY + 5, 3, 2, C.skinHi);
+      drawQuestionBubble(cx + 14, headY - 8, t);
+    } else if (eurekaSeq) {
+      drawMug(mugDeskX, deskTopY - 1, t);
+      capsule(cx - armXOff, shY + 4, cx - 10, deskTopY - 2, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      drawWatch(cx - 10, deskTopY - 2); roundedBox(cx - 11, deskTopY - 3, 3, 2, C.skinHi);
+      const pumpY = -Math.abs(Math.sin(t * 11)) * 3.5;
+      const hx = cx + armXOff + 5, hy = shY - 5 + pumpY;
+      capsule(cx + armXOff, shY + 3, hx, hy, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      roundedBox(hx - 1, hy - 2, 4, 4, C.skinHi);
+      drawPixelLightbulb(cx + 15, headY - 9, t);
+      star(cx - 14, headY - 7, '#34d399', true);
+    } else if (phoneSeq) {
+      drawMug(mugDeskX, deskTopY - 1, t);
+      capsule(cx - armXOff, shY + 4, cx - 10, deskTopY - 2, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      drawWatch(cx - 10, deskTopY - 2); roundedBox(cx - 11, deskTopY - 3, 3, 2, C.skinHi);
+      const pxPh = cx + armXOff + 4, pyPh = shY + 2 + Math.sin(t * 6) * 0.7;
+      capsule(cx + armXOff, shY + 4, pxPh, pyPh + 2, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      drawPixelPhone(pxPh + 1, pyPh - 2, t); roundedBox(pxPh - 1, pyPh, 3, 3, C.skinHi);
+      if (Math.floor(t * 4) % 2 === 0) star(pxPh + 4, pyPh - 8, '#38bdf8');
+    } else if (notesSeq) {
+      drawMug(mugDeskX, deskTopY - 1, t);
+      drawDeskNotebook(cx + 22, deskTopY - 1);
+      capsule(cx - armXOff, shY + 4, cx - 10, deskTopY - 2, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      drawWatch(cx - 10, deskTopY - 2); roundedBox(cx - 11, deskTopY - 3, 3, 2, C.skinHi);
+      const hx = cx + 21 + Math.sin(t * 14) * 2.2, hy = deskTopY - 4;
+      capsule(cx + armXOff, shY + 4, hx, hy, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      roundedBox(hx - 1, hy - 1, 3, 2, C.skinHi);
+      capsule(hx, hy, hx + 2, hy - 3, 0.55, C.goldMid, C.goldHi, C.ink);
+    } else if (pouringLift || pouringStream) {
+      const uLift = pouringLift ? Math.min(1, poseP / 0.16) : 1;
+      const targetElev = 10 + ph * 21;
+      const kx = kettleBaseX + (1 - uLift) * 3;
+      const ky = (deskTopY - 3) - uLift * targetElev + (pouringStream ? Math.sin(t * (12 + ph * 10)) * (0.35 + ph * 0.45) : 0);
+
+      if (coffeeSplashed) {
+        const shj = Math.sin(t * 26) * 1.3;
+        capsule(bcx - armXOff, shY + 4, bcx - 1, headY + 4 + shj, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+        drawWatch(bcx - 3, headY + 6 + shj); roundedBox(bcx - 2, headY + 3 + shj, 3, 3, C.skinHi);
+        capsule(bcx + armXOff, shY + 4, bcx + 5, headY + 6 - shj * 0.7, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+        roundedBox(bcx + 4, headY + 5 - shj * 0.7, 3, 3, C.skinHi);
+        drawAngerMark(bcx - 11, headY - 7, Math.floor(t * 12));
+        rect(bcx - 1, headY - 17, 2, 4, '#ef4444'); rect(bcx - 1, headY - 12, 2, 1, C.goldHi);
+        dot(bcx + 4, headY + 1, C.coffee); dot(bcx + 5, headY + 2, '#ba7a4a');
+      } else if (coffeeNervous) {
+        capsule(bcx - armXOff, shY + 4, bcx - 11, shY + 1, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+        drawWatch(bcx - 11, shY + 2); roundedBox(bcx - 12, shY - 1, 3, 3, C.skinHi);
+        capsule(bcx + armXOff, shY + 4, bcx + 11, shY + 1, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+        roundedBox(bcx + 10, shY - 1, 3, 3, C.skinHi);
+        dot(bcx - 9, headY - 7, '#7dd3fc');
+      } else {
+        capsule(bcx - armXOff, shY + 4, cx - 10, deskTopY - 2, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+        drawWatch(cx - 10, deskTopY - 2); roundedBox(cx - 11, deskTopY - 3, 3, 2, C.skinHi);
+        capsule(bcx + armXOff, shY + 4, cx + 10, deskTopY - 2, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+        roundedBox(cx + 9, deskTopY - 3, 3, 2, C.skinHi);
+      }
+
+      drawMug(mugDeskX, deskTopY - 1, t);
+      if (pouringStream) {
+        const sx = Math.round(kx - 7), sy0 = Math.round(ky + 3), sy1 = Math.round(deskTopY - 5);
+        for (let py = sy0; py <= sy1; py++) {
+          const wob = ((py + Math.floor(t * (20 + ph * 14))) % (ph < 0.5 ? 4 : 3) === 0) ? 1 : 0;
+          const swayX = ph >= 0.45 ? Math.round(Math.sin(py * 0.45 - t * 22) * (ph * 0.9)) : 0;
+          const pxs = sx + swayX;
+          dot(pxs, py, C.coffee);
+          if (ph >= 0.25 || wob) dot(pxs + 1, py, wob ? '#9c5e36' : C.coffee);
+          if (ph >= 0.72 && (py + Math.floor(t * 28)) % 2 === 0) dot(pxs - 1, py, '#d69862');
+          else if ((py + Math.floor(t * 26)) % 3 === 0) dot(pxs, py, '#d69862');
+        }
+        if (ph < 0.28) {
+          dot(mugDeskX - 1, sy1 - 1, '#d69862'); dot(mugDeskX + 1, sy1 - (Math.floor(t * 14) % 2), '#eec698');
+          star(mugDeskX - 3, sy1 - 5, C.goldMid);
+        } else {
+          const nDrops = ph < 0.68 ? 6 : 14;
+          const speedMul = 0.52 + ph * 1.20;
+          const foamR = ph < 0.68 ? 2 : 4;
+          for (let fx = -foamR; fx <= foamR; fx++) {
+            const fyb = -1 - ((Math.abs(fx) + Math.floor(t * 24)) % (ph < 0.68 ? 2 : 4));
+            dot(mugDeskX + fx, sy1 + fyb, fx % 2 === 0 ? '#eec698' : '#ba7a4a');
+          }
+          for (let i = 0; i < nDrops; i++) {
+            const ud = ((t * (2.5 + (i % 3) * 0.55) + i * 0.16) % 1 + 1) % 1;
+            const goLeft = ph >= 0.68 ? (i % 4 !== 0) : (i % 2 === 0);
+            const vx = goLeft ? -(8.5 + (i % 5) * 4.2) * speedMul : (5 + (i % 4) * 2.6) * speedMul;
+            const vy = -(8.5 + (i % 4) * 3.8) * speedMul;
+            const grav = 20 + ph * 10;
+            const dropX = Math.round(mugDeskX + vx * ud);
+            const dropY = Math.round(sy1 + vy * ud + 0.5 * grav * ud * ud);
+            const dcol = i % 2 === 0 ? C.coffee : (i % 3 === 1 ? '#ba7a4a' : '#f2cea6');
+            dot(dropX, dropY, dcol);
+            if (ph >= 0.68 && i < 8) {
+              dot(dropX - 1, dropY, '#945832');
+              if (i < 4) dot(dropX, dropY - 1, '#eec698');
+            }
+          }
+          dot(mugDeskX - 5, deskTopY, C.coffee); dot(mugDeskX + 6, deskTopY, '#9c5e36');
+          if (ph >= 0.68) { dot(mugDeskX - 8, deskTopY + 1, C.coffee); dot(mugDeskX - 11, deskTopY, '#9c5e36'); }
+        }
+      }
+      if (pouringStream && ph >= 0.36) dot(kx + 4, ky - 5, Math.floor(t * 10) % 2 === 0 ? C.goldHi : '#38bdf8');
+      drawCoffeeKettle(kx, ky, pouringStream);
+    } else if (sipping) {
+      capsule(cx - armXOff, shY + 4, cx - 12, deskTopY - 2, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      drawWatch(cx - 12, deskTopY - 2); roundedBox(cx - 13, deskTopY - 3, 3, 2, C.skinMid);
+      const cupX = cx + 6, cupY = headY + 5;
+      capsule(cx + armXOff, shY + 4, cupX + 3, cupY, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      roundedBox(cupX + 2, cupY - 1, 3, 2, C.skinHi);
+      drawMug(cupX, cupY, t);
+      if (pouringSip) { star(cx - 13, headY - 6, C.goldMid, true); star(cx + 15, headY - 4, C.goldMid); }
+    } else {
+      const lt = Math.floor(t * 10) % 2 === 0 ? -1 : 0, rt = Math.floor(t * 10 + 1) % 2 === 0 ? -1 : 0;
+      capsule(cx - armXOff, shY + 4, cx - 10, deskTopY - 2 + lt, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      drawWatch(cx - 10, deskTopY - 2 + lt); roundedBox(cx - 11, deskTopY - 3 + lt, 3, 2, C.skinHi);
+      capsule(cx + armXOff, shY + 4, cx + 10, deskTopY - 2 + rt, sleeveR, C.suitMid, C.suitHi, C.suitDk);
+      roundedBox(cx + 9, deskTopY - 3 + rt, 3, 2, C.skinHi);
+      drawMug(mugDeskX, deskTopY - 1, t);
+    }
+    if (levitate) {
+      for (let i = 0; i < 3; i++) star(cx - 22 + i * 22, headY - 8 - ((Math.floor(t * 6) + i * 3) % 6), C.goldMid, i === 1);
+    }
+  }
+
+  function drawTransitionFx(cx, gy, p, transTo, aura, t) {
+    const cy = gy - 26;
+    if (p < 0.52) {
+      const u = p / 0.52, ry = gy - 2 - u * 44, rx = Math.max(6, Math.round(24 - u * 8));
+      ellipsePx(cx, ry, rx, 4, aura, false, 0.85);
+      ellipsePx(cx, ry + 5, Math.max(4, rx - 4), 3, '#facc15', false, 0.65);
+      for (let i = 0; i < 6; i++) {
+        const ang = t * 8 + i * (Math.PI * 2 / 6), rad = (1 - u) * 26 + 4;
+        star(cx + Math.cos(ang) * rad, cy + Math.sin(ang) * rad * 0.65, i % 2 === 0 ? C.goldMid : aura);
+      }
+    }
+    if (p >= 0.34 && p <= 0.68) {
+      const peak = Math.max(0, Math.min(1, 1 - Math.abs(p - 0.5) / 0.18));
+      const pr = 6 + peak * 10;
+      const puffs = [[0,0,pr],[-11,-3,pr*0.72],[11,-3,pr*0.72],[-7,7,pr*0.66],[7,7,pr*0.66],[0,-9,pr*0.68]];
+      for (const [ox, oy, r] of puffs) ellipsePx(cx + ox * (0.6 + 0.4 * peak), cy + oy * (0.6 + 0.4 * peak), r + 1, r + 1, C.ink, true);
+      for (const [ox, oy, r] of puffs) ellipsePx(cx + ox * (0.6 + 0.4 * peak), cy + oy * (0.6 + 0.4 * peak), r, r, '#e0f2fe', true, 0.95);
+      ellipsePx(cx, cy, pr * 0.65, pr * 0.65, C.white, true);
+      if (peak > 0.45) {
+        if (transTo === 'office') {
+          rect(cx - 5, cy - 4, 2, 7, C.tieMid); dot(cx - 5, cy - 4, C.tieHi);
+          roundedBox(cx + 1, cy - 2, 5, 4, C.cupW, null, C.cupSh); rect(cx + 2, cy - 2, 3, 1, C.coffee);
+        } else {
+          rect(cx - 7, cy - 1, 14, 2, C.steelHi);
+          rect(cx - 7, cy - 4, 3, 8, '#ef4444'); rect(cx + 4, cy - 4, 3, 8, '#ef4444');
+          star(cx, cy - 6, C.goldMid, true);
+        }
+      }
+    }
+    if (p >= 0.48) {
+      const u = (p - 0.48) / 0.52, sw = Math.round(10 + u * 28);
+      ellipsePx(cx, gy + 1, sw, Math.max(2, Math.floor(sw / 6)), '#facc15', false, Math.max(0.08, 0.85 * (1 - u)));
+      for (let i = 0; i < 6; i++) {
+        const ang = i * (Math.PI * 2 / 6) + 0.4, dist = 8 + u * 26;
+        if (u < 0.85) star(cx + Math.cos(ang) * dist, cy + Math.sin(ang) * dist * 0.65, i % 2 === 0 ? C.goldMid : aura, u < 0.35 && i % 2 === 0);
+      }
+    }
+  }
+
+  let dispProgress = 0;
+  let dispEffort = 0;
+  let dispLift = 'deadlift';
+  let lastFrameMs = 0;
+
+  function renderPetFrame(ms) {
+    const t = ms / 1000;
+    const dt = lastFrameMs ? Math.max(0.004, Math.min(0.1, (ms - lastFrameMs) / 1000)) : 0.016;
+    lastFrameMs = ms;
+    pctx.fillStyle = '#000000';
+    pctx.fillRect(0, 0, GW, GH);
+
+    const scene = state.scene || 'gym';
+    const transP = Number(state.transition_progress || 0);
+    const transFrom = state.transition_from || scene;
+    const transTo = state.transition_to || scene;
+    const inTrans = transP > 0 && transP < 1 && transFrom !== transTo;
+    const drawScene = inTrans ? (transP < 0.5 ? transFrom : transTo) : scene;
+    let transYOff = 0;
+    if (inTrans) {
+      if (transP < 0.5) transYOff = -4.5 * Math.pow(transP / 0.5, 1.5);
+      else { const u = (transP - 0.5) / 0.5; transYOff = -Math.abs(Math.sin((1 - u) * Math.PI)) * 7.5 * (1 - u); }
+    }
+    const officeAction = state.office_action || 'idle';
+    const officeActionP = Number(state.office_action_progress || 0);
+    const pourHeight = Number(state.pour_height ?? 0.26);
+    const pourActive = Boolean(state.pour_active);
+    const lift = state.lift || 'deadlift';
+    const tgtP = Number(state.progress || 0);
+    const tgtE = Number(state.effort || 0);
+    if (lift !== dispLift) {
+      dispLift = lift; dispProgress = tgtP; dispEffort = tgtE;
+    } else {
+      const k = 1 - Math.exp(-dt * 115);
+      dispProgress += (tgtP - dispProgress) * k;
+      dispEffort += (tgtE - dispEffort) * k;
+      if (Math.abs(tgtP - dispProgress) < 0.004) dispProgress = tgtP;
+      if (Math.abs(tgtE - dispEffort) < 0.004) dispEffort = tgtE;
+    }
+    const p = dispProgress;
+    const effort = dispEffort;
+    const phase = state.phase || 'idle';
+    const d = state.daily || {};
+    const gr = state.growth || d.growth || {};
+    const morph = resolveMorph(state);
+    const mood = d.mood || 'sedentary';
+    const aura = d.aura_color || '#38bdf8';
+    const levitate = Boolean(d.levitate);
+    const cx = 54, gy = 75;
+
+    if (drawScene === 'office') {
+      drawOfficeScene(cx, gy, t, mood, levitate, officeAction, officeActionP, transYOff, morph, pourHeight, pourActive);
+    } else {
+      const floatY = (levitate ? (-4 + Math.sin(t * 4.2) * 1.5) : (phase === 'set_celebrate' ? -Math.abs(Math.sin(t * 9)) * 3.5 : Math.sin(t * 3.6) * 0.45)) + transYOff;
+      const px = cx + (effort > 0.52 ? Math.sin(t * 44) * effort : 0);
+
+      const shR = lift === 'bench' ? (levitate ? 23 : 28) : (levitate ? 13 : 16);
+      ellipsePx(cx - (lift === 'bench' ? 2 : 0), gy + 1, shR, 3.2, '#141026', true, 0.55);
+      drawBottle(cx + (lift === 'bench' ? 35 : 29), gy + 1);
+      if (levitate || phase === 'lockout' || phase === 'set_celebrate') {
+        const rr = 17 + Math.floor((t * 24) % 13);
+        ellipsePx(cx, gy + 1, rr, Math.max(2, Math.floor(rr / 5)), aura, false, 0.55);
+      }
+      const prestige = morph.prestige_tier;
+      if (levitate || phase === 'lockout' || phase === 'set_celebrate' || mood === 'pumped' || prestige >= 1) {
+        const n = (levitate || phase === 'set_celebrate') ? 5 : Math.min(4, 2 + prestige);
+        for (let i = 0; i < n; i++) {
+          const ang = t * 1.9 + i * (Math.PI * 2 / n);
+          star(cx + Math.cos(ang) * 20, gy - 14 - ((t * 11 + i * 9) % 36), (levitate || prestige >= 1 || i % 2 === 0) ? C.goldMid : aura, (levitate || prestige >= 2) && i % 2 === 0);
+        }
+      }
+
+      const shArmX = morph.shoulder_hw + 0.9;
+      const armR = morph.arm_r, chestDef = morph.chest_def;
+
+      if (lift === 'deadlift') {
+        const barY = gy - 7 - p * 15 + floatY, hipY = gy - 14 - p * 6 + floatY, shY = hipY - 11 - p * 4;
+        drawShortsSocksSneakers(px, hipY, 6.5 - p * 1.5, gy - 7 - p * 1.5 + floatY, 5.5, gy + floatY, morph);
+        drawBlackTank(px, shY, hipY, effort, morph);
+        drawBarbell(px, barY, state.plates, 27, p > 0.6 ? aura : null);
+        const gripX = Math.max(7.5, Math.min(9.8, shArmX + 0.4));
+        for (const s of [-1, 1]) {
+          const sx0 = px + s * shArmX, sy0 = shY + 2.5, sx1 = px + s * gripX;
+          capsule(sx0, sy0, sx1, barY, armR);
+          drawLeanBicepPeak(sx0, sy0, sx1, barY, s, armR, chestDef);
+          if (s < 0) drawWatch(sx1, barY - 2); else rect(sx1 - 1, barY - 3, 3, 2, C.white);
+          roundedBox(sx1 - 1, barY - 1, 3, 3, C.skinHi);
+        }
+        drawPersonalHead(px, shY - 8, t, mood, effort, phase);
+      } else if (lift === 'bench') {
+        drawLyingBenchPress(cx, gy, t, p, effort, phase, mood, state.plates, floatY, morph);
+      } else {
+        const drop = p * 14, hipY = gy - 17 + drop + floatY, shY = hipY - 13 + p * 1.5, barY = shY + 1;
+        for (const s of [-1, 1]) {
+          const rx = cx + s * 19;
+          rect(rx - 1, gy - 44 + floatY, 3, 45, C.ink); rect(rx, gy - 43 + floatY, 1, 43, C.steelDk);
+        }
+        drawBarbell(px, barY, state.plates, 27, p >= 0.78 ? '#34d399' : (levitate ? aura : null));
+        drawShortsSocksSneakers(px, hipY, 6 + p * 6, gy - 8.5 + p * 3 + floatY, 7, gy + floatY, morph);
+        drawBlackTank(px, shY, hipY, effort, morph);
+        const sqArmR = Math.max(1.32, armR * 0.94);
+        const elbOff = Math.max(11.8, shArmX + 4.4);
+        for (const s of [-1, 1]) {
+          const sx0 = px + s * shArmX, sy0 = shY + 2.5, ex = px + s * elbOff, ey = barY + 4;
+          capsule(sx0, sy0, ex, ey, sqArmR);
+          drawLeanBicepPeak(sx0, sy0, ex, ey, s, sqArmR, chestDef);
+          capsule(ex, ey, ex, barY, sqArmR);
+          if (s < 0) drawWatch(ex, barY + 1); else rect(ex - 1, barY - 1, 3, 2, C.white);
+        }
+        if (p >= 0.78) { star(px - 14, gy - 3, '#34d399'); star(px + 14, gy - 3, '#34d399'); }
+        drawPersonalHead(px, shY - 8, t, mood, effort, phase);
+      }
+    }
+
+    if (inTrans) {
+      drawTransitionFx(cx, gy, transP, transTo, aura, t);
+    }
+
+    g.imageSmoothingEnabled = false;
+    g.fillStyle = '#000000';
+    g.fillRect(0, 0, 324, 270);
+    g.drawImage(pix, 0, 0, 324, 270);
+
+    const meta = state.lift_meta || { zh: '硬拉' };
+    g.fillStyle = '#1a1624'; g.fillRect(22, 240, 280, 26);
+    g.fillStyle = 'rgba(19,25,50,0.95)'; g.fillRect(24, 242, 276, 22);
+    g.strokeStyle = aura; g.lineWidth = 2; g.strokeRect(24, 242, 276, 22);
+    g.fillStyle = '#ffffff';
+    g.font = 'bold 11.5px "Microsoft YaHei", sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    const tierSeg = gr && gr.tier_name ? ` · ${gr.tier_name}` : '';
+    const activePose = (officeAction !== 'idle' && (pourActive || (officeActionP > 0 && officeActionP < 1)))
+      ? officeAction : resolveOfficeIdlePose(t)[0];
+    let officeLbl = '';
+    if (activePose === 'pour_coffee') {
+      const phPct = Math.round(pourHeight * 100);
+      officeLbl = (pourHeight >= 0.68 ? `高空狂溅!(${phPct}%)` : (pourHeight >= 0.36 ? `中高拉花(${phPct}%)` : `贴杯柔注(${phPct}%)`)) + `${tierSeg} · ${d.progress_pct || 0}%`;
+    } else {
+      const actMap = {
+        wipe_coffee: `擦拭黑西装${tierSeg} · ${d.progress_pct || 0}%`,
+        shush_busy: `嘘! 专心办公${tierSeg} · ${d.progress_pct || 0}%`,
+        wave_away: `别打扰! 赶进度${tierSeg} · ${d.progress_pct || 0}%`,
+        dnd_sign: `勿扰模式 · 敲代码 · ${d.progress_pct || 0}%`,
+        stretch_break: `工位伸懒腰${tierSeg} · ${d.progress_pct || 0}%`,
+        desk_dumbbell: `偷练小哑铃${tierSeg} · ${d.progress_pct || 0}%`,
+        debug_eureka: `灵感修通Bug${tierSeg} · ${d.progress_pct || 0}%`,
+        eureka_cheer: `灵感爆发!${tierSeg} · ${d.progress_pct || 0}%`,
+        think_chin: `托腮思考中${tierSeg} · ${d.progress_pct || 0}%`,
+        check_phone: `摸鱼看手机${tierSeg} · ${d.progress_pct || 0}%`,
+        jot_notes: `写笔记整理${tierSeg} · ${d.progress_pct || 0}%`,
+        sip_coffee: `喝咖啡续命${tierSeg} · ${d.progress_pct || 0}%`,
+        typing: `专注敲代码${tierSeg} · ${d.progress_pct || 0}%`,
+      };
+      officeLbl = actMap[activePose] || `黑西装办公${tierSeg} · ${d.progress_pct || 0}%`;
+    }
+    const label = drawScene === 'office'
+      ? officeLbl
+      : `${meta.zh} ${state.weight_kg}kg(${state.current_reps}/${state.target_reps})${tierSeg} · ${d.progress_pct || 0}%`;
+    g.fillText(label, 162, 253);
+  }
+
+  function loop(now) {
+    renderPetFrame(now);
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (fourFaces) {
+      const turns = [[0, -210, 0], [210, 0, Math.PI / 2], [0, 210, Math.PI], [-210, 0, -Math.PI / 2]];
+      for (const [dx, dy, rot] of turns) {
+        ctx.save(); ctx.translate(360 + dx, 360 + dy); ctx.rotate(rot); ctx.scale(mirrorFlip ? -1 : 1, 1);
+        ctx.drawImage(off, -135, -112, 270, 225); ctx.restore();
+      }
+    } else {
+      ctx.save(); ctx.translate(360, 360); ctx.drawImage(off, -342, -285, 684, 570); ctx.restore();
+    }
+    requestAnimationFrame(loop);
+  }
+
+  const btnFaces = document.getElementById('btnFaces');
+  btnFaces.textContent = fourFaces ? '切单图直看' : '切四面金字塔';
+  btnFaces.onclick = () => { fourFaces = !fourFaces; btnFaces.textContent = fourFaces ? '切单图直看' : '切四面金字塔'; };
+  document.getElementById('btnMirror').onclick = () => { mirrorFlip = !mirrorFlip; };
+
+  function toggleClean() {
+    document.body.classList.toggle('clean');
+    if (document.body.classList.contains('clean')) document.documentElement.requestFullscreen?.().catch?.(() => {});
+    else if (document.fullscreenElement) document.exitFullscreen?.().catch?.(() => {});
+  }
+  document.getElementById('btnClean').onclick = toggleClean;
+  canvas.addEventListener('dblclick', toggleClean);
+
+  let lastTap = 0;
+  canvas.addEventListener('touchend', e => {
+    const n = performance.now();
+    if (n - lastTap < 320) { e.preventDefault(); toggleClean(); lastTap = 0; }
+    else lastTap = n;
+  }, { passive: false });
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

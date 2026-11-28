@@ -1,0 +1,2307 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-beacon-repo="Ethan0123419/antigravity-remote-assistant" data-beacon-subpath="gym">
+<head>
+  <meta charset="UTF-8">
+  <meta name="referrer" content="no-referrer">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#070b16">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="反重力桌宠">
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
+  <title>反重力桌宠</title>
+  <style>:root {
+  --bg: #070b16;
+  --panel: rgba(15, 23, 42, 0.88);
+  --panel-2: #0d152a;
+  --border: #1f2e4f;
+  --cyan: #38bdf8;
+  --indigo: #6366f1;
+  --violet: #a78bfa;
+  --emerald: #34d399;
+  --gold: #facc15;
+  --orange: #fb923c;
+  --red: #f87171;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: radial-gradient(circle at 50% -10%, #172554 0%, #090e1f 48%, var(--bg) 100%);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  min-height: 100vh;
+}
+
+.wrap { max-width: 1320px; margin: 0 auto; padding: 18px 16px 40px; }
+
+.topbar {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 14px 18px;
+  margin-bottom: 14px; backdrop-filter: blur(8px);
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.logo-badge {
+  width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+  background: linear-gradient(135deg, #38bdf8, #6366f1); color: #fff; font-weight: 900; font-size: 20px;
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.45);
+}
+.brand h1 { font-size: 18px; font-weight: 800; letter-spacing: 0.2px; }
+.brand p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+.pills { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pill {
+  padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 700;
+  border: 1px solid #334155; background: #0f172a; color: var(--muted);
+}
+.pill.ok { border-color: #22c55e; color: #4ade80; background: rgba(34, 197, 94, 0.14); }
+.pill.warn { border-color: #eab308; color: #fde047; background: rgba(234, 179, 8, 0.14); }
+.pill.cyan { border-color: var(--cyan); color: #7dd3fc; background: rgba(56, 189, 248, 0.14); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 8px 13px; border-radius: 10px; border: 1px solid #2c3e64;
+  background: #17233f; color: #f8fafc; font-size: 12.5px; font-weight: 700;
+  cursor: pointer; text-decoration: none; transition: transform 0.08s ease, background 0.15s ease;
+}
+.btn:hover { background: #22345c; }
+.btn:active { transform: scale(0.97); }
+.btn.primary { background: linear-gradient(135deg, #0284c7, #4f46e5); border-color: #38bdf8; }
+.btn.emerald { background: #059669; border-color: #34d399; }
+.btn.gold { background: #ca8a04; border-color: #fde047; color: #0b1224; }
+.btn.danger { background: #b91c1c; border-color: #f87171; }
+.btn.sm { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
+
+.mood-banner {
+  background: linear-gradient(120deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.95));
+  border: 1px solid var(--border); border-left: 4px solid var(--cyan); border-radius: 14px;
+  padding: 14px 18px; margin-bottom: 14px; display: flex; flex-wrap: wrap; gap: 12px;
+  align-items: center; justify-content: space-between;
+}
+.mood-title { font-size: 16px; font-weight: 800; }
+.mood-sub { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.progress-track {
+  width: 240px; max-width: 100%; height: 10px; background: #0b1224;
+  border-radius: 999px; overflow: hidden; border: 1px solid #263554; margin-top: 6px;
+}
+.progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #38bdf8, #a78bfa, #facc15); transition: width 0.35s ease; }
+
+.grid-main { display: grid; grid-template-columns: 1.25fr 1fr; gap: 14px; margin-bottom: 14px; }
+@media (max-width: 960px) { .grid-main { grid-template-columns: 1fr; } }
+
+.card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 15px;
+}
+.card-hd {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+  margin-bottom: 12px;
+}
+.card-hd h2 { font-size: 14.5px; font-weight: 800; color: #e2e8f0; }
+
+.stage-split { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 12px; }
+@media (max-width: 720px) { .stage-split { grid-template-columns: 1fr; } }
+.frame-card {
+  background: #050812; border: 1px solid #1e293b; border-radius: 12px; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.frame-hd {
+  display: flex; justify-content: space-between; align-items: center; padding: 7px 11px;
+  background: #0d152a; border-bottom: 1px solid #1e293b; font-size: 12px; color: var(--muted);
+}
+.frame-hd a { color: var(--cyan); text-decoration: none; font-weight: 700; }
+.frame-card iframe { width: 100%; height: 410px; border: 0; background: #000; }
+
+.lift-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+.stat-box {
+  background: var(--panel-2); border: 1px solid #1e2d4d; border-radius: 12px; padding: 11px;
+  cursor: pointer; transition: border-color 0.15s ease, transform 0.1s ease;
+}
+.stat-box:hover { border-color: var(--cyan); }
+.stat-box.active { border-color: var(--cyan); box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35); background: #101d3a; }
+.stat-box .lbl { font-size: 13px; font-weight: 800; display: flex; justify-content: space-between; }
+.stat-box .big { font-size: 20px; font-weight: 900; margin: 4px 0 2px; color: #fff; }
+.stat-box .meta { font-size: 11.5px; color: var(--muted); }
+
+.bars-7d {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-items: end;
+  height: 92px; padding: 10px 8px 6px; background: var(--panel-2); border-radius: 12px; border: 1px solid #1e2d4d;
+}
+.bar-col { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+.bar-fill { width: 70%; min-height: 4px; border-radius: 5px 5px 2px 2px; background: linear-gradient(180deg, #38bdf8, #6366f1); transition: height 0.3s ease; }
+.bar-lbl { font-size: 10px; color: var(--muted); }
+
+.log-list {
+  max-height: 155px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-top: 10px;
+}
+.log-row {
+  display: flex; justify-content: space-between; align-items: center; padding: 7px 10px;
+  border-radius: 9px; background: #0c1427; border: 1px solid #1c2944; font-size: 12px;
+}
+
+.qr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-top: 10px; }
+.qr-card {
+  background: var(--panel-2); border: 1px solid #223456; border-radius: 14px; padding: 13px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;
+}
+.qr-card img { width: 176px; height: 176px; background: #fff; padding: 8px; border-radius: 12px; image-rendering: pixelated; }
+.qr-card code {
+  font-size: 11px; color: var(--cyan); background: #070d1c; border: 1px solid #1d2d4e;
+  border-radius: 8px; padding: 5px 8px; word-break: break-all; width: 100%;
+}
+
+input, select {
+  background: #0a1122; color: var(--text); border: 1px solid #2b3c60; border-radius: 8px;
+  padding: 6px 10px; font-size: 12.5px;
+}
+
+/* Mobile controller specific */
+.mobile-body {
+  min-height: 100dvh;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-shell {
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto;
+  padding: max(10px, env(safe-area-inset-top, 0px)) 10px calc(108px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-x: hidden;
+}
+.ios-install-banner {
+  display: none; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 9px 11px; border-radius: 12px;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.22), rgba(99, 102, 241, 0.24));
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  font-size: 11.5px; color: #e0f2fe; line-height: 1.4;
+}
+.beacon-bar {
+  display: none; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 11px; border-radius: 12px;
+  background: rgba(30, 41, 59, 0.92); border: 1px solid rgba(250, 204, 21, 0.45);
+  font-size: 11.5px; color: #fef08a;
+}
+.pair-modal {
+  position: fixed; inset: 0; z-index: 99; display: none;
+  align-items: center; justify-content: center; padding: 16px;
+  background: rgba(5, 8, 18, 0.85); backdrop-filter: blur(8px);
+}
+.pair-modal.show { display: flex; }
+.pair-card {
+  width: 100%; max-width: 360px; background: #0f172a; border: 1px solid #38bdf8;
+  border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 10px;
+}
+.mobile-shell .card {
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+}
+.mob-header {
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.mob-header > div { min-width: 0; }
+.mob-title { font-size: 14.5px; font-weight: 900; white-space: nowrap; }
+.mob-sub { font-size: 11px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.lift-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.lift-tab {
+  padding: 10px 6px; border-radius: 12px; border: 1px solid #263659; background: #0e172e;
+  color: #cbd5e1; font-weight: 800; font-size: 13px; cursor: pointer; text-align: center;
+  touch-action: manipulation;
+}
+.lift-tab.active {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(99, 102, 241, 0.35));
+  border-color: var(--cyan); color: #fff; box-shadow: 0 0 14px rgba(56, 189, 248, 0.28);
+}
+
+.pad-box {
+  position: relative; height: 244px; border-radius: 18px; overflow: hidden; touch-action: none; user-select: none;
+  -webkit-user-select: none;
+  background: radial-gradient(circle at 50% 50%, #132145 0%, #070d1d 85%);
+  border: 2px solid #243b68; display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  padding: 10px 12px;
+}
+.pad-zone {
+  position: relative; z-index: 2;
+  width: 100%; height: 34px; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800; padding: 0 8px;
+  border-radius: 10px; border: 1px dashed rgba(148, 163, 184, 0.38); color: #94a3b8;
+  background: rgba(7, 13, 29, 0.55);
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+.pad-zone.hot { border-color: var(--gold); color: var(--gold); background: rgba(250, 204, 21, 0.16); }
+.pad-zone.ok { border-color: var(--emerald); color: var(--emerald); background: rgba(52, 211, 153, 0.18); }
+.pad-zone.danger { border-color: var(--red); color: #fecaca; background: rgba(239, 68, 68, 0.24); }
+.pad-box.coffee-mode {
+  background: radial-gradient(circle at 50% 45%, #241812 0%, #0d090a 85%);
+  border-color: #78350f;
+}
+.pad-rail-fill.coffee {
+  background: linear-gradient(180deg, #ef4444 0%, #f59e0b 45%, #b45309 100%);
+}
+/* 重量手感阻力条 + 粘滞点标识 + 拉力张力光带 + 重铁落杠震动 */
+.feel-strip {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 5px 9px; margin-bottom: 7px; border-radius: 9px;
+  background: rgba(11, 18, 36, 0.85); border: 1px solid #1e3157;
+  font-size: 11px; font-weight: 800; color: #cbd5e1;
+}
+.feel-meter {
+  width: 74px; height: 6px; border-radius: 999px; background: #070d1c;
+  border: 1px solid #263554; overflow: hidden; flex-shrink: 0;
+}
+.feel-meter-fill {
+  height: 100%; width: 45%; border-radius: 999px;
+  background: linear-gradient(90deg, #38bdf8, #facc15, #f97316, #ef4444);
+  transition: width 0.2s ease;
+}
+.stick-zone {
+  position: absolute; left: 0; right: 0; top: 30%; height: 34%;
+  background: repeating-linear-gradient(45deg, rgba(251, 146, 60, 0.36), rgba(251, 146, 60, 0.36) 4px, rgba(239, 68, 68, 0.16) 4px, rgba(239, 68, 68, 0.16) 8px);
+  opacity: 0; transition: opacity 0.22s ease; pointer-events: none;
+}
+.tension-beam {
+  position: absolute; left: 50%; width: 6px; transform: translateX(-50%);
+  border-radius: 999px; z-index: 2; pointer-events: none; opacity: 0;
+  background: linear-gradient(180deg, rgba(250, 204, 21, 0.92), rgba(249, 115, 22, 0.88));
+  box-shadow: 0 0 12px rgba(250, 204, 21, 0.7);
+}
+.finger-ghost {
+  position: absolute; top: 0; left: 50%; width: 32px; height: 10px;
+  border-radius: 999px; border: 1.5px dashed rgba(253, 224, 71, 0.85);
+  background: rgba(250, 204, 21, 0.18); z-index: 2; pointer-events: none;
+  opacity: 0; will-change: transform, opacity;
+}
+.bar-handle.heavy {
+  background: linear-gradient(90deg, #18181b 0%, #4f46e5 20%, #f59e0b 50%, #4f46e5 80%, #18181b 100%);
+  border-color: #fde68a; box-shadow: 0 0 24px rgba(250, 204, 21, 0.52); color: #090d16;
+}
+.bar-handle.max-grind {
+  background: linear-gradient(90deg, #270a0a 0%, #dc2626 18%, #facc15 50%, #dc2626 82%, #270a0a 100%);
+  border-color: #fef08a; box-shadow: 0 0 28px rgba(239, 68, 68, 0.72); color: #fffbeb;
+}
+@keyframes padImpactLight {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  30% { transform: translate3d(0, 2px, 0); }
+  65% { transform: translate3d(0, -1px, 0); }
+}
+@keyframes padImpactHeavy {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  20% { transform: translate3d(-3px, 4px, 0); }
+  45% { transform: translate3d(3px, -3px, 0); }
+  70% { transform: translate3d(-2px, 2px, 0); }
+}
+.pad-box.impact-light { animation: padImpactLight 0.16s ease-out; }
+.pad-box.impact-heavy { animation: padImpactHeavy 0.22s ease-out; }
+.bar-handle.coffee {
+  background: linear-gradient(90deg, #27150a 0%, #b45309 20%, #f59e0b 50%, #b45309 80%, #27150a 100%);
+  border-color: #fde68a; box-shadow: 0 0 22px rgba(245, 158, 11, 0.55); color: #1c0f07;
+}
+.bar-handle.coffee-splash {
+  background: linear-gradient(90deg, #450a0a 0%, #dc2626 22%, #f97316 50%, #dc2626 78%, #450a0a 100%);
+  border-color: #fecaca; box-shadow: 0 0 24px rgba(239, 68, 68, 0.68); color: #fff7ed;
+}
+
+.pad-rail {
+  position: absolute; top: 52px; bottom: 52px; left: 50%; width: 10px;
+  transform: translateX(-50%);
+  border-radius: 999px; background: rgba(15, 23, 42, 0.85);
+  border: 1px solid #1e3a5f; overflow: hidden; z-index: 1; pointer-events: none;
+}
+.pad-rail-fill {
+  position: absolute; left: 0; right: 0; height: 0%;
+  background: linear-gradient(180deg, #facc15, #a78bfa, #38bdf8);
+  border-radius: 999px;
+}
+.pad-fx-layer {
+  position: absolute; inset: 0; pointer-events: none; z-index: 4; overflow: hidden;
+}
+.fx-pop {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 14px; font-weight: 900; color: #fde047;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.85), 0 0 12px rgba(250,204,21,0.75);
+  white-space: nowrap;
+  animation: fxPopUp 0.78s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes fxPopUp {
+  0% { opacity: 0; transform: translate(-50%, -10%) scale(0.75); }
+  22% { opacity: 1; transform: translate(-50%, -55%) scale(1.12); }
+  100% { opacity: 0; transform: translate(-50%, -145%) scale(0.95); }
+}
+
+/* 动态迷你彩色奥林匹克杠铃可视化 */
+.mini-barbell-stage {
+  height: 44px; margin: 2px 0 6px; padding: 0 10px;
+  background: radial-gradient(circle at 50% 50%, #111d3a 0%, #070d1c 100%);
+  border: 1px solid #1e3259; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.12s ease;
+}
+.mini-barbell-stage.clank { transform: scale(1.035); border-color: var(--gold); }
+.mini-shaft {
+  flex: 1; max-width: 116px; min-width: 48px; height: 6px; border-radius: 3px;
+  background: linear-gradient(180deg, #f8fafc 0%, #94a3b8 55%, #475569 100%);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.6);
+}
+.mini-collar {
+  width: 6px; height: 14px; border-radius: 2px;
+  background: linear-gradient(180deg, #e2e8f0, #64748b);
+  border: 1px solid #0f172a;
+}
+.mini-plates { display: flex; align-items: center; gap: 2px; }
+.mini-plates.left { flex-direction: row-reverse; padding-right: 2px; }
+.mini-plates.right { flex-direction: row; padding-left: 2px; }
+.mini-plate-bar {
+  width: 8px; border-radius: 3px; border: 1px solid rgba(15, 23, 42, 0.85);
+  box-shadow: inset 1px 0 0 rgba(255,255,255,0.38);
+}
+.weight-fun {
+  text-align: center; font-size: 11.5px; font-weight: 700; color: #fde68a;
+  background: rgba(250, 204, 21, 0.08); border: 1px solid rgba(250, 204, 21, 0.22);
+  border-radius: 8px; padding: 4px 8px; margin-bottom: 8px;
+}
+
+.bar-handle {
+  position: absolute; top: 0; left: 50%; transform: translate3d(-50%, 98px, 0);
+  will-change: transform; z-index: 3;
+  width: 86%; max-width: 320px; height: 48px; border-radius: 999px;
+  background: linear-gradient(90deg, #1e293b 0%, #38bdf8 18%, #6366f1 50%, #38bdf8 82%, #1e293b 100%);
+  border: 2px solid #e0f2fe; box-shadow: 0 0 22px rgba(56, 189, 248, 0.55);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px;
+  font-weight: 900; font-size: 13px; color: #050a18;
+  pointer-events: none;
+}
+.bar-cap {
+  width: 10px; height: 28px; border-radius: 4px; flex-shrink: 0;
+  background: linear-gradient(180deg, #f8fafc, #94a3b8);
+  border: 1px solid #0f172a;
+}
+
+.weight-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.weight-grid .btn { padding: 7px 4px; font-size: 12px; width: 100%; touch-action: manipulation; }
+.weight-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; justify-content: center; }
+.plate-chips { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; align-items: center; margin-top: 8px; min-height: 22px; }
+.plate-dot {
+  padding: 2px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 800; color: #0b1224;
+}
+
+.mob-mini-stats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+}
+.mob-mini-item {
+  background: var(--panel-2); border: 1px solid #1e2d4d; border-radius: 9px;
+  padding: 5px 8px; display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; color: var(--muted);
+}
+.mob-mini-item strong { color: #f8fafc; font-size: 11.5px; }
+.mob-actions-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+.mob-actions-grid .btn { min-width: 0; padding: 7px 3px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; touch-action: manipulation; }
+
+/* 薄肌小子 · 半月周期成长档案 */
+.growth-banner {
+  background: linear-gradient(125deg, rgba(14, 24, 52, 0.94), rgba(10, 17, 36, 0.96));
+  border: 1px solid #233863; border-left: 4px solid var(--violet); border-radius: 14px;
+  padding: 13px 16px; margin-bottom: 14px;
+}
+.growth-top {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.growth-metrics {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0 8px;
+}
+@media (max-width: 720px) { .growth-metrics { grid-template-columns: repeat(2, 1fr); } }
+.g-tile {
+  background: rgba(11, 18, 36, 0.82); border: 1px solid #1e3157; border-radius: 10px;
+  padding: 8px 10px;
+}
+.g-tile .k { font-size: 11px; color: var(--muted); }
+.g-tile .v { font-size: 15.5px; font-weight: 900; color: #f8fafc; margin-top: 2px; }
+.g-tile .s { font-size: 10.5px; color: #7dd3fc; margin-top: 1px; }
+.growth-regions {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between;
+  font-size: 11.5px; color: var(--muted);
+}
+.g-chip {
+  background: rgba(99, 102, 241, 0.14); border: 1px solid rgba(129, 140, 248, 0.32);
+  color: #c7d2fe; border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 700;
+}
+.mob-growth-strip {
+  margin-top: 8px; padding: 7px 9px; border-radius: 10px;
+  background: rgba(15, 25, 52, 0.85); border: 1px solid #243b68;
+}
+.mob-growth-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 6px;
+  font-size: 11px; color: #cbd5e1; margin-bottom: 5px;
+}
+.btn.muted { opacity: 0.72; border-color: #475569; background: #1e293b; color: #94a3b8; }
+</style>
+</head>
+<body class="mobile-body">
+  <div class="mobile-shell">
+    <!-- iOS 添加到主屏幕引导条（仅首次 Safari 打开永久入口时显示） -->
+    <div class="ios-install-banner" id="iosInstallBanner">
+      <span>📲 点底部分享 → <strong>「添加到主屏幕」</strong>，桌面图标永久直连电脑，免重复扫码！</span>
+      <button class="btn sm" id="btnCloseIosBanner" style="padding:3px 7px;flex-shrink:0;">✕</button>
+    </div>
+    <!-- 永久信标连接状态提示条（仅在静态外壳寻址或重连时显示） -->
+    <div class="beacon-bar" id="beaconBar">
+      <span id="beaconBarTxt">⏳ 正在通过加密信标连接你的电脑…</span>
+      <div style="display:flex;gap:5px;flex-shrink:0;">
+        <button class="btn sm" id="btnBeaconRetry" style="padding:3px 8px;font-size:11px;">🔄 重连</button>
+        <button class="btn sm" id="btnOpenPair" style="padding:3px 8px;font-size:11px;">🔑 密钥</button>
+      </div>
+    </div>
+    <!-- 顶部 RPG 段位与状态条 -->
+    <div class="card mob-header">
+      <div style="min-width:0;">
+        <div class="mob-title">⚡ 反重力桌宠</div>
+        <div id="moodLine" class="mob-sub">Lv.1 热身准备中…</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+        <button class="btn sm" id="btnSoundMob" style="padding:5px 8px;font-size:12px;" title="开关提示音效">🔊</button>
+        <a class="btn sm" id="lanFastLink" style="display:none;padding:5px 7px;font-size:11px;border-color:#34d399;color:#6ee7b7;" title="同Wi-Fi 1ms零延迟直连">⚡1ms</a>
+        <a class="btn sm" id="holoLinkMob" href="/holo?faces=4" style="padding:5px 8px;font-size:11.5px;">🔮 全息</a>
+        <span class="pill" id="connBadge">连接中</span>
+      </div>
+    </div>
+
+    <!-- 三大项快速切换 -->
+    <div class="lift-tabs" id="liftTabs">
+      <button class="lift-tab active" data-lift="deadlift">🏋️ 硬拉</button>
+      <button class="lift-tab" data-lift="bench">💪 卧推</button>
+      <button class="lift-tab" data-lift="squat">🦵 深蹲</button>
+    </div>
+
+    <!-- 趣味街机感触控轨道区（零裁切 + 连击火焰 + 粒子弹窗特效） -->
+    <div class="card" style="padding:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;">
+        <span id="liftGuide" style="font-size:12px;font-weight:700;color:#7dd3fc;line-height:1.35;">向上猛滑拉到顶部锁定！</span>
+        <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
+          <span id="comboPill" class="pill warn" style="display:none;padding:3px 8px;font-size:11px;">🔥 ×1</span>
+          <span id="repCounter" class="pill cyan" style="padding:3px 9px;font-size:11.5px;">0 / 5 次</span>
+        </div>
+      </div>
+      <!-- 实时重量手感阻力反馈条（随配重动态变化惯性、粘滞点阻力与震动强度） -->
+      <div class="feel-strip" id="feelStrip">
+        <span id="feelLabel">🔥 正式组 · 沉稳铁感阻力</span>
+        <div class="feel-meter" aria-hidden="true"><div class="feel-meter-fill" id="feelMeterFill"></div></div>
+      </div>
+      <div class="pad-box" id="liftPad">
+        <div class="pad-zone" id="zoneTop">▲ 锁定区 (LOCKOUT)</div>
+        <div class="pad-rail" aria-hidden="true">
+          <div class="stick-zone" id="stickZone"></div>
+          <div class="pad-rail-fill" id="padFill"></div>
+        </div>
+        <div class="tension-beam" id="tensionBeam" aria-hidden="true"></div>
+        <div class="finger-ghost" id="fingerGhost" aria-hidden="true"></div>
+        <div class="pad-fx-layer" id="fxLayer" aria-hidden="true"></div>
+        <div class="bar-handle" id="barHandle">
+          <span class="bar-cap"></span>
+          <span id="barHandleText">🏋️ 硬拉 100kg · 0%</span>
+          <span class="bar-cap"></span>
+        </div>
+        <div class="pad-zone" id="zoneBottom">▼ 起始底位</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">
+        <button class="btn primary" id="btnSingleRep">⚡ 点一下举 1 次</button>
+        <button class="btn emerald" id="btnQuickLog">🏆 一键打卡整组</button>
+      </div>
+    </div>
+
+    <!-- 实时迷你彩色杠铃可视化 + 趣味重量对照 -->
+    <div class="card" style="padding:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:12.5px;font-weight:800;">🏋️ 配重：<strong id="weightVal" style="color:var(--gold);font-size:16px;">100 kg</strong></span>
+        <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:4px;">每组
+          <select id="repsSelect" style="padding:4px 7px;">
+            <option value="1">1次(冲PR)</option>
+            <option value="3">3次</option>
+            <option value="5" selected>5次</option>
+            <option value="8">8次</option>
+            <option value="10">10次</option>
+            <option value="12">12次</option>
+          </select>
+        </label>
+      </div>
+      <!-- 动态迷你彩色奥林匹克杠铃可视化 -->
+      <div class="mini-barbell-stage" id="miniBarbellStage">
+        <div class="mini-plates left" id="platesLeft"></div>
+        <div class="mini-collar"></div>
+        <div class="mini-shaft"></div>
+        <div class="mini-collar"></div>
+        <div class="mini-plates right" id="platesRight"></div>
+      </div>
+      <div class="weight-fun" id="weightFun">≈ 破百俱乐部！举起 1 只成年大熊猫 🐼🔥</div>
+      <div class="weight-grid">
+        <button class="btn sm" data-delta="-10">-10</button>
+        <button class="btn sm" data-delta="-5">-5</button>
+        <button class="btn sm" data-delta="5">+5</button>
+        <button class="btn sm" data-delta="10">+10</button>
+        <button class="btn sm gold" data-delta="20">+20</button>
+      </div>
+      <div class="plate-chips" id="plateChips"></div>
+    </div>
+
+    <!-- 办公摸鱼整蛊 & 今日三大项战绩 -->
+    <div class="card" style="padding:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:6px;">
+        <span style="font-size:12.5px;font-weight:800;">🎮 整蛊互动 & 今日战绩</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span id="volBadge" style="font-size:12px;color:var(--emerald);font-weight:800;">0 kg · 0%</span>
+          <button class="btn sm" id="btnUndoMob" style="padding:3px 7px;font-size:11px;">↩️ 撤销</button>
+        </div>
+      </div>
+      <div class="progress-track" style="width:100%;height:8px;margin:0 0 8px;">
+        <div class="progress-fill" id="mobPctBar"></div>
+      </div>
+      <div class="mob-mini-stats">
+        <div class="mob-mini-item"><span>🏋️ 硬拉</span><strong id="mobDl">0组</strong></div>
+        <div class="mob-mini-item"><span>💪 卧推</span><strong id="mobBp">0组</strong></div>
+        <div class="mob-mini-item"><span>🦵 深蹲</span><strong id="mobSq">0组</strong></div>
+      </div>
+      <div class="mob-growth-strip" id="mobGrowthStrip">
+        <div class="mob-growth-row">
+          <span id="mobGrowthTitle">🧬 清瘦少年 Lv.1</span>
+          <span id="mobGrowthStats" style="color:#7dd3fc;font-weight:700;">肌 27.8kg · 半月 0%</span>
+        </div>
+        <div class="progress-track" style="width:100%;height:5px;margin:0;">
+          <div class="progress-fill" id="mobCycleBar" style="background:linear-gradient(90deg,#a78bfa,#38bdf8,#34d399);"></div>
+        </div>
+      </div>
+      <div class="mob-actions-grid" style="margin-top:10px;">
+        <button class="btn sm gold" id="btnOfficeMob">💼 黑西装</button>
+        <button class="btn sm danger" id="btnBusyMob">🤫 别打扰</button>
+        <button class="btn sm" id="btnCoffeeMob" style="background:#78350f;border-color:#f59e0b;">☕ 轻倒</button>
+        <button class="btn sm" id="btnProtein" style="background:#1e3a8a;border-color:#60a5fa;">🥤 蛋白粉</button>
+      </div>
+      <div class="mob-actions-grid" style="margin-top:6px;">
+        <button class="btn sm" id="btnHighCoffeeMob" style="background:#991b1b;border-color:#fb923c;">🌊 高空倒</button>
+        <button class="btn sm" data-office-act="stretch_break" style="background:#1e3a5f;border-color:#38bdf8;">🙆 伸懒腰</button>
+        <button class="btn sm" data-office-act="desk_dumbbell" style="background:#3b0764;border-color:#c084fc;">💪 偷练</button>
+        <button class="btn sm" data-office-act="next" style="background:#1e293b;border-color:#facc15;">🎲 整活</button>
+      </div>
+      <div id="tipText" style="font-size:11.5px;color:var(--muted);line-height:1.45;margin-top:8px;text-align:center;">黑西装办公时可在上方轨道上下拖控倒咖啡高度（越高水花越大，冲顶会溅湿西装！）</div>
+    </div>
+  </div>
+  <!-- 永久入口首次手动配对弹窗（扫码自带 ?key= 时自动跳过） -->
+  <div class="pair-modal" id="pairModal">
+    <div class="pair-card">
+      <div style="font-size:15px;font-weight:900;color:#7dd3fc;">🔑 永久桌宠配对密钥</div>
+      <div style="font-size:12px;color:#94a3b8;line-height:1.5;">建议直接用手机扫描电脑工作台的「永久手机桌面 App 二维码」自动配对；也可在此粘贴配对密钥。</div>
+      <input id="pairKeyInput" type="text" placeholder="粘贴配对密钥 (key)" style="width:100%;">
+      <div id="pairErrTxt" style="font-size:11.5px;color:#fca5a5;display:none;"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn sm" id="btnPairCancel">取消</button>
+        <button class="btn sm primary" id="btnPairSave">保存并连接</button>
+      </div>
+    </div>
+  </div>
+  <script>'use strict';
+
+(() => {
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const hashParams = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+  const isEmbed = params.get('embed') === '1' || window.self !== window.top;
+  const isRemoteHttps = location.protocol === 'https:';
+
+  // 永久桌面 App 外壳识别 (GitHub Pages 静态入口 vs 直连本地/隧道服务)
+  const explicitBeaconRepo = document.documentElement.getAttribute('data-beacon-repo') || '';
+  const explicitBeaconSub = (document.documentElement.getAttribute('data-beacon-subpath') || '').replace(/^\/+|\/+$/g, '');
+  const ghParts = location.hostname.endsWith('.github.io')
+    ? [location.hostname.replace(/\.github\.io$/i, ''), (location.pathname.split('/').filter(Boolean)[0] || '')]
+    : ['', ''];
+  const beaconRepo = explicitBeaconRepo || (ghParts[0] && ghParts[1] ? `${ghParts[0]}/${ghParts[1]}` : '');
+  const isStaticShell = !isEmbed && (Boolean(beaconRepo) || location.hostname.endsWith('.github.io'));
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isStandalone = Boolean(window.navigator.standalone) || window.matchMedia?.('(display-mode: standalone)')?.matches;
+
+  const incomingKey = (params.get('key') || params.get('token') || hashParams.get('key') || hashParams.get('token') || '').trim();
+  const incomingTunnel = (params.get('t') || hashParams.get('t') || '').trim();
+  if (incomingTunnel && /^https:\/\/[a-z0-9.-]+(?::\d+)?(?:\/.*)?$/i.test(incomingTunnel)) {
+    try { localStorage.setItem('agy_gym_last_tunnel', incomingTunnel.replace(/\/$/, '')); } catch {}
+  }
+  if (incomingKey) {
+    try { localStorage.setItem('agy_gym_token', incomingKey); } catch {}
+    if (isStaticShell && isIOS && !isStandalone) {
+      // 关键：在 iOS Safari 中保留 ?key=... 并剔除临时 &t=...，确保「添加到主屏幕」永久保存含密钥的固定网址！
+      const cleanPath = location.pathname.replace(/\/index\.html$/i, '/');
+      const normPath = cleanPath.endsWith('/') ? cleanPath : `${cleanPath}/`;
+      try { history.replaceState({}, '', `${normPath}?key=${encodeURIComponent(incomingKey)}`); } catch {}
+    } else if (isStaticShell) {
+      try { history.replaceState({}, '', location.pathname); } catch {}
+    }
+  } else if (incomingTunnel && isStaticShell) {
+    try { history.replaceState({}, '', location.pathname); } catch {}
+  }
+
+  let gymToken = '';
+  try { gymToken = localStorage.getItem('agy_gym_token') || incomingKey || ''; } catch { gymToken = incomingKey; }
+  let apiBase = '';
+  let activeEs = null;
+  let activeWs = null;
+  let wsFailCount = 0;
+  let wsReconnectTimer = 0;
+  let wsPingTimer = 0;
+  let wsPingSentAt = 0;
+  let resolvedLanUrl = '';
+  try { resolvedLanUrl = localStorage.getItem('agy_gym_last_lan') || ''; } catch {}
+  let beaconConnecting = false;
+  let consecutiveNetFails = 0;
+
+  const apiUrl = path => (apiBase ? `${apiBase}${path}` : path);
+  const wsUrl = path => {
+    if (apiBase) return apiBase.replace(/^http/i, 'ws') + path;
+    return `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}${path}`;
+  };
+  const wsOpen = () => Boolean(activeWs && activeWs.readyState === 1);
+  const updateLanFastLink = () => {
+    const el = $('lanFastLink');
+    if (!el) return;
+    if (isStaticShell && resolvedLanUrl && /^http:\/\/\d+\.\d+\.\d+\.\d+:\d+$/i.test(resolvedLanUrl)) {
+      el.href = `${resolvedLanUrl.replace(/\/$/, '')}/mobile`;
+      el.style.display = 'inline-flex';
+    } else {
+      el.style.display = 'none';
+    }
+  };
+
+  // iOS Safari 静态入口不注入 manifest（防止 SpringBoard 丢弃 ?key=...）；Android/桌面端正常挂载 manifest 与 SW
+  if (!isEmbed && !(isStaticShell && isIOS)) {
+    const ml = document.createElement('link');
+    ml.rel = 'manifest';
+    ml.href = isStaticShell ? './manifest.json' : '/manifest.json';
+    document.head.appendChild(ml);
+  }
+  if (!isEmbed && 'serviceWorker' in navigator && (isStaticShell || location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+    navigator.serviceWorker.register(isStaticShell ? './sw.js' : '/sw.js').catch(() => {});
+  }
+  if (isStaticShell && isIOS && !isStandalone && $('iosInstallBanner')) {
+    try {
+      if (!sessionStorage.getItem('hide_gym_ios_banner')) $('iosInstallBanner').style.display = 'flex';
+    } catch { $('iosInstallBanner').style.display = 'flex'; }
+    if ($('btnCloseIosBanner')) {
+      $('btnCloseIosBanner').onclick = () => {
+        $('iosInstallBanner').style.display = 'none';
+        try { sessionStorage.setItem('hide_gym_ios_banner', '1'); } catch {}
+      };
+    }
+  }
+  const syncHoloLink = () => {
+    const hl = $('holoLinkMob');
+    if (!hl) return;
+    if (isStaticShell) {
+      hl.href = gymToken ? `./holo.html?key=${encodeURIComponent(gymToken)}&faces=4` : './holo.html?faces=4';
+    } else {
+      hl.href = '/holo?faces=4';
+    }
+  };
+  syncHoloLink();
+  updateLanFastLink();
+
+  let state = { lift: 'deadlift', scene: 'gym', weight_kg: 100, target_reps: 5, current_reps: 0, progress: 0, sound_enabled: true, pour_height: 0.22, pour_active: false, office_action: 'idle' };
+  let dragging = false;
+  let dragMode = 'gym';
+  let dragEndAt = 0;
+  let audioCtx = null;
+  let soundEnabled = true;
+  let lastAudioId = 0;
+  let lastRttMs = isRemoteHttps ? 180 : 6;
+  let comboCount = 0;
+  let lastRepAt = 0;
+  let lastBottomFxAt = 0;
+  let lastSplashFxAt = 0;
+  let wasSplashing = false;
+  let lastSseAt = 0;
+
+  // 高帧率 GPU 渲染 + 真实重量手感惯性/粘滞点物理引擎 + 带超时防卡死的 1-in-flight 合并发包泵
+  const pad = $('liftPad');
+  const handle = $('barHandle');
+  const handleText = $('barHandleText');
+  const padFill = $('padFill');
+  const fxLayer = $('fxLayer');
+  const zoneTop = $('zoneTop');
+  const zoneBot = $('zoneBottom');
+  const feelStrip = $('feelStrip');
+  const feelLabel = $('feelLabel');
+  const feelMeterFill = $('feelMeterFill');
+  const stickZoneEl = $('stickZone');
+  const tensionBeam = $('tensionBeam');
+  const fingerGhost = $('fingerGhost');
+  let cachedPadRect = null;
+  let rafId = 0;
+  let physicsRafId = 0;
+  let lastPhysicsMs = 0;
+  let localProgress = 0;
+  let fingerTarget = 0;
+  let barVel = 0;
+  let barTension = 0;
+  let barInStick = false;
+  let wasInStick = false;
+  let droppingBar = false;
+  let dropPeakProg = 0;
+  let lastGrindHapticAt = 0;
+  let lastStickFxAt = 0;
+  let localPourHeight = 0.22;
+  let motionInFlight = false;
+  let pendingMotion = null;
+  let lastSentAt = 0;
+  let lastSentProg = -1;
+  let pourInFlight = false;
+  let pendingPour = null;
+  let lastPourSentAt = 0;
+  let lastPourSentH = -1;
+
+  const cache = {
+    scene: '',
+    lift: '',
+    weight: -1,
+    feelSig: '',
+    repsText: '',
+    targetReps: '',
+    platesKey: '',
+    moodLine: '',
+    officeLabel: '',
+    volBadge: '',
+    pctWidth: '',
+    miniStats: '',
+    tipText: '',
+    handleText: '',
+    topText: '',
+    botText: '',
+    topCls: '',
+    botCls: '',
+    connText: '',
+    soundState: null,
+    growthSig: '',
+  };
+
+  function getWeightFeel(weightKg, lift) {
+    const w = Math.max(20, Number(weightKg) || 20);
+    const ref = lift === 'bench' ? 135 : (lift === 'squat' ? 170 : 200);
+    const raw = (w - 20) / Math.max(40, ref - 20);
+    const load = Math.max(0, Math.min(1.25, raw));
+    const norm = Math.max(0, Math.min(1.0, raw));
+    let label, color;
+    if (norm < 0.18) {
+      label = '🪶 轻盈空杆 · 零阻力丝滑跟随';
+      color = '#7dd3fc';
+    } else if (norm < 0.42) {
+      label = '⚡ 热身流畅 · 轻巧铁感惯性';
+      color = '#38bdf8';
+    } else if (norm < 0.68) {
+      label = '🔥 正式组 · 沉稳阻力 + 轻粘滞点';
+      color = '#facc15';
+    } else if (norm < 0.90) {
+      label = '💢 大重量 · 强惯性 + 粘滞点硬拉';
+      color = '#fb923c';
+    } else {
+      label = '🌋 极限冲PR · 重阻力震颤 + 重铁砸地!';
+      color = '#f87171';
+    }
+    return { load, norm, label, color, meterPct: Math.max(8, Math.round(norm * 100)) };
+  }
+
+  function updateWeightFeelUI() {
+    const isOff = state.scene === 'office';
+    if (feelStrip) feelStrip.style.display = isOff ? 'none' : 'flex';
+    if (isOff) {
+      if (stickZoneEl) stickZoneEl.style.opacity = '0';
+      return;
+    }
+    const wf = getWeightFeel(state.weight_kg, state.lift);
+    const sig = `${state.lift}|${state.weight_kg}`;
+    if (cache.feelSig !== sig) {
+      cache.feelSig = sig;
+      if (feelLabel) {
+        feelLabel.textContent = wf.label;
+        feelLabel.style.color = wf.color;
+      }
+      if (feelMeterFill) feelMeterFill.style.width = `${wf.meterPct}%`;
+      if (stickZoneEl) {
+        // 大重量时在轨道中段浮现「粘滞发力区」警示斜纹
+        stickZoneEl.style.opacity = wf.norm >= 0.36 ? String(Math.min(0.95, (wf.norm - 0.30) * 1.35)) : '0';
+        stickZoneEl.style.top = state.lift === 'deadlift' ? '28%' : '34%';
+        stickZoneEl.style.height = '34%';
+      }
+    }
+  }
+
+  function triggerPadImpact(heavy = false) {
+    if (!pad) return;
+    const cls = heavy ? 'impact-heavy' : 'impact-light';
+    pad.classList.remove('impact-light', 'impact-heavy');
+    requestAnimationFrame(() => {
+      pad.classList.add(cls);
+      setTimeout(() => pad.classList.remove(cls), heavy ? 240 : 180);
+    });
+  }
+
+  function playHeavyBassThud(normLoad = 0.5) {
+    if (!soundEnabled || !audioCtx || audioCtx.state !== 'running') return;
+    try {
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      const startF = 135 - normLoad * 52;
+      const endF = Math.max(38, 62 - normLoad * 24);
+      osc.frequency.setValueAtTime(startF, now);
+      osc.frequency.exponentialRampToValueAtTime(endF, now + 0.16 + normLoad * 0.08);
+      gain.gain.setValueAtTime(0.12 + normLoad * 0.16, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18 + normLoad * 0.09);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.28);
+    } catch {}
+  }
+
+  function unlockAudio() {
+    if (!soundEnabled) return;
+    if (!audioCtx) {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AC();
+      } catch {}
+    }
+    audioCtx?.resume?.().catch?.(() => {});
+  }
+
+  function beep(freq, dur = 0.12, type = 'triangle') {
+    if (!soundEnabled) return;
+    if (!audioCtx || audioCtx.state !== 'running') return;
+    try {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.14, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + dur);
+    } catch {}
+  }
+
+  function spawnFx(text, color = '#fde047', yPct = 46) {
+    if (!fxLayer) return;
+    const el = document.createElement('div');
+    el.className = 'fx-pop';
+    el.textContent = text;
+    el.style.color = color;
+    el.style.top = `${yPct}%`;
+    fxLayer.appendChild(el);
+    setTimeout(() => el.remove(), 800);
+  }
+
+  function weightFunText(kg) {
+    const w = Number(kg || 20);
+    if (w <= 25) return '≈ 空杆热身 · 扛起 4 只胖橘猫 🐱';
+    if (w <= 45) return '≈ 轻松举起 2 桶饮水机大桶水 💧';
+    if (w <= 65) return '≈ 举起 1 只圆滚滚的大熊猫幼崽 🐼';
+    if (w <= 85) return '≈ 轻松公主抱起 1 位成年打工人 💼';
+    if (w <= 105) return '≈ 破百俱乐部！举起 1 只成年大熊猫 🐼🔥';
+    if (w <= 125) return '≈ 硬核！举起 1 台双开门大冰箱 🧊⚡';
+    if (w <= 155) return '≈ 猛男警告！举起 1 辆踏板摩托车 🛵🔥';
+    if (w <= 190) return '≈ 怪兽力量！举起 1 头成年棕熊 🐻💥';
+    return '≈ 反重力战神！直接托起 1 架三角钢琴 🎹🏆';
+  }
+
+  const LIFT_META_LOCAL = {
+    deadlift: { zh: '硬拉', emoji: '🏋️', default_kg: 100 },
+    bench: { zh: '卧推', emoji: '💪', default_kg: 70 },
+    squat: { zh: '深蹲', emoji: '🦵', default_kg: 90 },
+  };
+  const PLATE_SPEC_LOCAL = [
+    { kg: 25, label: '25', color: '#ef4444', h: 1.0 },
+    { kg: 20, label: '20', color: '#2563eb', h: 0.96 },
+    { kg: 15, label: '15', color: '#eab308', h: 0.88 },
+    { kg: 10, label: '10', color: '#22c55e', h: 0.78 },
+    { kg: 5, label: '5', color: '#f8fafc', h: 0.64 },
+    { kg: 2.5, label: '2.5', color: '#94a3b8', h: 0.54 },
+    { kg: 1.25, label: '1.25', color: '#cbd5e1', h: 0.46 },
+  ];
+  function computePlatesLocal(totalKg) {
+    let rem = Math.max(0, (Number(totalKg) - 20) / 2);
+    const out = [];
+    for (const sp of PLATE_SPEC_LOCAL) {
+      while (rem + 1e-6 >= sp.kg && out.length < 7) {
+        out.push(sp);
+        rem -= sp.kg;
+      }
+    }
+    return out;
+  }
+  let opLock = null; // 乐观切换防回弹锁：{ scene, lift, weight_kg, until }
+
+  function renderMiniBarbell(plates, weightKg, animateClank = false) {
+    const pl = $('platesLeft');
+    const pr = $('platesRight');
+    const wf = $('weightFun');
+    if (wf) wf.textContent = weightFunText(weightKg);
+    if (!pl || !pr) return;
+    const list = (plates && plates.length) ? plates.slice(0, 6) : [];
+    const html = list.map(p => {
+      const h = Math.round(16 + (Number(p.h || 0.7) * 18));
+      return `<span class="mini-plate-bar" style="height:${h}px;background:${p.color};"></span>`;
+    }).join('');
+    pl.innerHTML = html;
+    pr.innerHTML = html;
+    if (animateClank && $('miniBarbellStage')) {
+      const st = $('miniBarbellStage');
+      st.classList.remove('clank');
+      requestAnimationFrame(() => {
+        st.classList.add('clank');
+        setTimeout(() => st.classList.remove('clank'), 140);
+      });
+    }
+  }
+
+  function bumpCombo() {
+    const now = performance.now();
+    comboCount = (now - lastRepAt < 9000) ? (comboCount + 1) : 1;
+    lastRepAt = now;
+    const cp = $('comboPill');
+    if (cp) {
+      cp.style.display = comboCount >= 2 ? 'inline-flex' : 'none';
+      cp.textContent = `🔥 连击 ×${comboCount}`;
+    }
+    spawnFx(comboCount >= 2 ? `🔥 COMBO ×${comboCount}!` : '⚡ +1 REP!', '#fde047', 34);
+  }
+
+  function setConnBadge(ok, rttMs) {
+    const isWs = wsOpen();
+    const mode = isRemoteHttps ? (isWs ? '5G WS' : '5G') : (isWs ? 'WS' : '局域网');
+    const icon = isWs ? '⚡' : '●';
+    const txt = ok
+      ? (rttMs !== undefined ? `${icon} ${mode} ${Math.max(1, Math.round(rttMs))}ms` : `${icon} ${mode} 已连`)
+      : '○ 重连中';
+    if (cache.connText !== txt) {
+      cache.connText = txt;
+      $('connBadge').textContent = txt;
+      $('connBadge').className = ok ? 'pill ok' : 'pill warn';
+    }
+  }
+
+  const WS_CMD_MAP = {
+    '/api/lift/select': 'lift_select',
+    '/api/lift/weight': 'lift_weight',
+    '/api/lift/reps': 'lift_reps',
+    '/api/lift/rep': 'lift_rep',
+    '/api/workout/log': 'workout_log',
+    '/api/workout/undo': 'workout_undo',
+    '/api/scene/set': 'scene_set',
+    '/api/pet/coffee': 'coffee',
+    '/api/pet/busy': 'busy',
+    '/api/pet/office_action': 'office_action',
+    '/api/pet/protein': 'protein',
+    '/api/audio/toggle': 'audio_toggle',
+  };
+
+  async function post(url, body = {}, timeoutMs = 4500) {
+    if (wsOpen() && WS_CMD_MAP[url]) {
+      try {
+        activeWs.send(JSON.stringify({ cmd: WS_CMD_MAP[url], ...(body || {}) }));
+        return { ok: true, via: 'ws' };
+      } catch {}
+    }
+    if (isStaticShell && !apiBase) return null;
+    const t0 = performance.now();
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+    try {
+      // 使用 text/plain 属于 CORS 简单请求，彻底消除跨源 OPTIONS 预检双倍延迟！
+      const r = await fetch(apiUrl(url), {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify(body),
+        signal: ctrl?.signal,
+      });
+      if (r.ok) {
+        lastRttMs = Math.round(lastRttMs * 0.55 + (performance.now() - t0) * 0.45);
+        setConnBadge(true, lastRttMs);
+        const snap = await r.json();
+        if (snap && snap.lift) applyState(snap);
+        return snap;
+      }
+    } catch {} finally {
+      if (timer) clearTimeout(timer);
+    }
+    return null;
+  }
+
+  function updateZoneText(progress, lift) {
+    let topText, botText, topCls = 'pad-zone', botCls = 'pad-zone';
+    if (lift === 'deadlift') {
+      topText = progress >= 0.88 ? '🔥 锁定成功 LOCKOUT!' : '▲ 向上拖动杠铃到此锁定';
+      botText = '▼ 放回地面重新拉起';
+      if (progress >= 0.88) topCls = 'pad-zone hot';
+    } else if (lift === 'bench') {
+      topText = state.eccentric_reached ? '▲ 已触胸！猛向上推锁定！' : '▲ 高位起点（先向下拉触胸）';
+      botText = progress >= 0.78 ? '✅ 触胸达标！向上推起！' : '▼ 先向下滑至胸口触胸';
+      if (progress >= 0.78) botCls = 'pad-zone ok';
+      if (state.eccentric_reached && progress < 0.35) topCls = 'pad-zone hot';
+    } else {
+      topText = state.eccentric_reached ? '▲ 深度达标！猛向上蹲起！' : '▲ 背杠站立（先向下深蹲）';
+      botText = progress >= 0.78 ? '✅ DEPTH OK! 爆发蹲起！' : '▼ 先向下滑深蹲至平行线';
+      if (progress >= 0.78) botCls = 'pad-zone ok';
+      if (state.eccentric_reached && progress < 0.35) topCls = 'pad-zone hot';
+    }
+    if (cache.topText !== topText) { zoneTop.textContent = topText; cache.topText = topText; }
+    if (cache.botText !== botText) { zoneBot.textContent = botText; cache.botText = botText; }
+    if (cache.topCls !== topCls) { zoneTop.className = topCls; cache.topCls = topCls; }
+    if (cache.botCls !== botCls) { zoneBot.className = botCls; cache.botCls = botCls; }
+  }
+
+  function updateCoffeeZoneText(height, pouring) {
+    const h = Math.max(0, Math.min(1, Number(height) || 0));
+    let topText = '▲ 往上拉高倒咖啡 · 冲顶溅黑西装!';
+    let botText = '▼ 贴杯轻倒（丝滑零水花）';
+    let topCls = 'pad-zone';
+    let botCls = 'pad-zone';
+    if (pouring && h >= 0.68) {
+      topText = '💦 高空狂溅！已溅到黑西装和脸上！';
+      topCls = 'pad-zone danger';
+    } else if (pouring && h >= 0.40) {
+      topText = '⚠️ 中高水花飞溅 · 再拉高就要溅湿啦!';
+      topCls = 'pad-zone hot';
+    } else if (pouring && h < 0.34) {
+      botText = '✅ 贴杯丝滑柔注 · 零飞溅优雅满杯';
+      botCls = 'pad-zone ok';
+    }
+    if (cache.topText !== topText) { zoneTop.textContent = topText; cache.topText = topText; }
+    if (cache.botText !== botText) { zoneBot.textContent = botText; cache.botText = botText; }
+    if (cache.topCls !== topCls) { zoneTop.className = topCls; cache.topCls = topCls; }
+    if (cache.botCls !== botCls) { zoneBot.className = botCls; cache.botCls = botCls; }
+  }
+
+  function renderHandle(progress, lift) {
+    const isOffice = dragging ? (dragMode === 'office') : (state.scene === 'office');
+    const padH = (cachedPadRect && cachedPadRect.height) || pad.clientHeight || 244;
+    const handleH = 48;
+    const minY = 50;
+    const maxY = Math.max(minY + 12, padH - 50 - handleH);
+
+    if (isOffice) {
+      const h = Math.max(0, Math.min(1, Number(localPourHeight) || 0));
+      const pouring = dragging || Boolean(state.pour_active) || state.office_action === 'pour_coffee';
+      const yPx = Math.round(minY + (1 - h) * (maxY - minY));
+      handle.style.transform = `translate3d(-50%, ${yPx}px, 0)`;
+      pad.classList.add('coffee-mode');
+      handle.classList.toggle('coffee', h < 0.68);
+      handle.classList.toggle('coffee-splash', h >= 0.68);
+      if (padFill) {
+        padFill.classList.add('coffee');
+        padFill.style.top = 'auto';
+        padFill.style.bottom = '0';
+        padFill.style.height = `${Math.round(h * 100)}%`;
+      }
+      const pct = Math.round(h * 100);
+      let hText;
+      if (!pouring && state.office_action === 'wipe_coffee') {
+        hText = '🧻 正在擦黑西装上的咖啡渍…';
+      } else if (!pouring) {
+        hText = `☕ 按住上下拖控手冲高度 · ${pct}%`;
+      } else if (h >= 0.68) {
+        hText = `💦 高空猛倒 ${pct}% · 溅湿黑西装!`;
+      } else if (h >= 0.38) {
+        hText = `⚠️ 中高水花 ${pct}% · 注意飞溅`;
+      } else {
+        hText = `☕ 贴杯柔注 ${pct}% · 丝滑零溅`;
+      }
+      if (cache.handleText !== hText) {
+        if (handleText) handleText.textContent = hText;
+        else handle.textContent = hText;
+        cache.handleText = hText;
+      }
+      if (tensionBeam) tensionBeam.style.opacity = '0';
+      if (fingerGhost) fingerGhost.style.opacity = '0';
+      handle.classList.remove('heavy', 'max-grind');
+      updateCoffeeZoneText(h, pouring);
+      return;
+    }
+
+    pad.classList.remove('coffee-mode');
+    handle.classList.remove('coffee', 'coffee-splash');
+    if (padFill) padFill.classList.remove('coffee');
+
+    const p = Math.max(0, Math.min(1, Number(progress) || 0));
+    const wf = getWeightFeel(state.weight_kg, lift);
+    const normPos = lift === 'deadlift' ? (1 - p) : p;
+    const baseY = minY + normPos * (maxY - minY);
+    // 重铁发力微震颤：大重量遇到张力或粘滞点时杠铃手把真实发抖！
+    let jx = 0, jy = 0;
+    if (dragging && dragMode === 'gym' && wf.norm >= 0.30 && (barTension > 0.08 || barInStick)) {
+      const amp = (0.7 + wf.norm * 2.5) * Math.min(1.2, barTension * 1.15 + (barInStick ? 0.45 : 0));
+      const tNow = performance.now() * 0.075;
+      jx = Math.sin(tNow * 1.7) * amp;
+      jy = Math.cos(tNow * 2.3) * amp * 0.55;
+    }
+    const yPx = Math.round(baseY + jy);
+    handle.style.transform = `translate3d(calc(-50% + ${jx.toFixed(1)}px), ${yPx}px, 0)`;
+    handle.classList.toggle('heavy', wf.norm >= 0.50 && !(barInStick && barTension > 0.16));
+    handle.classList.toggle('max-grind', wf.norm >= 0.80 || (wf.norm >= 0.45 && barInStick && barTension > 0.18));
+
+    // 拉力张力光带 + 手指目标虚影：大重量拉不动时清晰看见“手在往上拽、重铁正吃力跟上”！
+    if (dragging && dragMode === 'gym' && barTension > 0.06 && wf.norm >= 0.22) {
+      const fNorm = lift === 'deadlift' ? (1 - fingerTarget) : fingerTarget;
+      const fY = minY + fNorm * (maxY - minY) + handleH * 0.5;
+      const bY = baseY + handleH * 0.5;
+      const topBeam = Math.min(fY, bY);
+      const beamH = Math.max(4, Math.abs(fY - bY));
+      if (tensionBeam) {
+        tensionBeam.style.top = `${Math.round(topBeam)}px`;
+        tensionBeam.style.height = `${Math.round(beamH)}px`;
+        tensionBeam.style.opacity = String(Math.min(0.95, 0.28 + barTension * 0.72));
+        tensionBeam.style.background = (barInStick || wf.norm >= 0.80)
+          ? 'linear-gradient(180deg, rgba(248, 113, 113, 0.96), rgba(250, 204, 21, 0.92))'
+          : 'linear-gradient(180deg, rgba(250, 204, 21, 0.92), rgba(56, 189, 248, 0.88))';
+      }
+      if (fingerGhost) {
+        fingerGhost.style.transform = `translate3d(-50%, ${Math.round(fY - 5)}px, 0)`;
+        fingerGhost.style.opacity = String(Math.min(0.9, 0.35 + barTension * 0.6));
+      }
+    } else {
+      if (tensionBeam) tensionBeam.style.opacity = '0';
+      if (fingerGhost) fingerGhost.style.opacity = '0';
+    }
+
+    if (padFill) {
+      padFill.style.height = `${Math.round(p * 100)}%`;
+      if (lift === 'deadlift') {
+        padFill.style.top = 'auto';
+        padFill.style.bottom = '0';
+      } else {
+        padFill.style.top = '0';
+        padFill.style.bottom = 'auto';
+      }
+    }
+
+    const meta = state.lift_meta || { zh: '硬拉', emoji: '🏋️' };
+    const strainTag = (dragging && dragMode === 'gym' && barInStick && barTension > 0.16 && wf.norm >= 0.42)
+      ? ' · 💢发力中!'
+      : '';
+    const hText = `${meta.emoji} ${meta.zh} ${state.weight_kg}kg · ${Math.round(p * 100)}%${strainTag}`;
+    if (cache.handleText !== hText) {
+      if (handleText) handleText.textContent = hText;
+      else handle.textContent = hText;
+      cache.handleText = hText;
+    }
+    updateZoneText(p, lift);
+  }
+
+  function scheduleHandleRender() {
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = 0;
+      renderHandle(localProgress, state.lift);
+    });
+  }
+
+  async function flushMotionPump() {
+    if (motionInFlight || !pendingMotion) return;
+    if (isStaticShell && !apiBase) { pendingMotion = null; return; }
+    const payload = pendingMotion;
+    pendingMotion = null;
+    motionInFlight = true;
+    const t0 = performance.now();
+    lastSentAt = t0;
+    lastSentProg = payload.progress;
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    // 防 5G 丢包死锁：单包超过 2.6 秒强制中止并放行下一帧最新位置！
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 2600) : null;
+    try {
+      const r = await fetch(apiUrl('/api/lift/motion'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify(payload),
+        keepalive: payload.progress === 0,
+        signal: ctrl?.signal,
+      });
+      if (r.ok) {
+        const rtt = performance.now() - t0;
+        lastRttMs = Math.round(lastRttMs * 0.6 + rtt * 0.4);
+        setConnBadge(true, lastRttMs);
+        const ack = await r.json();
+        if (ack && ack.ok) {
+          const prevReps = state.current_reps;
+          state.eccentric_reached = Boolean(ack.eccentric_reached);
+          state.current_reps = ack.current_reps ?? state.current_reps;
+          state.target_reps = ack.target_reps ?? state.target_reps;
+          if (state.current_reps > prevReps) bumpCombo();
+          const rt = `${state.current_reps} / ${state.target_reps} 次`;
+          if (cache.repsText !== rt) { $('repCounter').textContent = rt; cache.repsText = rt; }
+          updateZoneText(localProgress, state.lift);
+        }
+      }
+    } catch {} finally {
+      if (timer) clearTimeout(timer);
+    }
+    motionInFlight = false;
+    if (pendingMotion) {
+      flushMotionPump();
+    }
+  }
+
+  function queueMotion(progress, effort, force = false) {
+    const p = Math.round(progress * 1000) / 1000;
+    const e = Math.round(effort * 1000) / 1000;
+    const now = performance.now();
+    const isCritical = force || p === 0 || p >= 0.88 || (state.lift !== 'deadlift' && p >= 0.78);
+    // 优先走全双工 WebSocket 60Hz 即发即走微帧 (~18B)：0 预检、0 ACK 阻塞、真 0 延迟！
+    if (wsOpen()) {
+      const wsInterval = 16;
+      if (!force && !isCritical && Math.abs(p - lastSentProg) < 0.006 && (now - lastSentAt) < wsInterval) {
+        return;
+      }
+      if (force || ((isCritical || (now - lastSentAt) >= wsInterval) && activeWs.bufferedAmount < 4096)) {
+        try {
+          activeWs.send(`m ${p} ${e} ${state.lift || 'deadlift'} ${isEmbed ? 'workbench' : 'phone'} ne`);
+          lastSentAt = now;
+          lastSentProg = p;
+          pendingMotion = null;
+          return;
+        } catch {}
+      }
+      return;
+    }
+    // HTTP 降级通道（使用 text/plain 跳过 CORS 预检）
+    const minInterval = isRemoteHttps ? Math.max(40, Math.min(120, lastRttMs * 0.45)) : 16;
+    if (!isCritical && Math.abs(p - lastSentProg) < 0.015 && (now - lastSentAt) < minInterval) {
+      return;
+    }
+    pendingMotion = {
+      progress: p,
+      effort: e,
+      lift: state.lift,
+      source: isEmbed ? 'workbench' : 'phone',
+      fast: true,
+    };
+    if (!motionInFlight && (isCritical || (now - lastSentAt) >= minInterval)) {
+      flushMotionPump();
+    } else if (!motionInFlight) {
+      setTimeout(flushMotionPump, Math.max(1, minInterval - (now - lastSentAt)));
+    }
+  }
+
+  async function flushPourPump() {
+    if (pourInFlight || !pendingPour) return;
+    if (isStaticShell && !apiBase) { pendingPour = null; return; }
+    const payload = pendingPour;
+    pendingPour = null;
+    pourInFlight = true;
+    const t0 = performance.now();
+    lastPourSentAt = t0;
+    lastPourSentH = payload.height;
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 2600) : null;
+    try {
+      const r = await fetch(apiUrl('/api/pet/coffee_pour'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify(payload),
+        keepalive: !payload.active,
+        signal: ctrl?.signal,
+      });
+      if (r.ok) {
+        const rtt = performance.now() - t0;
+        lastRttMs = Math.round(lastRttMs * 0.6 + rtt * 0.4);
+        setConnBadge(true, lastRttMs);
+        const ack = await r.json();
+        if (ack && ack.ok) {
+          state.pour_height = ack.pour_height ?? state.pour_height;
+          state.pour_active = Boolean(ack.pour_active);
+          state.office_action = ack.office_action || state.office_action;
+        }
+      }
+    } catch {} finally {
+      if (timer) clearTimeout(timer);
+    }
+    pourInFlight = false;
+    if (pendingPour) flushPourPump();
+  }
+
+  function queuePour(height, active, force = false) {
+    const h = Math.round(Math.max(0, Math.min(1, Number(height) || 0)) * 1000) / 1000;
+    const now = performance.now();
+    const isCritical = force || !active || h >= 0.68 || h <= 0.15;
+    if (wsOpen()) {
+      const wsInterval = 16;
+      if (!force && active && !isCritical && Math.abs(h - lastPourSentH) < 0.006 && (now - lastPourSentAt) < wsInterval) {
+        return;
+      }
+      if (force || !active || ((isCritical || (now - lastPourSentAt) >= wsInterval) && activeWs.bufferedAmount < 4096)) {
+        try {
+          activeWs.send(`p ${h} ${active ? 1 : 0} ${isEmbed ? 'workbench' : 'phone'} ne`);
+          lastPourSentAt = now;
+          lastPourSentH = h;
+          pendingPour = null;
+          return;
+        } catch {}
+      }
+      return;
+    }
+    const minInterval = isRemoteHttps ? Math.max(40, Math.min(120, lastRttMs * 0.45)) : 16;
+    if (!isCritical && Math.abs(h - lastPourSentH) < 0.015 && (now - lastPourSentAt) < minInterval) {
+      return;
+    }
+    pendingPour = {
+      height: h,
+      active: Boolean(active),
+      source: isEmbed ? 'workbench' : 'phone',
+      fast: true,
+    };
+    if (!pourInFlight && (isCritical || (now - lastPourSentAt) >= minInterval)) {
+      flushPourPump();
+    } else if (!pourInFlight) {
+      setTimeout(flushPourPump, Math.max(1, minInterval - (now - lastPourSentAt)));
+    }
+  }
+
+  function applyState(next) {
+    if (!next || typeof next !== 'object') return;
+    if (next.lan_url && /^http:\/\/\d+\.\d+\.\d+\.\d+:\d+$/i.test(String(next.lan_url))) {
+      const lu = String(next.lan_url).replace(/\/$/, '');
+      if (resolvedLanUrl !== lu) {
+        resolvedLanUrl = lu;
+        try { localStorage.setItem('agy_gym_last_lan', lu); } catch {}
+        updateLanFastLink();
+      }
+    }
+    const nowPerf = performance.now();
+    if (opLock && nowPerf < opLock.until) {
+      const matchLift = !opLock.lift || next.lift === opLock.lift;
+      const matchScene = !opLock.scene || next.scene === opLock.scene;
+      const matchW = opLock.weight_kg === undefined || Number(next.weight_kg) === opLock.weight_kg;
+      if (matchLift && matchScene && matchW) {
+        opLock = null;
+      } else {
+        // 丢弃点击切换前在途的旧状态包，杜绝动作/重量来回弹跳卡顿！
+        if (next._fast) return;
+        next = { ...next };
+        if (opLock.scene) next.scene = opLock.scene;
+        if (opLock.lift) {
+          next.lift = opLock.lift;
+          next.lift_meta = LIFT_META_LOCAL[opLock.lift] || next.lift_meta;
+        }
+        if (opLock.weight_kg !== undefined) {
+          next.weight_kg = opLock.weight_kg;
+          next.plates = computePlatesLocal(opLock.weight_kg);
+        }
+      }
+    } else if (opLock) {
+      opLock = null;
+    }
+
+    if (next._fast) {
+      const prevReps = state.current_reps;
+      if (next.scene) state.scene = next.scene;
+      if (next.lift) state.lift = next.lift;
+      if (next.progress !== undefined) state.progress = next.progress;
+      if (next.effort !== undefined) state.effort = next.effort;
+      if (next.phase !== undefined) state.phase = next.phase;
+      if (next.eccentric_reached !== undefined) state.eccentric_reached = Boolean(next.eccentric_reached);
+      if (next.current_reps !== undefined) state.current_reps = next.current_reps;
+      if (next.target_reps !== undefined) state.target_reps = next.target_reps;
+      if (next.office_action !== undefined) state.office_action = next.office_action;
+      if (next.office_action_progress !== undefined) state.office_action_progress = next.office_action_progress;
+      if (next.pour_height !== undefined) state.pour_height = next.pour_height;
+      if (next.pour_active !== undefined) state.pour_active = Boolean(next.pour_active);
+      if (state.current_reps > prevReps) bumpCombo();
+      const rt = `${state.current_reps} / ${state.target_reps} 次`;
+      if (cache.repsText !== rt) { $('repCounter').textContent = rt; cache.repsText = rt; }
+      setConnBadge(true, lastRttMs);
+      const guardMs = Math.max(220, Math.min(1200, lastRttMs * 2.2));
+      if (!dragging && !droppingBar && (nowPerf - dragEndAt) > guardMs) {
+        localProgress = Number(state.progress || 0);
+        fingerTarget = localProgress;
+        if (state.scene === 'office') {
+          localPourHeight = (state.pour_active || state.office_action === 'pour_coffee')
+            ? Number(state.pour_height ?? 0.24)
+            : 0.22;
+        }
+        scheduleHandleRender();
+      } else {
+        updateZoneText(localProgress, state.lift);
+      }
+      return;
+    }
+    if (!next.lift) return;
+    const prevRepsFull = state.current_reps;
+    const prevWeight = state.weight_kg;
+    state = next;
+    if (next.current_reps > prevRepsFull && (nowPerf - lastRepAt) > 350) bumpCombo();
+    setConnBadge(true, lastRttMs);
+
+    const curScene = next.scene === 'office' ? 'office' : 'gym';
+    const sceneChanged = cache.scene !== curScene;
+    if (sceneChanged || cache.lift !== next.lift) {
+      cache.scene = curScene;
+      cache.lift = next.lift;
+      document.querySelectorAll('#liftTabs .lift-tab').forEach(b => {
+        b.classList.toggle('active', b.dataset.lift === next.lift);
+      });
+      if (curScene === 'office') {
+        $('liftGuide').textContent = '☕ 按住轨道上下拖控手冲高度：拉得越高水花越大，冲顶会溅湿黑西装！';
+        if ($('btnSingleRep')) $('btnSingleRep').textContent = '☕ 贴杯优雅倒';
+        if ($('btnQuickLog')) $('btnQuickLog').textContent = '🌊 高空狂溅整活';
+      } else {
+        const guideMap = {
+          deadlift: '向上猛滑拉到顶部锁定 → 电脑小人同步发力硬拉！',
+          bench: '先向下滑控杠触胸，再向上推回顶部完成 1 次卧推！',
+          squat: '先向下滑蹲至平行深度，再向上滑爆发蹲起完成 1 次深蹲！',
+        };
+        $('liftGuide').textContent = guideMap[next.lift] || '';
+        if ($('btnSingleRep')) $('btnSingleRep').textContent = '⚡ 点一下举 1 次';
+        if ($('btnQuickLog')) $('btnQuickLog').textContent = '🏆 一键打卡整组';
+      }
+      scheduleHandleRender();
+    }
+    updateWeightFeelUI();
+
+    const repsText = `${next.current_reps} / ${next.target_reps} 次`;
+    if (cache.repsText !== repsText) {
+      $('repCounter').textContent = repsText;
+      cache.repsText = repsText;
+    }
+    if (cache.weight !== next.weight_kg) {
+      const changed = cache.weight !== -1 && cache.weight !== next.weight_kg;
+      cache.weight = next.weight_kg;
+      $('weightVal').textContent = `${next.weight_kg} kg`;
+      renderMiniBarbell(next.plates || [], next.weight_kg, changed || prevWeight !== next.weight_kg);
+    }
+    const tgtStr = String(next.target_reps);
+    if (cache.targetReps !== tgtStr) {
+      cache.targetReps = tgtStr;
+      const opt = [...$('repsSelect').options].find(o => o.value === tgtStr);
+      if (opt) $('repsSelect').value = tgtStr;
+    }
+
+    const plates = next.plates || [];
+    const platesKey = plates.map(p => `${p.label}:${p.color}`).join('|');
+    if (cache.platesKey !== platesKey) {
+      cache.platesKey = platesKey;
+      renderMiniBarbell(plates, next.weight_kg, false);
+      $('plateChips').innerHTML = plates.length
+        ? '<span style="font-size:11px;color:var(--muted);">单侧：</span>' + plates.map(p =>
+          `<span class="plate-dot" style="background:${p.color};">${p.label}kg</span>`
+        ).join('')
+        : '<span style="font-size:11px;color:var(--muted);">空杆 20kg</span>';
+    }
+
+    const d = next.daily || {};
+    const rankMap = {
+      sedentary: 'Lv.1 久坐摸鱼 · 待唤醒',
+      warming_up: 'Lv.2 热身觉醒 · 状态升温',
+      pumped: 'Lv.3 泵感爆发 · 火力全开',
+      god_mode: 'Lv.4 反重力战神 🏆',
+      overtrained: 'Lv.MAX 容量爆表 · 注意恢复',
+    };
+    const moodLine = next.scene === 'office'
+      ? '💼 穿黑西装办公中（上下拖控倒咖啡高度，点下方整活！）'
+      : (rankMap[d.mood] || d.mood_label || '⚡ Antigravity');
+    if (cache.moodLine !== moodLine) { $('moodLine').textContent = moodLine; cache.moodLine = moodLine; }
+
+    const offLbl = next.scene === 'office' ? '🏋️ 健身' : '💼 黑西装';
+    if ($('btnOfficeMob') && cache.officeLabel !== offLbl) {
+      $('btnOfficeMob').textContent = offLbl;
+      cache.officeLabel = offLbl;
+    }
+
+    const volBadge = `${Math.round(d.total_volume_kg || 0)} kg · ${d.progress_pct || 0}%`;
+    if (cache.volBadge !== volBadge) { $('volBadge').textContent = volBadge; cache.volBadge = volBadge; }
+
+    const pctW = `${Math.min(100, d.progress_pct || 0)}%`;
+    if ($('mobPctBar') && cache.pctWidth !== pctW) {
+      $('mobPctBar').style.width = pctW;
+      cache.pctWidth = pctW;
+    }
+
+    const bl = d.by_lift || {};
+    const dlTxt = `${bl.deadlift?.sets || 0}组`;
+    const bpTxt = `${bl.bench?.sets || 0}组`;
+    const sqTxt = `${bl.squat?.sets || 0}组`;
+    const miniSig = `${dlTxt}|${bpTxt}|${sqTxt}`;
+    if (cache.miniStats !== miniSig) {
+      cache.miniStats = miniSig;
+      if ($('mobDl')) $('mobDl').textContent = dlTxt;
+      if ($('mobBp')) $('mobBp').textContent = bpTxt;
+      if ($('mobSq')) $('mobSq').textContent = sqTxt;
+    }
+
+    const tipText = d.tip || d.headline || '点击上方按钮可远程触发电脑小人变身、比嘘勿扰与倒咖啡！';
+    if (cache.tipText !== tipText) { $('tipText').textContent = tipText; cache.tipText = tipText; }
+
+    const sOn = next.sound_enabled !== false;
+    soundEnabled = sOn;
+    if (cache.soundState !== sOn && $('btnSoundMob')) {
+      cache.soundState = sOn;
+      $('btnSoundMob').textContent = sOn ? '🔊' : '🔇';
+      $('btnSoundMob').classList.toggle('muted', !sOn);
+    }
+
+    const gr = next.growth || d.growth || null;
+    if (gr && $('mobGrowthTitle')) {
+      const gSig = `${gr.tier_name}|${gr.level}|${gr.lean_muscle_kg}|${gr.cycle_progress_pct}|${gr.cycle_number}`;
+      if (cache.growthSig !== gSig) {
+        cache.growthSig = gSig;
+        $('mobGrowthTitle').textContent = `🧬 ${gr.tier_name || '清瘦少年'} Lv.${gr.level || 1} (第${gr.cycle_number || 1}期)`;
+        $('mobGrowthStats').textContent = `肌 ${Number(gr.lean_muscle_kg || 27.8).toFixed(1)}kg · 半月 ${gr.cycle_progress_pct || 0}%`;
+        if ($('mobCycleBar')) $('mobCycleBar').style.width = `${Math.min(100, gr.cycle_progress_pct || 0)}%`;
+      }
+    }
+
+    const guardMs = Math.max(300, Math.min(1800, lastRttMs * 2.5));
+    if (!dragging && !droppingBar && (performance.now() - dragEndAt) > guardMs) {
+      localProgress = Number(next.progress || 0);
+      fingerTarget = localProgress;
+      barTension = 0;
+      barInStick = false;
+      if (next.scene === 'office') {
+        localPourHeight = (next.pour_active || next.office_action === 'pour_coffee')
+          ? Number(next.pour_height ?? 0.24)
+          : 0.22;
+      }
+      scheduleHandleRender();
+    }
+    updateWeightFeelUI();
+
+    const wfAud = getWeightFeel(next.weight_kg, next.lift);
+    for (const ev of (next.audio || [])) {
+      if (ev.id > lastAudioId) {
+        lastAudioId = ev.id;
+        if (!isEmbed && soundEnabled) {
+          if (ev.name === 'pr_fanfare') { beep(880, 0.16); setTimeout(() => beep(1174, 0.22), 110); playHeavyBassThud(1.0); navigator.vibrate?.([40, 30, 80]); }
+          else if (ev.name === 'lift_lockout' || ev.name === 'barbell_drop') {
+            beep(Math.round(740 - wfAud.norm * 240), 0.14);
+            if (wfAud.norm >= 0.45) playHeavyBassThud(wfAud.norm);
+            navigator.vibrate?.(wfAud.norm >= 0.65 ? [30, 22, 55] : Math.round(16 + wfAud.norm * 28));
+          }
+          else if (ev.name === 'plate_clank') {
+            beep(Math.round(1180 - wfAud.norm * 480), 0.08 + wfAud.norm * 0.04, 'square');
+            navigator.vibrate?.(Math.round(10 + wfAud.norm * 18));
+          }
+          else if (ev.name === 'busy_shush') { beep(620, 0.08); setTimeout(() => beep(480, 0.10), 85); navigator.vibrate?.([20, 25, 20]); }
+          else if (ev.name === 'coffee_pour') { beep(520, 0.12); navigator.vibrate?.(25); }
+          else if (ev.name === 'coffee_splash') { beep(410, 0.09, 'sawtooth'); setTimeout(() => beep(760, 0.13), 75); navigator.vibrate?.([30, 25, 45]); }
+          else if (ev.name === 'eureka_ding') { beep(784, 0.10); setTimeout(() => beep(1046, 0.15), 95); navigator.vibrate?.(20); }
+          else if (ev.name === 'phone_ping') { beep(920, 0.07); setTimeout(() => beep(1180, 0.08), 80); navigator.vibrate?.(15); }
+          else { beep(540, 0.09); }
+        }
+      }
+    }
+  }
+
+  function ensurePhysicsLoop() {
+    if (physicsRafId) return;
+    lastPhysicsMs = performance.now();
+    const step = (now) => {
+      physicsRafId = 0;
+      const dt = Math.max(0.004, Math.min(0.05, (now - lastPhysicsMs) / 1000));
+      lastPhysicsMs = now;
+      const lift = state.lift || 'deadlift';
+      const wf = getWeightFeel(state.weight_kg, lift);
+
+      if (dragging && dragMode === 'gym') {
+        const diff = fingerTarget - localProgress;
+        const isConc = lift === 'deadlift' ? (diff > 0.002) : (diff < -0.002);
+        const inStick = isConc && wf.norm >= 0.34 && localProgress >= 0.34 && localProgress <= 0.70;
+        barInStick = inStick;
+
+        // 重量越大：向心阻尼越沉、最大跟手速度越慢，中段粘滞点明显卡顿需稳住发力冲破！
+        const baseRate = isConc
+          ? (26.0 - wf.norm * 21.5) * (inStick ? (1.0 - Math.min(0.68, (wf.norm - 0.28) * 0.92)) : 1.0)
+          : (26.0 - wf.norm * 14.0);
+        const maxSpeed = isConc
+          ? (4.6 - wf.norm * 3.65) * (inStick ? (1.0 - wf.norm * 0.48) : 1.0)
+          : (5.2 - wf.norm * 2.6);
+
+        let delta = diff * (1 - Math.exp(-Math.max(1.8, baseRate) * dt));
+        const cap = Math.max(0.45, maxSpeed) * dt;
+        if (Math.abs(delta) > cap) delta = Math.sign(delta) * cap;
+
+        const prevP = localProgress;
+        localProgress = Math.max(0, Math.min(1, localProgress + delta));
+        barVel = (localProgress - prevP) / dt;
+        barTension = isConc ? Math.max(0, Math.min(1, Math.abs(fingerTarget - localProgress) * (1.25 + wf.norm * 1.45))) : 0;
+
+        // 粘滞点发力微震动与冲破瞬间爽感！
+        if (inStick && barTension > 0.22 && wf.norm >= 0.42) {
+          if ((now - lastGrindHapticAt) > (175 - wf.norm * 55)) {
+            lastGrindHapticAt = now;
+            navigator.vibrate?.(Math.round(8 + wf.norm * 14));
+            if (!isEmbed && soundEnabled) beep(Math.round(165 - wf.norm * 45), 0.04, 'sawtooth');
+          }
+          if (!wasInStick && (now - lastStickFxAt) > 1300) {
+            lastStickFxAt = now;
+            spawnFx(wf.norm >= 0.80 ? '🌋 顶住！突破粘滞点！' : '💢 粘滞点发力！', '#fb923c', 50);
+          }
+          wasInStick = true;
+        } else if (wasInStick && !inStick && isConc) {
+          wasInStick = false;
+          if ((lift === 'deadlift' && localProgress > 0.70) || (lift !== 'deadlift' && localProgress < 0.34)) {
+            spawnFx('⚡ 突破！一鼓作气锁定！', '#fde047', 34);
+            navigator.vibrate?.(18);
+          }
+        } else if (!isConc) {
+          wasInStick = false;
+        }
+
+        // 触达锁定区 / 蹲底触胸瞬间给出按重量分级的冲击震动与特效！
+        if (localProgress >= 0.88 && lift === 'deadlift' && (now - lastBottomFxAt) > 650) {
+          lastBottomFxAt = now;
+          spawnFx(wf.norm >= 0.75 ? '🌋 极限锁定 LOCKOUT!!' : '🔥 锁定 LOCKOUT!', '#fde047', 26);
+          triggerPadImpact(wf.norm >= 0.55);
+          if (!isEmbed && wf.norm >= 0.45) playHeavyBassThud(wf.norm);
+          navigator.vibrate?.(wf.norm >= 0.65 ? [30, 20, 55] : Math.round(14 + wf.norm * 22));
+        } else if (localProgress >= 0.78 && lift !== 'deadlift' && (now - lastBottomFxAt) > 650) {
+          lastBottomFxAt = now;
+          spawnFx(lift === 'bench' ? '✅ 触胸达标！猛推起！' : '✅ 蹲底达标！爆发蹲起！', '#34d399', 72);
+          triggerPadImpact(false);
+          navigator.vibrate?.(Math.round(12 + wf.norm * 18));
+        }
+
+        const effort = Math.max(0.12, Math.min(1, 0.16 + wf.norm * 0.42 + localProgress * 0.24 + barTension * 0.48));
+        renderHandle(localProgress, lift);
+        queueMotion(localProgress, effort, false);
+        physicsRafId = requestAnimationFrame(step);
+        return;
+      }
+
+      if (droppingBar) {
+        // 松手后的真实重力回落：越重下落越具冲击感，落地时触发重铁砸地抖动与低频音效！
+        const grav = 4.6 + wf.norm * 7.8;
+        barVel = Math.min(8.5, Math.max(0.8, barVel + grav * dt));
+        localProgress = Math.max(0, localProgress - barVel * dt);
+        barTension = 0;
+        barInStick = false;
+        if (localProgress <= 0.012) {
+          localProgress = 0;
+          droppingBar = false;
+          barVel = 0;
+          if (dropPeakProg >= 0.42 && wf.norm >= 0.30) {
+            triggerPadImpact(wf.norm >= 0.55);
+            if (!isEmbed) playHeavyBassThud(wf.norm);
+            navigator.vibrate?.(wf.norm >= 0.65 ? [38, 18, 28] : Math.round(14 + wf.norm * 20));
+            if (wf.norm >= 0.62 && lift === 'deadlift') {
+              spawnFx('💥 重铁砸地！', '#f97316', 76);
+            }
+          }
+          dropPeakProg = 0;
+          renderHandle(0, lift);
+          queueMotion(0, 0, true);
+          return;
+        }
+        renderHandle(localProgress, lift);
+        queueMotion(localProgress, Math.max(0.05, localProgress * 0.35), false);
+        physicsRafId = requestAnimationFrame(step);
+      }
+    };
+    physicsRafId = requestAnimationFrame(step);
+  }
+
+  function handlePointer(clientY, forceSend = false) {
+    const rect = cachedPadRect || pad.getBoundingClientRect();
+    const padTop = rect.top + 52;
+    const span = Math.max(40, rect.height - 104);
+    const normY = Math.max(0, Math.min(1, (clientY - padTop) / span));
+    const now = performance.now();
+
+    if (dragMode === 'office') {
+      const h = Math.max(0, Math.min(1, 1 - normY));
+      localPourHeight = h;
+      if (h >= 0.68 && (!wasSplashing || (now - lastSplashFxAt) > 950)) {
+        wasSplashing = true;
+        lastSplashFxAt = now;
+        spawnFx('💦 溅到黑西装和脸上啦！', '#fb7185', 24);
+        navigator.vibrate?.([30, 25, 45]);
+      } else if (h < 0.62) {
+        wasSplashing = false;
+      }
+      scheduleHandleRender();
+      queuePour(h, true, forceSend);
+      return;
+    }
+
+    const targetP = state.lift === 'deadlift' ? (1 - normY) : normY;
+    fingerTarget = targetP;
+    droppingBar = false;
+    // 极轻空杆 (<=30kg) 保持近乎即时零延迟跟手；中高重量由 60fps 物理引擎驱动真实惯性与粘滞点阻力！
+    const wf = getWeightFeel(state.weight_kg, state.lift);
+    if (forceSend && wf.norm < 0.12) {
+      localProgress = targetP;
+      const effort = Math.min(1, 0.18 + targetP * 0.35);
+      scheduleHandleRender();
+      queueMotion(targetP, effort, true);
+    }
+    ensurePhysicsLoop();
+  }
+
+  pad.addEventListener('pointerdown', e => {
+    unlockAudio();
+    cachedPadRect = pad.getBoundingClientRect();
+    dragMode = state.scene === 'office' ? 'office' : 'gym';
+    dragging = true;
+    droppingBar = false;
+    wasSplashing = false;
+    wasInStick = false;
+    barVel = 0;
+    pad.setPointerCapture?.(e.pointerId);
+    handlePointer(e.clientY, true);
+  });
+  pad.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    handlePointer(e.clientY, false);
+  });
+  const endDrag = () => {
+    if (!dragging) return;
+    dragging = false;
+    dragEndAt = performance.now();
+    if (dragMode === 'office') {
+      const releaseH = localPourHeight;
+      wasSplashing = false;
+      scheduleHandleRender();
+      queuePour(releaseH, false, true);
+      if (releaseH >= 0.68) {
+        spawnFx('🧻 快拿手帕擦黑西装！', '#fde047', 42);
+      }
+      return;
+    }
+    barTension = 0;
+    barInStick = false;
+    wasInStick = false;
+    if (localProgress > 0.04) {
+      dropPeakProg = localProgress;
+      droppingBar = true;
+      barVel = 0.4;
+      ensurePhysicsLoop();
+    } else {
+      localProgress = 0;
+      droppingBar = false;
+      scheduleHandleRender();
+      queueMotion(0, 0, true);
+    }
+  };
+  pad.addEventListener('pointerup', endDrag);
+  pad.addEventListener('pointercancel', endDrag);
+  window.addEventListener('resize', () => { cachedPadRect = null; scheduleHandleRender(); }, { passive: true });
+
+  function applyOptimisticUI(patch) {
+    const lockMs = Math.max(950, Math.min(2600, lastRttMs * 2.6));
+    opLock = {
+      scene: patch.scene || state.scene,
+      lift: patch.lift || state.lift,
+      weight_kg: patch.weight_kg !== undefined ? patch.weight_kg : undefined,
+      until: performance.now() + lockMs,
+    };
+    const nextSnap = { ...state, ...patch };
+    if (patch.lift && LIFT_META_LOCAL[patch.lift]) {
+      nextSnap.lift_meta = LIFT_META_LOCAL[patch.lift];
+    }
+    if (patch.weight_kg !== undefined) {
+      nextSnap.plates = computePlatesLocal(patch.weight_kg);
+    }
+    // 直接 0ms 驱动整套 UI 渲染，无需等公网往返，丝滑零卡顿！
+    const savedLock = opLock;
+    opLock = null;
+    applyState(nextSnap);
+    opLock = savedLock;
+  }
+
+  document.querySelectorAll('#liftTabs .lift-tab').forEach(btn => {
+    btn.onclick = () => {
+      unlockAudio();
+      const l = btn.dataset.lift;
+      const meta = LIFT_META_LOCAL[l] || { zh: l, emoji: '🏋️', default_kg: 100 };
+      dragging = false;
+      droppingBar = false;
+      localProgress = 0;
+      fingerTarget = 0;
+      barVel = 0;
+      barTension = 0;
+      barInStick = false;
+      dragEndAt = 0;
+      applyOptimisticUI({
+        scene: 'gym',
+        lift: l,
+        lift_meta: meta,
+        weight_kg: meta.default_kg,
+        current_reps: 0,
+        progress: 0,
+        effort: 0,
+        eccentric_reached: false,
+      });
+      spawnFx(btn.textContent.trim(), '#7dd3fc', 46);
+      post('/api/lift/select', { lift: l });
+    };
+  });
+  document.querySelectorAll('.weight-grid button[data-delta]').forEach(btn => {
+    btn.onclick = () => {
+      unlockAudio();
+      const d = Number(btn.dataset.delta);
+      const nextW = Math.max(20, Math.min(360, Math.round(((Number(state.weight_kg) || 100) + d) * 2) / 2));
+      applyOptimisticUI({ weight_kg: nextW });
+      spawnFx(d > 0 ? `+${d}kg 💥` : `${d}kg`, d > 0 ? '#fde047' : '#94a3b8', 50);
+      post('/api/lift/weight', { delta_kg: d });
+    };
+  });
+  $('repsSelect').onchange = () => post('/api/lift/reps', { target_reps: Number($('repsSelect').value) });
+  $('btnSingleRep').onclick = () => {
+    unlockAudio();
+    if (state.scene === 'office') {
+      spawnFx('☕ 贴杯优雅手冲！', '#fbbf24', 40);
+      post('/api/pet/coffee', { height: 0.22, source: isEmbed ? 'workbench' : 'phone' });
+      return;
+    }
+    bumpCombo();
+    post('/api/lift/rep', { lift: state.lift, source: isEmbed ? 'workbench' : 'phone' });
+  };
+  $('btnQuickLog').onclick = () => {
+    unlockAudio();
+    if (state.scene === 'office') {
+      spawnFx('💦 高空瀑布猛倒溅一身！', '#fb7185', 32);
+      navigator.vibrate?.([30, 25, 55]);
+      post('/api/pet/coffee', { height: 0.96, source: isEmbed ? 'workbench' : 'phone' });
+      return;
+    }
+    spawnFx('🏆 整组打卡完成！', '#34d399', 36);
+    navigator.vibrate?.([35, 30, 60]);
+    post('/api/workout/log', {
+      lift: state.lift,
+      weight_kg: state.weight_kg,
+      reps: Number($('repsSelect').value),
+      source: isEmbed ? 'workbench' : 'phone',
+    });
+  };
+  $('btnOfficeMob').onclick = () => {
+    unlockAudio();
+    const toOff = state.scene !== 'office';
+    const nextScene = toOff ? 'office' : 'gym';
+    dragging = false;
+    droppingBar = false;
+    localProgress = 0;
+    fingerTarget = 0;
+    localPourHeight = 0.22;
+    dragEndAt = 0;
+    applyOptimisticUI({ scene: nextScene, progress: 0, effort: 0, pour_active: false });
+    spawnFx(toOff ? '✨ 换纯黑西装办公！' : '✨ 换回黑背心举铁！', '#fde047', 42);
+    post('/api/scene/set', { scene: nextScene });
+  };
+  if ($('btnBusyMob')) {
+    $('btnBusyMob').onclick = () => {
+      unlockAudio();
+      spawnFx('🤫 嘘！别打扰我办公！', '#fb7185', 42);
+      navigator.vibrate?.([20, 20, 20]);
+      post('/api/pet/busy', { source: isEmbed ? 'workbench' : 'phone' });
+    };
+  }
+  if ($('btnCoffeeMob')) {
+    $('btnCoffeeMob').onclick = () => {
+      unlockAudio();
+      spawnFx('☕ 贴杯丝滑柔注！', '#fbbf24', 42);
+      post('/api/pet/coffee', { height: 0.22, source: isEmbed ? 'workbench' : 'phone' });
+    };
+  }
+  if ($('btnHighCoffeeMob')) {
+    $('btnHighCoffeeMob').onclick = () => {
+      unlockAudio();
+      spawnFx('💦 高空瀑布猛倒！', '#fb7185', 34);
+      navigator.vibrate?.([30, 25, 50]);
+      post('/api/pet/coffee', { height: 0.96, source: isEmbed ? 'workbench' : 'phone' });
+    };
+  }
+  document.querySelectorAll('button[data-office-act]').forEach(btn => {
+    btn.onclick = () => {
+      unlockAudio();
+      const act = btn.dataset.officeAct || 'next';
+      spawnFx(btn.textContent.trim(), '#7dd3fc', 40);
+      post('/api/pet/office_action', { action: act, source: isEmbed ? 'workbench' : 'phone' });
+    };
+  });
+  $('btnProtein').onclick = () => {
+    unlockAudio();
+    spawnFx('🥤 蛋白粉能量 +100%', '#60a5fa', 42);
+    post('/api/pet/protein');
+  };
+  if ($('btnUndoMob')) $('btnUndoMob').onclick = () => { unlockAudio(); post('/api/workout/undo'); };
+  if ($('btnSoundMob')) {
+    $('btnSoundMob').onclick = () => {
+      const nxt = !soundEnabled;
+      soundEnabled = nxt;
+      if (nxt) unlockAudio();
+      $('btnSoundMob').textContent = nxt ? '🔊' : '🔇';
+      $('btnSoundMob').classList.toggle('muted', !nxt);
+      cache.soundState = nxt;
+      spawnFx(nxt ? '🔊 音效已开启' : '🔇 音效已静音', nxt ? '#34d399' : '#94a3b8', 42);
+      post('/api/audio/toggle', { enabled: nxt });
+    };
+  }
+
+  // ── 永久 App 加密信标解码与多源竞速寻址 (AGY-BEACON-V1) ──
+  function setBeaconBanner(show, text = '') {
+    const bar = $('beaconBar');
+    if (!bar) return;
+    bar.style.display = show ? 'flex' : 'none';
+    if (text && $('beaconBarTxt')) $('beaconBarTxt').textContent = text;
+  }
+  function openPairModal(errHint = '') {
+    if (!$('pairModal')) return;
+    if ($('pairKeyInput')) $('pairKeyInput').value = gymToken || '';
+    if ($('pairErrTxt')) {
+      $('pairErrTxt').textContent = errHint;
+      $('pairErrTxt').style.display = errHint ? 'block' : 'none';
+    }
+    $('pairModal').classList.add('show');
+  }
+  if ($('btnOpenPair')) $('btnOpenPair').onclick = () => openPairModal('');
+  if ($('btnPairCancel')) $('btnPairCancel').onclick = () => $('pairModal')?.classList.remove('show');
+  if ($('btnPairSave')) {
+    $('btnPairSave').onclick = () => {
+      const v = ($('pairKeyInput')?.value || '').trim();
+      if (!v) return;
+      gymToken = v;
+      try { localStorage.setItem('agy_gym_token', v); } catch {}
+      syncHoloLink();
+  updateLanFastLink();
+      $('pairModal')?.classList.remove('show');
+      connectViaBeacon(true);
+    };
+  }
+  if ($('btnBeaconRetry')) $('btnBeaconRetry').onclick = () => connectViaBeacon(true);
+
+  function b64uToBytes(str) {
+    const pad = '='.repeat((4 - (str.length % 4)) % 4);
+    const bin = atob((str + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  async function decryptBeaconEnvelope(env, secretToken) {
+    if (!env || Number(env.v) !== 1 || !window.crypto?.subtle) throw new Error('BEACON_UNSUPPORTED');
+    const salt = b64uToBytes(env.salt), nonce = b64uToBytes(env.nonce), ct = b64uToBytes(env.ct), expMac = b64uToBytes(env.mac);
+    const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(secretToken.trim()), 'PBKDF2', false, ['deriveBits']);
+    const derived = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: Number(env.iter) || 100000, hash: 'SHA-256' }, baseKey, 512));
+    const encKeyBytes = derived.slice(0, 32), macKeyBytes = derived.slice(32, 64);
+    const tag = new TextEncoder().encode('AGY-BEACON-V1');
+    const macIn = new Uint8Array(tag.length + salt.length + nonce.length + ct.length);
+    macIn.set(tag, 0); macIn.set(salt, tag.length); macIn.set(nonce, tag.length + salt.length); macIn.set(ct, tag.length + salt.length + nonce.length);
+    const macKey = await crypto.subtle.importKey('raw', macKeyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+    if (!(await crypto.subtle.verify('HMAC', macKey, expMac, macIn))) throw new Error('BEACON_MAC_MISMATCH');
+    const streamKey = await crypto.subtle.importKey('raw', encKeyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const pt = new Uint8Array(ct.length);
+    for (let idx = 0; idx < Math.ceil(ct.length / 32); idx++) {
+      const blk = new Uint8Array(20);
+      blk.set(nonce, 0);
+      new DataView(blk.buffer).setUint32(16, idx, false);
+      const ks = new Uint8Array(await crypto.subtle.sign('HMAC', streamKey, blk));
+      for (let j = idx * 32; j < Math.min((idx + 1) * 32, ct.length); j++) pt[j] = ct[j] ^ ks[j - idx * 32];
+    }
+    return JSON.parse(new TextDecoder().decode(pt));
+  }
+  async function probePing(baseUrl, timeoutMs = 2400) {
+    if (!baseUrl) return false;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const r = await fetch(`${baseUrl.replace(/\/$/, '')}/ping?_t=${Date.now()}`, { cache: 'no-store', signal: ctrl.signal });
+      return r.ok;
+    } catch { return false; } finally { clearTimeout(timer); }
+  }
+  async function fetchBeaconJson(url, timeoutMs = 8500, headers = {}, unwrapGhApi = false) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const r = await fetch(url, { cache: 'no-store', headers, signal: ctrl.signal });
+      if (!r.ok) throw new Error('HTTP_' + r.status);
+      const j = await r.json();
+      return unwrapGhApi ? JSON.parse(atob(String(j.content || '').replace(/\s+/g, ''))) : j;
+    } finally { clearTimeout(timer); }
+  }
+  async function resolveGymApiBase(forceFresh = false) {
+    let cached = '';
+    try { cached = localStorage.getItem('agy_gym_last_tunnel') || ''; } catch {}
+    if (cached && !forceFresh && await probePing(cached, 2200)) {
+      return cached.replace(/\/$/, '');
+    }
+    if (!gymToken) throw new Error('NO_KEY');
+
+    const tsNow = Date.now();
+    const relPath = explicitBeaconSub ? `${explicitBeaconSub}/beacon.json` : 'beacon.json';
+    const sources = [];
+    const seen = new Set();
+    const addSrc = (u, hdrs = {}, ghApi = false) => {
+      if (!u || seen.has(u)) return;
+      seen.add(u);
+      sources.push(fetchBeaconJson(u, 8500, hdrs, ghApi));
+    };
+    if (beaconRepo && beaconRepo.includes('/')) {
+      const [owner, repo] = beaconRepo.split('/');
+      const isUserSite = repo.toLowerCase() === `${owner.toLowerCase()}.github.io`;
+      const pagesB = isUserSite
+        ? `https://${owner.toLowerCase()}.github.io/${relPath}?_t=${tsNow}`
+        : `https://${owner.toLowerCase()}.github.io/${repo}/${relPath}?_t=${tsNow}`;
+      addSrc(pagesB);
+      addSrc(`https://raw.githubusercontent.com/${beaconRepo}/gh-pages/${relPath}?_t=${tsNow}`);
+      addSrc(`https://api.github.com/repos/${beaconRepo}/contents/${relPath}?ref=gh-pages&_t=${tsNow}`, { Accept: 'application/vnd.github.v3+json' }, true);
+    }
+    addSrc(`./beacon.json?_t=${tsNow}`);
+
+    let bestUrl = '', bestTs = -1, sawMacErr = false;
+    const tasks = sources.map(async p => {
+      try {
+        const env = await p;
+        if (!env || !env.ct) throw new Error('EMPTY');
+        const dec = await decryptBeaconEnvelope(env, gymToken);
+        const lanCand = String(dec.lan_url || '').replace(/\/$/, '');
+        if (lanCand && /^http:\/\/\d+\.\d+\.\d+\.\d+:\d+$/i.test(lanCand)) {
+          resolvedLanUrl = lanCand;
+          try { localStorage.setItem('agy_gym_last_lan', lanCand); } catch {}
+          updateLanFastLink();
+        }
+        const cand = String(dec.tunnel_url || '').replace(/\/$/, '');
+        if (!cand) throw new Error('EMPTY');
+        const ts = Number(dec.ts || env.updated_ms || 0);
+        if (ts >= bestTs) { bestTs = ts; bestUrl = cand; }
+        if (await probePing(cand, 3200)) return cand;
+        throw new Error('PING_FAIL');
+      } catch (e) {
+        if (String(e?.message || '') === 'BEACON_MAC_MISMATCH') sawMacErr = true;
+        throw e;
+      }
+    });
+    try {
+      const winner = await Promise.any(tasks);
+      if (winner) {
+        try { localStorage.setItem('agy_gym_last_tunnel', winner); } catch {}
+        return winner;
+      }
+    } catch {}
+    if (bestUrl) {
+      try { localStorage.setItem('agy_gym_last_tunnel', bestUrl); } catch {}
+      return bestUrl;
+    }
+    if (sawMacErr) throw new Error('BEACON_MAC_MISMATCH');
+    throw new Error('BEACON_NOT_FOUND');
+  }
+
+  function startSseStream() {
+    if (activeEs) { try { activeEs.close(); } catch {} activeEs = null; }
+    if (isStaticShell && !apiBase) return;
+    const es = new EventSource(apiUrl('/api/sync/stream?fast=1'));
+    activeEs = es;
+    es.onmessage = ev => {
+      lastSseAt = performance.now();
+      consecutiveNetFails = 0;
+      setBeaconBanner(false);
+      try { applyState(JSON.parse(ev.data)); } catch {}
+    };
+    es.onerror = () => {
+      if ((performance.now() - lastSseAt) > 6000 && !wsOpen()) setConnBadge(false);
+    };
+  }
+
+  function openWsStream() {
+    if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = 0; }
+    if (wsPingTimer) { clearInterval(wsPingTimer); wsPingTimer = 0; }
+    if (activeWs) { try { activeWs.close(); } catch {} activeWs = null; }
+    if (isStaticShell && !apiBase) return;
+    if (typeof WebSocket === 'undefined') { startSseStream(); return; }
+    let ws;
+    try {
+      ws = new WebSocket(wsUrl('/ws'));
+    } catch {
+      startSseStream();
+      return;
+    }
+    activeWs = ws;
+    ws.onopen = () => {
+      wsFailCount = 0;
+      consecutiveNetFails = 0;
+      setBeaconBanner(false);
+      if (activeEs) { try { activeEs.close(); } catch {} activeEs = null; }
+      try {
+        ws.send('hb');
+        wsPingSentAt = performance.now();
+        ws.send(`ping ${Math.round(wsPingSentAt)}`);
+      } catch {}
+      setConnBadge(true, lastRttMs);
+      wsPingTimer = setInterval(() => {
+        if (!wsOpen() || dragging) return;
+        try {
+          wsPingSentAt = performance.now();
+          ws.send(`ping ${Math.round(wsPingSentAt)}`);
+        } catch {}
+      }, 2500);
+    };
+    ws.onmessage = ev => {
+      lastSseAt = performance.now();
+      consecutiveNetFails = 0;
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg && msg._pong !== undefined) {
+          if (wsPingSentAt > 0) {
+            const rtt = Math.max(1, performance.now() - wsPingSentAt);
+            wsPingSentAt = 0;
+            lastRttMs = Math.max(1, Math.round(lastRttMs * 0.45 + rtt * 0.55));
+            setConnBadge(true, lastRttMs);
+          }
+          return;
+        }
+        applyState(msg);
+      } catch {}
+    };
+    ws.onclose = () => {
+      if (wsPingTimer) { clearInterval(wsPingTimer); wsPingTimer = 0; }
+      if (activeWs === ws) activeWs = null;
+      wsFailCount += 1;
+      if (!activeEs && wsFailCount >= 2) startSseStream();
+      if (!activeEs) setConnBadge(false);
+      if (isStaticShell && wsFailCount >= 3) {
+        wsFailCount = 0;
+        wsReconnectTimer = setTimeout(() => connectViaBeacon(true), 1800);
+      } else {
+        wsReconnectTimer = setTimeout(() => openWsStream(), Math.min(7000, 900 * wsFailCount));
+      }
+    };
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  }
+
+  async function connectViaBeacon(forceFresh = false) {
+    if (!isStaticShell) {
+      openWsStream();
+      return;
+    }
+    if (beaconConnecting) return;
+    if (!gymToken) {
+      setBeaconBanner(true, '🔑 请扫描电脑永久二维码或输入配对密钥');
+      openPairModal('');
+      return;
+    }
+    beaconConnecting = true;
+    setBeaconBanner(true, forceFresh ? '⏳ 正在拉取电脑最新加密通道…' : '⏳ 正在通过永久信标连接电脑…');
+    try {
+      apiBase = await resolveGymApiBase(forceFresh);
+      const t0 = performance.now();
+      const r = await fetch(apiUrl('/api/status'), { cache: 'no-store' });
+      if (r.ok) {
+        const snap = await r.json();
+        lastRttMs = Math.round(performance.now() - t0);
+        if (snap && snap.lift) applyState(snap);
+      }
+      consecutiveNetFails = 0;
+      setBeaconBanner(false);
+      openWsStream();
+    } catch (e) {
+      const msg = String(e?.message || '');
+      if (msg === 'BEACON_MAC_MISMATCH') {
+        setBeaconBanner(true, '❌ 配对密钥已更新，请重新扫描电脑永久二维码');
+        openPairModal('配对密钥不匹配，请重新扫码或粘贴电脑端新密钥');
+      } else {
+        setConnBadge(false);
+        setBeaconBanner(true, '📡 暂未连上电脑（确认电脑桌宠已启动后点重连）');
+      }
+    } finally {
+      beaconConnecting = false;
+    }
+  }
+
+  // 1. 零等待瞬间水合服务端内联初始状态（无需等第二轮网络请求即可立刻滑动！）
+  if (window.__INIT_STATE__ && window.__INIT_STATE__.lift) {
+    for (const ev of (window.__INIT_STATE__.audio || [])) {
+      lastAudioId = Math.max(lastAudioId, Number(ev.id || 0));
+    }
+    applyState(window.__INIT_STATE__);
+    setConnBadge(true);
+  } else {
+    renderHandle(0, state.lift);
+  }
+
+  // 2. 全双工 WebSocket 0延迟主通道 + SSE/HTTP 容灾同步；永久外壳断连自动重新解密最新信标！
+  if (isEmbed && typeof BroadcastChannel !== 'undefined') {
+    const bus = new BroadcastChannel('agy-gym-bus');
+    bus.onmessage = ev => applyState(ev.data);
+    if (!window.__INIT_STATE__) {
+      fetch('/api/status', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(applyState).catch(() => {});
+    }
+  } else {
+    connectViaBeacon(false);
+    // 兜底同步：若 WS/SSE 超过 4.5 秒未收到新帧且未在拖动，自动轻拉 /api/status 保持同步
+    setInterval(() => {
+      if (dragging || beaconConnecting) return;
+      if (isStaticShell && !apiBase) return;
+      if ((performance.now() - lastSseAt) > 4500) {
+        const t0 = performance.now();
+        fetch(apiUrl('/api/status'), { cache: 'no-store' })
+          .then(r => r.ok ? r.json() : null)
+          .then(snap => {
+            if (snap && snap.lift) {
+              consecutiveNetFails = 0;
+              setBeaconBanner(false);
+              lastRttMs = Math.round(lastRttMs * 0.6 + (performance.now() - t0) * 0.4);
+              applyState(snap);
+              if (!wsOpen() && !wsReconnectTimer) openWsStream();
+            } else if (isStaticShell && ++consecutiveNetFails >= 2) {
+              consecutiveNetFails = 0;
+              connectViaBeacon(true);
+            }
+          })
+          .catch(() => {
+            if (isStaticShell && ++consecutiveNetFails >= 2) {
+              consecutiveNetFails = 0;
+              connectViaBeacon(true);
+            }
+          });
+      }
+    }, 2500);
+    // 空闲低频心跳（WS 已开直接发 2B 'hb'，零 HTTP 开销）
+    setInterval(() => {
+      if (dragging || (isStaticShell && !apiBase)) return;
+      if (wsOpen()) {
+        try { activeWs.send('hb'); } catch {}
+        return;
+      }
+      fetch(apiUrl('/api/pet/heartbeat'), {
+        method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body: '{"role":"phone"}',
+      }).catch(() => {});
+    }, 4500);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        if (isStaticShell && !apiBase) {
+          connectViaBeacon(false);
+        } else {
+          if (!wsOpen()) openWsStream();
+          fetch(apiUrl('/api/status'), { cache: 'no-store' })
+            .then(r => r.ok ? r.json() : null)
+            .then(snap => {
+              if (snap && snap.lift) applyState(snap);
+              else if (isStaticShell) connectViaBeacon(true);
+            })
+            .catch(() => { if (isStaticShell) connectViaBeacon(true); });
+        }
+      }
+    });
+    const cleanup = () => {
+      if (wsPingTimer) clearInterval(wsPingTimer);
+      if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
+      try { activeWs?.close(); } catch {}
+      try { activeEs?.close(); } catch {}
+    };
+    window.addEventListener('pagehide', cleanup);
+    window.addEventListener('beforeunload', cleanup);
+  }
+})();
+</script>
+</body>
+</html>
